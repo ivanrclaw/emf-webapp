@@ -1,14 +1,16 @@
 /**
  * @emf-webapp/frontend — Breadcrumbs
  *
- * Componente de navegación jerárquica que se renderiza en el header
- * de cada página. Parsea la URL actual y construye una ruta de navegación
- * contextual: Projects → ProjectName → MetamodelName → View
+ * Componente de navegación jerárquica en el header.
+ * Parsea la URL manualmente (useParams no funciona fuera de Route).
  *
- * Las rutas del editor (EcoreEditor, ModelEditor) renderizan su propia
- * versión dentro del componente editor.
+ * Projects → ProjectName → View
+ * Projects → ProjectName → MetamodelName → View  (dentro de metamodel)
+ *
+ * NOTA: Las rutas del editor (EcoreEditor) renderizan sus propios
+ * breadcrumbs dentro del topbar del editor, no aquí.
  */
-import { Link, useLocation, useParams } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useMemo } from 'react';
 
 interface Crumb {
@@ -16,47 +18,52 @@ interface Crumb {
   to?: string;
 }
 
+/** Títulos legibles para sub-vistas de metamodelo */
+const VIEW_LABELS: Record<string, string> = {
+  edit: 'Editor',
+  models: 'Models',
+  specs: 'Graphics',
+  constraints: 'OCL',
+  templates: 'Code',
+};
+
 export default function Breadcrumbs() {
   const location = useLocation();
-  const { id, pid, mmid } = useParams<{ id: string; pid: string; mmid: string }>();
+  const path = location.pathname;
 
   const crumbs = useMemo<Crumb[]>(() => {
-    const path = location.pathname;
-    const parts: Crumb[] = [];
+    const parts: Crumb[] = [{ label: 'Projects', to: '/' }];
+    const segments = path.split('/').filter(Boolean);
 
-    // Base: always show Projects link
-    parts.push({ label: 'Projects', to: '/' });
+    // /projects/:id[/...]
+    const projIdx = segments.indexOf('projects');
+    if (projIdx !== -1 && segments[projIdx + 1]) {
+      const projectId = segments[projIdx + 1];
+      parts.push({
+        label: `Project ${projectId.slice(0, 8)}…`,
+        to: `/projects/${projectId}`,
+      });
 
-    // /projects/:id → ProjectDetail
-    if (id || pid) {
-      const projectId = id || pid;
-      parts.push({ label: projectId!, to: `/projects/${projectId}` });
-    }
+      // /projects/:pid/metamodels/:mmid/...
+      const metaIdx = segments.indexOf('metamodels');
+      if (metaIdx !== -1 && segments[metaIdx + 1]) {
+        const mmid = segments[metaIdx + 1];
+        const viewSeg = segments[metaIdx + 2]; // edit / models / specs / constraints / templates
+        const viewLabel = VIEW_LABELS[viewSeg] || viewSeg;
 
-    // /projects/:pid/metamodels/:mmid/... → metamodel views
-    if (pid && mmid) {
-      // Determine the current view label
-      let viewLabel = '';
-      if (path.endsWith('/edit')) viewLabel = 'Editor';
-      else if (path.includes('/models')) viewLabel = 'Models';
-      else if (path.includes('/specs')) viewLabel = 'Graphics';
-      else if (path.includes('/constraints')) viewLabel = 'OCL';
-      else if (path.includes('/templates')) viewLabel = 'Code';
-
-      if (viewLabel) {
         parts.push({
-          label: `${mmid.slice(0, 8)}…`,
-          to: `/projects/${pid}/metamodels/${mmid}/edit`,
+          label: `Metamodel ${mmid.slice(0, 8)}…`,
+          to: `/projects/${projectId}/metamodels/${mmid}/edit`,
         });
         parts.push({ label: viewLabel });
       }
     }
 
     return parts;
-  }, [location.pathname, id, pid, mmid]);
+  }, [path]);
 
-  // Don't render breadcrumbs on home
-  if (location.pathname === '/') return null;
+  // Don't render on home page or editor routes (they have their own)
+  if (path === '/' || path.includes('/edit')) return null;
 
   return (
     <nav className="breadcrumbs" aria-label="Breadcrumb">
