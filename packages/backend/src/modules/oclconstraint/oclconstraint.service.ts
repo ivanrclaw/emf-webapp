@@ -185,7 +185,7 @@ export class OCLConstraintService {
         const result = evaluator.evaluate(ast, obj);
         if (!result.success) {
           allPassed = false;
-          firstError = result.error;
+          firstError = (result as { success: false; error: string }).error;
           break;
         }
         // For boolean constraints, the value must be true
