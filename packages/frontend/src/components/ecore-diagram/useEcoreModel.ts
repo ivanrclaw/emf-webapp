@@ -56,6 +56,7 @@ function packageToNodesAndEdges(
 ): { nodes: AppNode[]; edges: AppEdge[] } {
   const nodes: AppNode[] = [];
   const edges: AppEdge[] = [];
+  const classifiers = pkg.eClassifiers ?? [];
   const positions = [
     { x: 50, y: 50 },
     { x: 400, y: 50 },
@@ -69,7 +70,7 @@ function packageToNodesAndEdges(
   ];
   let posIdx = 0;
 
-  for (const cls of pkg.eClassifiers) {
+  for (const cls of classifiers) {
     const defaultPos = positions[posIdx++ % positions.length];
     const pos = 'position' in cls && cls.position
       ? cls.position!

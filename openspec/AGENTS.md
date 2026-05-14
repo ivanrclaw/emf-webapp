@@ -23,4 +23,14 @@ Cuando se te pida trabajar en una funcionalidad, sigue estrictamente este flujo:
 - React Flow para diagramas
 - NestJS para API backend
 - PyEcore para validación OCL (como subproceso Python)
-- Tailwind CSS 4 + shadcn/ui para UI
+- CSS Modules + Design System propio (App.css) — NO usar Tailwind directamente
+
+## Sistema de Diseño (CRÍTICO)
+- **Siempre** aplicar el design system completo en toda nueva vista. NO crear vistas básicas.
+- El diseño debe ser **moderno, fresco y profesional**: cards con hover, gradientes, skeleton loading, modales animados, empty states.
+- Usar las clases CSS de App.css (card, btn, stat-card, project-card, mm-card, etc.) y variables CSS (--primary, --radius, --shadow).
+- Ver "Sistema de Diseño" en project.md para la especificación completa.
+
+## Manejo de Errores Comunes
+- **Metamodel content vacío**: Cuando el campo `content` de un metamodelo es `{}`, el editor falla con "eClassifiers is not iterable". Siempre verificar `Array.isArray(content.eClassifiers)` antes de usar. En EMF WebApp se soluciona en `EcoreEditor.tsx` línea ~48 y en `useEcoreModel.ts` con `pkg.eClassifiers ?? []`.
+- **npm install vs pnpm**: El proyecto migró de pnpm a npm workspaces. Usar `npm install`, `npm run build`, etc. Nunca `pnpm`.

@@ -45,9 +45,11 @@ export default function EcoreEditor() {
     (async () => {
       try {
         const mm = await getMetamodel(pid, mmid);
-        const content = mm.content || DEFAULT_PKG;
-        setPkg(content as SerializableEPackage);
-        model.updateFromExternal(content as SerializableEPackage);
+        const content = mm.content && Array.isArray((mm.content as any).eClassifiers)
+          ? (mm.content as SerializableEPackage)
+          : DEFAULT_PKG;
+        setPkg(content);
+        model.updateFromExternal(content);
       } catch (e: any) {
         setError(e.message || 'Failed to load metamodel');
       } finally {
