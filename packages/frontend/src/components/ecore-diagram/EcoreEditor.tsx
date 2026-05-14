@@ -162,7 +162,6 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
     projectId,
     metamodelId,
     initialPkg: fetchedPkg,
-    initialLoad: initialLoad.current,
   });
 
   // Track initial load complete
