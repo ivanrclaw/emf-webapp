@@ -170,6 +170,17 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
     initialLoad.current = false;
   }
 
+  // ── Helper function for inspector (MUST be before early returns!) ──
+  const handleAddAttribute = useCallback(
+    (classId: string) => model.addAttribute(classId),
+    [model],
+  );
+
+  const handleAddReference = useCallback(
+    (classId: string) => model.addReference(classId),
+    [model],
+  );
+
   // ── Keyboard shortcuts ──────────────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -258,17 +269,6 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
       </div>
     );
   }
-
-  // ── Helper function for inspector ────────────────────────────
-  const handleAddAttribute = useCallback(
-    (classId: string) => model.addAttribute(classId),
-    [model],
-  );
-
-  const handleAddReference = useCallback(
-    (classId: string) => model.addReference(classId),
-    [model],
-  );
 
   // ── Render ──────────────────────────────────────────────────
   return (
