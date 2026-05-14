@@ -134,7 +134,7 @@ export class CodeTemplateService {
 
     // 5. Execute the template against the model
     const executor = new MTLExecutor();
-    const result: MTLExecutionResult = executor.execute(ast, modelObject);
+    const result: MTLExecutionResult = executor.execute(ast, modelObject as any);
 
     if (result.error) {
       throw new BadRequestException(`Template execution error: ${result.error}`);
