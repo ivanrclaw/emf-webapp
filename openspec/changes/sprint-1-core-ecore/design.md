@@ -57,7 +57,7 @@ emf-webapp/
 │       │   ├── pages/
 │       │   └── App.tsx
 │       └── package.json
-├── pnpm-workspace.yaml
+├── package-lock.json
 ├── turbo.json
 └── package.json
 ```

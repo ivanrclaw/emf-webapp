@@ -1,7 +1,7 @@
 # Tasks: Sprint 1 — Core Ecore
 
 ## Fase 1: Configuración del Proyecto
-- [ ] Inicializar monorepo con Turborepo + pnpm
+- [ ] Inicializar monorepo con Turborepo + npm workspaces
 - [ ] Configurar TypeScript estricto en packages/core
 - [ ] Configurar Vitest para tests
 - [ ] Configurar NestJS en packages/backend

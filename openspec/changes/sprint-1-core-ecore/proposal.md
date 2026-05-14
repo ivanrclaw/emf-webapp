@@ -22,7 +22,7 @@ Establecer las bases sobre las que se construirá toda la aplicación. Sin un co
 - [EMF-010] Tests unitarios completos del core
 
 ## Diseño Técnico
-- Monorepo con Turborepo + pnpm
+- Monorepo con Turborepo + npm workspaces
 - `packages/core`: librería Ecore TypeScript compartida
 - `packages/backend`: NestJS con módulos Project, Metamodel
 - `packages/frontend`: React + Vite (básico, solo interfaz de listado)
