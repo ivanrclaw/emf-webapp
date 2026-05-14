@@ -3,17 +3,24 @@
  *
  * Usa SQLite en memoria (:memory:) para tests aislados.
  * Cubre CRUD de Projects, Metamodels, exportación y casos borde.
+ *
+ * NOTA: Los repositorios se proveen manualmente porque vitest (esbuild)
+ * no soporta emitDecoratorMetadata que necesita @InjectRepository.
  */
 import 'reflect-metadata';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { getDataSourceToken } from '@nestjs/typeorm';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ProjectModule } from '../src/modules/project/project.module.js';
 import { MetamodelModule } from '../src/modules/metamodel/metamodel.module.js';
 import { Project } from '../src/modules/project/project.entity.js';
 import { Metamodel } from '../src/modules/metamodel/metamodel.entity.js';
+import { ProjectService } from '../src/modules/project/project.service.js';
+import { MetamodelService } from '../src/modules/metamodel/metamodel.service.js';
 import request from 'supertest';
+import { DataSource } from 'typeorm';
 
 let app: INestApplication;
 
@@ -29,7 +36,24 @@ beforeAll(async () => {
       ProjectModule,
       MetamodelModule,
     ],
-  }).compile();
+  })
+    .overrideProvider(ProjectService)
+    .useFactory({
+      factory: async (ds: DataSource) => {
+        const repo = ds.getRepository(Project);
+        return new ProjectService(repo);
+      },
+      inject: [getDataSourceToken()],
+    })
+    .overrideProvider(MetamodelService)
+    .useFactory({
+      factory: async (ds: DataSource) => {
+        const repo = ds.getRepository(Metamodel);
+        return new MetamodelService(repo, ds.getRepository(Project));
+      },
+      inject: [getDataSourceToken()],
+    })
+    .compile();
 
   app = moduleFixture.createNestApplication();
   app.setGlobalPrefix('api');
@@ -80,7 +104,6 @@ describe('Projects API', () => {
     const res = await request(app.getHttpServer())
       .post('/api/projects')
       .send({});
-    // Sin ValidationPipe con DTO, NestJS lo acepta pero 'name' será undefined
     // TypeORM lanzará error por NOT NULL
     expect(res.status).toBeGreaterThanOrEqual(400);
   });
@@ -252,7 +275,7 @@ describe('Edge cases', () => {
       .post(`/api/projects/${pid}/metamodels`)
       .send({ name: 'My Cool Model!' });
     expect(res.status).toBe(201);
-    expect(res.body.ns_prefix).toBe('my cool model!');
+    expect(res.body.ns_prefix).toBe('my-cool-model');
     expect(res.body.ns_uri).toContain('my-cool-model');
   });
 

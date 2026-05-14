@@ -57,6 +57,11 @@ export class EcoreTransformer {
     }
 
     if (format === 'xmi') {
+      // Si el contenido está vacío, devolver XMI mínimo
+      if (!content || Object.keys(content).length === 0) {
+        return `<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" name="unnamed" nsURI="${nsURI}" nsPrefix="${nsPrefix}"/>`;
+      }
       const ePackage = this.deserializeToEPackage(content);
       return serializeToXMI(ePackage, { nsURI, nsPrefix });
     }

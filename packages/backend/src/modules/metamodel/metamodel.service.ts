@@ -53,7 +53,7 @@ export class MetamodelService {
       content?: Record<string, any>;
     },
   ): Promise<Metamodel> {
-    const safeName = data.name.trim().toLowerCase().replace(/\\s+/g, '-');
+    const safeName = data.name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
     const mm = this.repo.create({
       project_id: projectId,
       name: data.name,
