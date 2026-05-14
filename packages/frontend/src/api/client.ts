@@ -16,6 +16,13 @@ export interface Metamodel {
   nsPrefix: string;
 }
 
+export interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 async function request<T>(
   url: string,
   options?: RequestInit,
@@ -34,8 +41,8 @@ async function request<T>(
 
 // ── Projects ──────────────────────────────────────────────────────
 
-export function getProjects(): Promise<Project[]> {
-  return request<Project[]>('/projects');
+export function getProjects(): Promise<PaginatedResponse<Project>> {
+  return request<PaginatedResponse<Project>>('/projects');
 }
 
 export function getProject(id: string): Promise<Project> {
