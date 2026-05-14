@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@emf-webapp/core": "file:../core",
+    "@xyflow/react": "^12.10.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.0.0"

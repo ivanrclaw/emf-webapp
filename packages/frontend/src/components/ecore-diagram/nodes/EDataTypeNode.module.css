@@ -1,0 +1,49 @@
+/* ── EDataTypeNode ────────────────────────────────────────────── */
+.node {
+  background: #fff;
+  border: 2px solid #9ca3af;
+  border-radius: 10px;
+  min-width: 160px;
+  max-width: 240px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.header {
+  background: #f3f4f6;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.name {
+  font-weight: 700;
+  font-size: 14px;
+  color: #1f2937;
+  cursor: text;
+}
+
+.nameInput {
+  font-weight: 700;
+  font-size: 14px;
+  color: #1f2937;
+  background: #fff;
+  border: 1px solid #9ca3af;
+  border-radius: 4px;
+  padding: 2px 6px;
+  outline: none;
+  width: 100%;
+}
+
+.instanceClass {
+  font-size: 11px;
+  color: #6b7280;
+  font-family: monospace;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

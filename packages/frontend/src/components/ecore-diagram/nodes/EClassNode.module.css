@@ -1,0 +1,178 @@
+/* ── EClassNode ───────────────────────────────────────────────── */
+.node {
+  background: #fff;
+  border: 2px solid #3b82f6;
+  border-radius: 10px;
+  min-width: 200px;
+  max-width: 320px;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+/* ── Header ──────────────────────────────────────────────────── */
+.header {
+  background: #dbeafe;
+  padding: 8px 12px;
+  border-bottom: 1px solid #bfdbfe;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.name {
+  font-weight: 700;
+  font-size: 14px;
+  color: #1e40af;
+  cursor: text;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nameInput {
+  font-weight: 700;
+  font-size: 14px;
+  color: #1e40af;
+  background: #fff;
+  border: 1px solid #3b82f6;
+  border-radius: 4px;
+  padding: 2px 6px;
+  outline: none;
+  width: 100%;
+}
+
+.badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.badgeAbstract {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #f59e0b;
+}
+
+.badgeInterface {
+  background: #e0e7ff;
+  color: #3730a3;
+  border: 1px solid #6366f1;
+}
+
+/* ── Sections ────────────────────────────────────────────────── */
+.section {
+  padding: 4px 0;
+}
+
+.sectionAttributes {
+  background: #f0fdf4;
+}
+
+.sectionReferences {
+  background: #fefce8;
+}
+
+.sectionTitle {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: #6b7280;
+  padding: 4px 12px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+/* ── Items (atributos y referencias) ─────────────────────────── */
+.item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 12px;
+  font-size: 12px;
+  color: #374151;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.item:last-child {
+  border-bottom: none;
+}
+
+.itemLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.typeName {
+  color: #6b7280;
+  font-size: 11px;
+}
+
+.arrow {
+  color: #9ca3af;
+  margin: 0 2px;
+}
+
+/* ── Item badges ─────────────────────────────────────────────── */
+.itemBadge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 3px;
+  line-height: 1.2;
+}
+
+.badgeId {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+}
+
+.badgeRequired {
+  background: #f3e8ff;
+  color: #7c3aed;
+  border: 1px solid #c4b5fd;
+}
+
+.badgeCardinality {
+  background: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #7dd3fc;
+  font-size: 9px;
+}
+
+/* ── Add button ──────────────────────────────────────────────── */
+.addBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 4px 12px;
+  background: transparent;
+  border: none;
+  border-top: 1px dashed #d1d5db;
+  color: #6b7280;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.addBtn:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: #374151;
+}

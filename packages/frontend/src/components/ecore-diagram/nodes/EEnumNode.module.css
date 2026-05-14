@@ -1,0 +1,88 @@
+/* ── EEnumNode ────────────────────────────────────────────────── */
+.node {
+  background: #fff;
+  border: 2px solid #f97316;
+  border-radius: 10px;
+  min-width: 180px;
+  max-width: 280px;
+  box-shadow: 0 2px 8px rgba(249, 115, 22, 0.15);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+/* ── Header ──────────────────────────────────────────────────── */
+.header {
+  background: #fff7ed;
+  padding: 8px 12px;
+  border-bottom: 1px solid #fed7aa;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.name {
+  font-weight: 700;
+  font-size: 14px;
+  color: #9a3412;
+  cursor: text;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nameInput {
+  font-weight: 700;
+  font-size: 14px;
+  color: #9a3412;
+  background: #fff;
+  border: 1px solid #f97316;
+  border-radius: 4px;
+  padding: 2px 6px;
+  outline: none;
+  width: 100%;
+}
+
+/* ── Literals section ────────────────────────────────────────── */
+.literals {
+  padding: 4px 0;
+}
+
+.literalItem {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 12px;
+  font-size: 12px;
+  color: #374151;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.literalItem:last-child {
+  border-bottom: none;
+}
+
+.literalName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.literalValue {
+  color: #78716c;
+  font-size: 11px;
+  font-family: monospace;
+}
+
+.equals {
+  color: #d6d3d1;
+  margin: 0 4px;
+}

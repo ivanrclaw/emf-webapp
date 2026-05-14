@@ -14,6 +14,7 @@ export interface Metamodel {
   name: string;
   nsUri: string;
   nsPrefix: string;
+  content?: Record<string, any>;
 }
 
 export interface PaginatedResponse<T> {
@@ -99,6 +100,17 @@ export function deleteMetamodel(
 ): Promise<void> {
   return request<void>(`/projects/${projectId}/metamodels/${mmid}`, {
     method: 'DELETE',
+  });
+}
+
+export function updateMetamodelContent(
+  projectId: string,
+  mmid: string,
+  content: Record<string, any>,
+): Promise<Metamodel> {
+  return request<Metamodel>(`/projects/${projectId}/metamodels/${mmid}/content`, {
+    method: 'PUT',
+    body: JSON.stringify({ content }),
   });
 }
 

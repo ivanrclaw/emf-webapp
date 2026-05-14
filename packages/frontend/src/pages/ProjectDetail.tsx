@@ -186,6 +186,13 @@ export default function ProjectDetail() {
                   <td style={{ fontSize: '0.85rem' }}>{mm.nsUri}</td>
                   <td><code>{mm.nsPrefix}</code></td>
                   <td className="actions">
+                    <Link
+                      to={`/projects/${id}/metamodels/${mm.id}/edit`}
+                      className="inline-block px-2 py-1 text-sm border rounded hover:bg-blue-50"
+                      title="Open in visual editor"
+                    >
+                      ✏️ Edit
+                    </Link>
                     <button onClick={() => handleExport(mm.id, mm.name)}>
                       Export
                     </button>

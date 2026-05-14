@@ -73,6 +73,15 @@ export class MetamodelController {
     return this.service.remove(pid, mmid);
   }
 
+  @Put(':mmid/content')
+  updateContent(
+    @Param('pid') pid: string,
+    @Param('mmid') mmid: string,
+    @Body() data: { content: Record<string, any> },
+  ) {
+    return this.service.updateContent(pid, mmid, data.content);
+  }
+
   @Post(':mmid/export')
   async exportMetamodel(
     @Param('pid') pid: string,

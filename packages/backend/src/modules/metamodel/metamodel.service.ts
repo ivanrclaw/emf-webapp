@@ -86,6 +86,19 @@ export class MetamodelService {
   }
 
   /**
+   * Actualiza únicamente el content de un metamodelo.
+   */
+  async updateContent(
+    projectId: string,
+    id: string,
+    content: Record<string, any>,
+  ): Promise<Metamodel> {
+    const mm = await this.findOne(projectId, id);
+    mm.content = content;
+    return this.repo.save(mm);
+  }
+
+  /**
    * Elimina un metamodelo por su ID.
    */
   async remove(projectId: string, id: string): Promise<void> {
