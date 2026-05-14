@@ -318,9 +318,10 @@ export default function ProjectDetail() {
             </button>
           </div>
           <pre style={{
-            background: '#0f172a', color: '#e2e8f0', padding: 16, borderRadius: 8,
+            background: 'var(--surface)', color: 'var(--text)', padding: 16, borderRadius: 8,
             fontSize: '.8125rem', overflow: 'auto', maxHeight: 400, fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
             lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+            border: '1px solid var(--border)',
           }}>
             {exportOutput}
           </pre>

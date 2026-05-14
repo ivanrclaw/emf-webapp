@@ -30,6 +30,19 @@ const LANGUAGE_SYNTAXES: Record<string, string> = {
 
 export default function CodeTemplatePage() {
   const { pid, mmid } = useParams<{ pid: string; mmid: string }>();
+  const [monacoTheme, setMonacoTheme] = useState(() =>
+    document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'vs-dark'
+  );
+
+  // Sync Monaco theme with app theme toggle
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      const theme = document.documentElement.getAttribute('data-theme');
+      setMonacoTheme(theme === 'light' ? 'light' : 'vs-dark');
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
+  }, []);
 
   const [metamodel, setMetamodel] = useState<Metamodel | null>(null);
   const [templates, setTemplates] = useState<CodeTemplate[]>([]);
@@ -235,7 +248,7 @@ export default function CodeTemplatePage() {
               value={formContent}
               onChange={(val) => setFormContent(val || '')}
               onMount={handleEditorMount}
-              theme="vs-dark"
+              theme={monacoTheme}
               options={{
                 minimap: { enabled: false },
                 fontSize: 13,
