@@ -39,7 +39,21 @@ import type {
   SerializableEPackage,
   AppNode,
   EcoreNodeData,
+  SerializableEClass,
+  SerializableEEnum,
+  SerializableEDataType,
 } from './types';
+
+// ── Type guards ──────────────────────────────────────────────────
+function isClass(c: any): c is SerializableEClass {
+  return c && 'eAttributes' in c;
+}
+function isEnum(c: any): c is SerializableEEnum {
+  return c && 'eLiterals' in c && !('eAttributes' in c);
+}
+function isDataType(c: any): c is SerializableEDataType {
+  return c && !('eAttributes' in c) && !('eLiterals' in c);
+}
 
 // ── Panel components ───────────────────────────────────────────
 import { Toolbox, DRAG_DATA_KEY } from './Toolbox';
@@ -206,7 +220,8 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
   const onNodeClick: NodeMouseHandler = useCallback(
     (_: any, node: Node) => {
       const data = node.data as EcoreNodeData;
-      model.setSelected(node.id, data?.type ?? 'class');
+      const typeMap: Record<string, string> = { ecoreClass: 'class', ecoreEnum: 'enum', ecoreDataType: 'dataType' };
+      model.setSelected(node.id, typeMap[data?.type] ?? 'class');
     },
     [model],
   );
@@ -339,7 +354,29 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
           <div style={{ flex: 1, overflow: 'hidden', borderTop: '1px solid #e2e8f0' }}>
             <TreeView
               pkg={model.pkg}
-              onSelect={(id) => model.setSelected(id, id ? 'class' : null)}
+              onSelect={(id) => {
+                if (!id) { model.setSelected(null, null); return; }
+                // Check classifiers first
+                const c = model.pkg.eClassifiers.find((x) => x.id === id);
+                if (c) {
+                  const type = isClass(c) ? 'class' : isEnum(c) ? 'enum' : 'dataType';
+                  model.setSelected(id, type);
+                  return;
+                }
+                // Check features (attributes/references)
+                for (const cls of model.pkg.eClassifiers) {
+                  if (!isClass(cls)) continue;
+                  if (cls.eAttributes.some((a) => a.id === id)) {
+                    model.setSelected(id, 'attribute');
+                    return;
+                  }
+                  if (cls.eReferences.some((r) => r.id === id)) {
+                    model.setSelected(id, 'reference');
+                    return;
+                  }
+                }
+                model.setSelected(id, null);
+              }}
               selectedId={model.selectedId}
             />
           </div>
