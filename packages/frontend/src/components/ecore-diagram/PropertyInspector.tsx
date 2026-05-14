@@ -609,36 +609,7 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
     return { classifier: cls, attribute: null, reference: null };
   }, [selectedId, selectedType, pkg]);
 
-  // Si no hay selección
-  if (!selectedId || !selectedType) {
-    return (
-      <div style={{ width: 320, background: '#fff', borderLeft: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', background: 'linear-gradient(to right, #f9fafb, #fff)' }}>
-          <h2 style={{
-            fontSize: 13,
-            fontWeight: 600,
-            color: '#374151',
-            textTransform: 'uppercase',
-            letterSpacing: '0.025em',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-          }}>
-            <svg style={{ width: 16, height: 16, color: '#6366f1' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-            Properties
-          </h2>
-        </div>
-        <div style={{ flex: 1, padding: 16 }}>
-          <NoSelection />
-        </div>
-      </div>
-    );
-  }
-
-  // Handlers específicos
+  // ── Handlers específicos (MUST be before early returns!) ──
   const handleClassifierChange = useCallback(
     (updates: Partial<SerializableEClass | SerializableEEnum | SerializableEDataType>) => {
       if (classifier) {
@@ -755,7 +726,9 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
       </div>
 
       {/* Form */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>{renderForm()}</div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+        {!selectedId || !selectedType ? <NoSelection /> : renderForm()}
+      </div>
     </div>
   );
 };

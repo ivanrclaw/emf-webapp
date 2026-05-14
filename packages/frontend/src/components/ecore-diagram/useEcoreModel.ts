@@ -214,7 +214,7 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg }: UseEcoreMo
       saveTimer.current = setTimeout(() => {
         // Build content with positions from nodesRef
         const content = buildContent(pkgRef.current, posMap.current);
-        updateMetamodelContent(projectId, metamodelId, { content });
+        updateMetamodelContent(projectId, metamodelId, content);
         setIsDirty(false);
       }, AUTO_SAVE_MS);
     }
@@ -423,7 +423,7 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg }: UseEcoreMo
     setLoading(true);
     try {
       const content = buildContent(pkgRef.current, posMap.current);
-      await updateMetamodelContent(projectId, metamodelId, { content });
+      await updateMetamodelContent(projectId, metamodelId, content);
       setIsDirty(false);
     } finally {
       setLoading(false);
