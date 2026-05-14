@@ -79,12 +79,19 @@ const TreeNode: React.FC<TreeNodeProps> = ({
   return (
     <div>
       <div
-        className={`
-          flex items-center gap-1.5 px-2 py-1 cursor-pointer rounded-sm text-sm
-          transition-colors duration-100
-          ${isSelected ? 'bg-blue-100 text-blue-800' : 'hover:bg-gray-100 text-gray-700'}
-        `}
-        style={{ paddingLeft: `${8 + depth * 16}px` }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '4px 8px',
+          paddingLeft: `${8 + depth * 16}px`,
+          cursor: 'pointer',
+          borderRadius: 2,
+          fontSize: 13,
+          ...(isSelected
+            ? { background: '#dbeafe', color: '#1e40af' }
+            : { color: '#374151' }),
+        }}
         onClick={handleSelect}
         role="treeitem"
         aria-selected={isSelected}
@@ -94,13 +101,27 @@ const TreeNode: React.FC<TreeNodeProps> = ({
           <button
             type="button"
             onClick={handleToggle}
-            className="flex-shrink-0 w-4 h-4 flex items-center justify-center
-                       text-gray-400 hover:text-gray-600 transition-transform duration-150
-                       focus:outline-none"
+            style={{
+              flexShrink: 0,
+              width: 16,
+              height: 16,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#9ca3af',
+              outline: 'none',
+              border: 'none',
+              background: 'transparent',
+              padding: 0,
+            }}
             aria-label={expanded ? 'Collapse' : 'Expand'}
           >
             <svg
-              className={`w-3 h-3 transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`}
+              style={{
+                width: 12,
+                height: 12,
+                transform: expanded ? 'rotate(90deg)' : 'none',
+              }}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -109,21 +130,33 @@ const TreeNode: React.FC<TreeNodeProps> = ({
             </svg>
           </button>
         ) : (
-          <span className="flex-shrink-0 w-4" />
+          <span style={{ flexShrink: 0, width: 16 }} />
         )}
 
         {/* Icon */}
-        <span className="flex-shrink-0 text-sm">{icon}</span>
+        <span style={{ flexShrink: 0, fontSize: 13 }}>{icon}</span>
 
         {/* Label */}
-        <span className="truncate font-medium text-sm">{label}</span>
+        <span
+          style={{
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            fontWeight: 500,
+            fontSize: 13,
+          }}
+        >
+          {label}
+        </span>
       </div>
 
       {/* Children with expand animation */}
       <div
-        className={`overflow-hidden transition-all duration-200 ease-in-out ${
-          expanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
-        }`}
+        style={{
+          overflow: 'hidden',
+          maxHeight: expanded ? 2000 : 0,
+          opacity: expanded ? 1 : 0,
+        }}
       >
         {children}
       </div>
@@ -234,8 +267,13 @@ const EClassTreeNode: React.FC<{
         allChildren
       ) : (
         <div
-          className="text-xs text-gray-400 italic pl-10 py-1"
-          style={{ paddingLeft: `${8 + (depth + 1) * 16}px` }}
+          style={{
+            fontSize: 11,
+            color: '#9ca3af',
+            fontStyle: 'italic',
+            padding: '4px 0',
+            paddingLeft: `${8 + (depth + 1) * 16}px`,
+          }}
         >
           No features
         </div>
@@ -298,22 +336,61 @@ export const TreeView: React.FC<TreeViewProps> = ({ pkg, onSelect, selectedId })
   const dataTypeCount = pkg.eClassifiers.filter(isEDataType).length;
 
   return (
-    <div className="flex-1 bg-white border-r border-gray-200 flex flex-col overflow-hidden">
+    <div
+      style={{
+        flex: 1,
+        background: '#fff',
+        borderRight: '1px solid #e5e7eb',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+      }}
+    >
       {/* Header */}
-      <div className="px-4 py-2 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-2">
-          <svg className="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div
+        style={{
+          padding: '8px 16px',
+          borderBottom: '1px solid #e5e7eb',
+          background: 'linear-gradient(to right, #f9fafb, #fff)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
+        <h2
+          style={{
+            fontSize: 13,
+            fontWeight: 600,
+            color: '#374151',
+            textTransform: 'uppercase',
+            letterSpacing: '0.025em',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            margin: 0,
+          }}
+        >
+          <svg
+            style={{ width: 16, height: 16, color: '#6366f1' }}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
           </svg>
           Model
         </h2>
-        <span className="text-xs text-gray-400">
+        <span style={{ fontSize: 11, color: '#9ca3af' }}>
           {pkg.eClassifiers.length} classifier{pkg.eClassifiers.length !== 1 ? 's' : ''}
         </span>
       </div>
 
       {/* Tree content */}
-      <div className="flex-1 overflow-y-auto py-1" role="tree" aria-label="Model tree">
+      <div
+        style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}
+        role="tree"
+        aria-label="Model tree"
+      >
         {/* Root: EPackage */}
         <TreeNode
           label={`${pkg.name}${pkg.nsURI ? ` (${pkg.nsURI})` : ''}`}
@@ -326,8 +403,13 @@ export const TreeView: React.FC<TreeViewProps> = ({ pkg, onSelect, selectedId })
         >
           {/* Summary row */}
           <div
-            className="text-xs text-gray-400 italic px-2 py-1"
-            style={{ paddingLeft: `${8 + 1 * 16}px` }}
+            style={{
+              fontSize: 11,
+              color: '#9ca3af',
+              fontStyle: 'italic',
+              padding: '4px 8px',
+              paddingLeft: `${8 + 1 * 16}px`,
+            }}
           >
             {classCount} class{classCount !== 1 ? 'es' : ''}, {enumCount} enum{enumCount !== 1 ? 's' : ''},{' '}
             {dataTypeCount} data type{dataTypeCount !== 1 ? 's' : ''}
@@ -371,8 +453,13 @@ export const TreeView: React.FC<TreeViewProps> = ({ pkg, onSelect, selectedId })
           {/* Empty state */}
           {pkg.eClassifiers.length === 0 && (
             <div
-              className="text-xs text-gray-400 italic px-2 py-2"
-              style={{ paddingLeft: `${8 + 1 * 16}px` }}
+              style={{
+                fontSize: 11,
+                color: '#9ca3af',
+                fontStyle: 'italic',
+                padding: '8px 8px',
+                paddingLeft: `${8 + 1 * 16}px`,
+              }}
             >
               No classifiers yet. Use the toolbox to add one.
             </div>

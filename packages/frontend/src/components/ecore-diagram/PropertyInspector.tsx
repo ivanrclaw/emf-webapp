@@ -70,16 +70,22 @@ const TextInput: React.FC<{
   onChange: (v: string) => void;
   placeholder?: string;
 }> = ({ label, value, onChange, placeholder }) => (
-  <div className="flex flex-col gap-1">
-    <label className="text-xs font-medium text-gray-500">{label}</label>
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+    <label style={{ fontSize: 11, fontWeight: 500, color: '#6b7280' }}>{label}</label>
     <input
       type="text"
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded
-                 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500
-                 bg-white"
+      style={{
+        width: '100%',
+        padding: '6px 8px',
+        fontSize: 13,
+        border: '1px solid #d1d5db',
+        borderRadius: 4,
+        outline: 'none',
+        background: '#fff',
+      }}
     />
   </div>
 );
@@ -90,12 +96,12 @@ const Checkbox: React.FC<{
   checked: boolean;
   onChange: (v: boolean) => void;
 }> = ({ label, checked, onChange }) => (
-  <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
+  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#374151', cursor: 'pointer', userSelect: 'none' }}>
     <input
       type="checkbox"
       checked={checked}
       onChange={(e) => onChange(e.target.checked)}
-      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+      style={{ borderRadius: 4, border: '1px solid #d1d5db', accentColor: '#2563eb' }}
     />
     {label}
   </label>
@@ -108,14 +114,20 @@ const SelectInput: React.FC<{
   options: { value: string; label: string }[];
   onChange: (v: string) => void;
 }> = ({ label, value, options, onChange }) => (
-  <div className="flex flex-col gap-1">
-    <label className="text-xs font-medium text-gray-500">{label}</label>
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+    <label style={{ fontSize: 11, fontWeight: 500, color: '#6b7280' }}>{label}</label>
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded
-                 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500
-                 bg-white"
+      style={{
+        width: '100%',
+        padding: '6px 8px',
+        fontSize: 13,
+        border: '1px solid #d1d5db',
+        borderRadius: 4,
+        outline: 'none',
+        background: '#fff',
+      }}
     >
       {options.map((opt) => (
         <option key={opt.value} value={opt.value}>
@@ -128,9 +140,16 @@ const SelectInput: React.FC<{
 
 /** Sección de propiedades agrupadas */
 const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
-  <div className="border-b border-gray-200 pb-3 mb-3 last:border-b-0 last:mb-0 last:pb-0">
-    <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{title}</h4>
-    <div className="space-y-2">{children}</div>
+  <div style={{ borderBottom: '1px solid #e5e7eb', paddingBottom: 12, marginBottom: 12 }}>
+    <h4 style={{
+      fontSize: 11,
+      fontWeight: 600,
+      color: '#9ca3af',
+      textTransform: 'uppercase',
+      letterSpacing: '0.05em',
+      marginBottom: 8,
+    }}>{title}</h4>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{children}</div>
   </div>
 );
 
@@ -172,10 +191,10 @@ const EClassForm: React.FC<EClassFormProps> = ({ cls, pkg, onChange, onAddAttrib
   );
 
   return (
-    <div className="space-y-3">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <Section title="General">
         <TextInput label="Name" value={cls.name} onChange={(v) => onChange({ name: v })} />
-        <div className="flex gap-4">
+        <div style={{ display: 'flex', gap: 16 }}>
           <Checkbox label="Abstract" checked={cls.abstract} onChange={(v) => onChange({ abstract: v })} />
           <Checkbox label="Interface" checked={cls.interface} onChange={(v) => onChange({ interface: v })} />
         </div>
@@ -183,22 +202,31 @@ const EClassForm: React.FC<EClassFormProps> = ({ cls, pkg, onChange, onAddAttrib
 
       <Section title="Super Types">
         {cls.eSuperTypes.length === 0 && (
-          <p className="text-xs text-gray-400 italic">No super types</p>
+          <p style={{ fontSize: 11, color: '#9ca3af', fontStyle: 'italic' }}>No super types</p>
         )}
-        <div className="flex flex-wrap gap-1.5">
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {cls.eSuperTypes.map((superId) => {
             const superCls = pkg.eClassifiers.find((c) => c.id === superId);
             return (
               <span
                 key={superId}
-                className="inline-flex items-center gap-1 px-2 py-0.5 text-xs
-                           bg-blue-50 text-blue-700 rounded-full border border-blue-200"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: '2px 8px',
+                  fontSize: 11,
+                  background: '#eff6ff',
+                  color: '#1d4ed8',
+                  borderRadius: 9999,
+                  border: '1px solid #bfdbfe',
+                }}
               >
                 {superCls?.name ?? superId}
                 <button
                   type="button"
                   onClick={() => removeSuperType(superId)}
-                  className="text-blue-400 hover:text-blue-700 font-bold leading-none"
+                  style={{ color: '#60a5fa', fontWeight: 700, lineHeight: 1, border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }}
                   title="Remove super type"
                 >
                   ×
@@ -213,9 +241,16 @@ const EClassForm: React.FC<EClassFormProps> = ({ cls, pkg, onChange, onAddAttrib
             onChange={(e) => {
               if (e.target.value) addSuperType(e.target.value);
             }}
-            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded
-                       focus:outline-none focus:ring-1 focus:ring-blue-500
-                       bg-white mt-1"
+            style={{
+              width: '100%',
+              padding: '6px 8px',
+              fontSize: 13,
+              border: '1px solid #d1d5db',
+              borderRadius: 4,
+              outline: 'none',
+              background: '#fff',
+              marginTop: 4,
+            }}
           >
             <option value="">+ Add super type…</option>
             {availableSuperTypes.map((c) => (
@@ -228,13 +263,22 @@ const EClassForm: React.FC<EClassFormProps> = ({ cls, pkg, onChange, onAddAttrib
       </Section>
 
       <Section title="Features">
-        <div className="flex gap-2">
+        <div style={{ display: 'flex', gap: 8 }}>
           {onAddAttribute && (
             <button
               type="button"
               onClick={() => onAddAttribute(cls.id)}
-              className="flex-1 px-2 py-1.5 text-xs font-medium text-white bg-blue-600
-                         rounded hover:bg-blue-700 transition-colors"
+              style={{
+                flex: 1,
+                padding: '6px 8px',
+                fontSize: 11,
+                fontWeight: 500,
+                color: '#fff',
+                background: '#2563eb',
+                borderRadius: 4,
+                border: 'none',
+                cursor: 'pointer',
+              }}
             >
               + Attribute
             </button>
@@ -243,14 +287,23 @@ const EClassForm: React.FC<EClassFormProps> = ({ cls, pkg, onChange, onAddAttrib
             <button
               type="button"
               onClick={() => onAddReference(cls.id)}
-              className="flex-1 px-2 py-1.5 text-xs font-medium text-white bg-green-600
-                         rounded hover:bg-green-700 transition-colors"
+              style={{
+                flex: 1,
+                padding: '6px 8px',
+                fontSize: 11,
+                fontWeight: 500,
+                color: '#fff',
+                background: '#16a34a',
+                borderRadius: 4,
+                border: 'none',
+                cursor: 'pointer',
+              }}
             >
               + Reference
             </button>
           )}
         </div>
-        <div className="text-xs text-gray-400">
+        <div style={{ fontSize: 11, color: '#9ca3af' }}>
           {cls.eAttributes.length} attribute{cls.eAttributes.length !== 1 ? 's' : ''},{' '}
           {cls.eReferences.length} reference{cls.eReferences.length !== 1 ? 's' : ''}
         </div>
@@ -263,7 +316,7 @@ const AttributeForm: React.FC<{
   attr: SerializableEAttribute;
   onChange: (updates: Partial<SerializableEAttribute>) => void;
 }> = ({ attr, onChange }) => (
-  <div className="space-y-3">
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
     <Section title="General">
       <TextInput label="Name" value={attr.name} onChange={(v) => onChange({ name: v })} />
       <SelectInput
@@ -275,7 +328,7 @@ const AttributeForm: React.FC<{
     </Section>
 
     <Section title="Bounds">
-      <div className="flex gap-3">
+      <div style={{ display: 'flex', gap: 12 }}>
         <TextInput
           label="Lower Bound"
           value={boundDisplay(attr.lowerBound)}
@@ -323,7 +376,7 @@ const ReferenceForm: React.FC<{
   const currentTarget = pkg.eClassifiers.find((c) => c.id === ref.targetId);
 
   return (
-    <div className="space-y-3">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <Section title="General">
         <TextInput label="Name" value={ref.name} onChange={(v) => onChange({ name: v })} />
         <SelectInput
@@ -333,14 +386,14 @@ const ReferenceForm: React.FC<{
           onChange={(v) => onChange({ targetId: v })}
         />
         {currentTarget && (
-          <p className="text-xs text-gray-400">
+          <p style={{ fontSize: 11, color: '#9ca3af' }}>
             → {currentTarget.name} ({ref.targetId.slice(0, 12)}…)
           </p>
         )}
       </Section>
 
       <Section title="Bounds">
-        <div className="flex gap-3">
+        <div style={{ display: 'flex', gap: 12 }}>
           <TextInput
             label="Lower Bound"
             value={boundDisplay(ref.lowerBound)}
@@ -362,8 +415,8 @@ const ReferenceForm: React.FC<{
 
       {ref.eOpposite && (
         <Section title="Opposite">
-          <p className="text-xs text-gray-600">
-            eOpposite: <code className="bg-gray-100 px-1 rounded">{ref.eOpposite}</code>
+          <p style={{ fontSize: 11, color: '#4b5563' }}>
+            eOpposite: <code style={{ background: '#f3f4f6', padding: '0 4px', borderRadius: 4 }}>{ref.eOpposite}</code>
           </p>
         </Section>
       )}
@@ -375,23 +428,32 @@ const EnumForm: React.FC<{
   enm: SerializableEEnum;
   onChange: (updates: Partial<SerializableEEnum>) => void;
 }> = ({ enm, onChange }) => (
-  <div className="space-y-3">
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
     <Section title="General">
       <TextInput label="Name" value={enm.name} onChange={(v) => onChange({ name: v })} />
     </Section>
 
     <Section title="Literals">
       {enm.eLiterals.length === 0 && (
-        <p className="text-xs text-gray-400 italic">No literals defined</p>
+        <p style={{ fontSize: 11, color: '#9ca3af', fontStyle: 'italic' }}>No literals defined</p>
       )}
-      <div className="space-y-1">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         {enm.eLiterals.map((lit) => (
           <div
             key={lit.id}
-            className="flex items-center gap-2 px-2 py-1 text-xs bg-gray-50 rounded border border-gray-200"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '4px 8px',
+              fontSize: 11,
+              background: '#f9fafb',
+              borderRadius: 4,
+              border: '1px solid #e5e7eb',
+            }}
           >
-            <span className="font-mono text-gray-500">{lit.value}</span>
-            <span className="text-gray-700">{lit.name}</span>
+            <span style={{ fontFamily: 'monospace', color: '#6b7280' }}>{lit.value}</span>
+            <span style={{ color: '#374151' }}>{lit.name}</span>
           </div>
         ))}
       </div>
@@ -403,7 +465,7 @@ const DataTypeForm: React.FC<{
   dt: SerializableEDataType;
   onChange: (updates: Partial<SerializableEDataType>) => void;
 }> = ({ dt, onChange }) => (
-  <div className="space-y-3">
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
     <Section title="General">
       <TextInput label="Name" value={dt.name} onChange={(v) => onChange({ name: v })} />
       <TextInput
@@ -447,30 +509,30 @@ const EdgeForm: React.FC<{
     : null;
 
   return (
-    <div className="space-y-3">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <Section title="Edge">
-        <div className="text-xs text-gray-500 space-y-2">
+        <div style={{ fontSize: 11, color: '#6b7280', display: 'flex', flexDirection: 'column', gap: 8 }}>
           <p>
-            <span className="font-medium">ID:</span>{' '}
-            <code className="bg-gray-100 px-1 rounded">{edgeId}</code>
+            <span style={{ fontWeight: 500 }}>ID:</span>{' '}
+            <code style={{ background: '#f3f4f6', padding: '0 4px', borderRadius: 4 }}>{edgeId}</code>
           </p>
           {ref && (
             <>
               <p>
-                <span className="font-medium">Type:</span> Reference
+                <span style={{ fontWeight: 500 }}>Type:</span> Reference
               </p>
               <p>
-                <span className="font-medium">Name:</span> {ref.ref.name}
+                <span style={{ fontWeight: 500 }}>Name:</span> {ref.ref.name}
               </p>
               <p>
-                <span className="font-medium">From:</span> {ref.className}
+                <span style={{ fontWeight: 500 }}>From:</span> {ref.className}
               </p>
               <p>
-                <span className="font-medium">To:</span>{' '}
+                <span style={{ fontWeight: 500 }}>To:</span>{' '}
                 {pkg.eClassifiers.find((c) => c.id === ref.ref.targetId)?.name ?? ref.ref.targetId}
               </p>
               <p>
-                <span className="font-medium">Containment:</span>{' '}
+                <span style={{ fontWeight: 500 }}>Containment:</span>{' '}
                 {ref.ref.containment ? 'Yes' : 'No'}
               </p>
             </>
@@ -478,13 +540,13 @@ const EdgeForm: React.FC<{
           {inheritance && (
             <>
               <p>
-                <span className="font-medium">Type:</span> Inheritance
+                <span style={{ fontWeight: 500 }}>Type:</span> Inheritance
               </p>
               <p>
-                <span className="font-medium">From:</span> {inheritance.sourceName}
+                <span style={{ fontWeight: 500 }}>From:</span> {inheritance.sourceName}
               </p>
               <p>
-                <span className="font-medium">To:</span> {inheritance.targetName}
+                <span style={{ fontWeight: 500 }}>To:</span> {inheritance.targetName}
               </p>
             </>
           )}
@@ -495,8 +557,8 @@ const EdgeForm: React.FC<{
 };
 
 const NoSelection: React.FC = () => (
-  <div className="flex flex-col items-center justify-center h-full text-gray-400">
-    <svg className="w-10 h-10 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#9ca3af' }}>
+    <svg style={{ width: 40, height: 40, marginBottom: 8 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -504,8 +566,8 @@ const NoSelection: React.FC = () => (
         d="M15 15l-2 5H9l2-5m4.5-4.5a3 3 0 11-6 0 3 3 0 016 0z"
       />
     </svg>
-    <p className="text-sm">Select an element</p>
-    <p className="text-xs">to inspect its properties</p>
+    <p style={{ fontSize: 14 }}>Select an element</p>
+    <p style={{ fontSize: 11 }}>to inspect its properties</p>
   </div>
 );
 
@@ -550,17 +612,26 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
   // Si no hay selección
   if (!selectedId || !selectedType) {
     return (
-      <div className="w-80 bg-white border-l border-gray-200 flex flex-col">
-        <div className="px-4 py-3 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white">
-          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-2">
-            <svg className="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div style={{ width: 320, background: '#fff', borderLeft: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', background: 'linear-gradient(to right, #f9fafb, #fff)' }}>
+          <h2 style={{
+            fontSize: 13,
+            fontWeight: 600,
+            color: '#374151',
+            textTransform: 'uppercase',
+            letterSpacing: '0.025em',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+          }}>
+            <svg style={{ width: 16, height: 16, color: '#6366f1' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
             Properties
           </h2>
         </div>
-        <div className="flex-1 p-4">
+        <div style={{ flex: 1, padding: 16 }}>
           <NoSelection />
         </div>
       </div>
@@ -614,35 +685,35 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
             onAddReference={onAddReference}
           />
         ) : (
-          <p className="text-sm text-red-500">Selected element is not a class</p>
+          <p style={{ fontSize: 13, color: '#ef4444' }}>Selected element is not a class</p>
         );
 
       case 'attribute':
         return attribute ? (
           <AttributeForm attr={attribute} onChange={handleAttributeChange} />
         ) : (
-          <p className="text-sm text-red-500">Attribute not found</p>
+          <p style={{ fontSize: 13, color: '#ef4444' }}>Attribute not found</p>
         );
 
       case 'reference':
         return reference ? (
           <ReferenceForm ref={reference} pkg={pkg} onChange={handleReferenceChange} />
         ) : (
-          <p className="text-sm text-red-500">Reference not found</p>
+          <p style={{ fontSize: 13, color: '#ef4444' }}>Reference not found</p>
         );
 
       case 'enum':
         return classifier && isEEnum(classifier) ? (
           <EnumForm enm={classifier} onChange={handleClassifierChange} />
         ) : (
-          <p className="text-sm text-red-500">Selected element is not an enum</p>
+          <p style={{ fontSize: 13, color: '#ef4444' }}>Selected element is not an enum</p>
         );
 
       case 'dataType':
         return classifier && isEDataType(classifier) ? (
           <DataTypeForm dt={classifier} onChange={handleClassifierChange} />
         ) : (
-          <p className="text-sm text-red-500">Selected element is not a data type</p>
+          <p style={{ fontSize: 13, color: '#ef4444' }}>Selected element is not a data type</p>
         );
 
       case 'edge':
@@ -654,18 +725,27 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
   };
 
   return (
-    <div className="w-80 bg-white border-l border-gray-200 flex flex-col overflow-hidden">
+    <div style={{ width: 320, background: '#fff', borderLeft: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* Header */}
-      <div className="px-4 py-3 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white">
-        <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-2">
-          <svg className="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', background: 'linear-gradient(to right, #f9fafb, #fff)' }}>
+        <h2 style={{
+          fontSize: 13,
+          fontWeight: 600,
+          color: '#374151',
+          textTransform: 'uppercase',
+          letterSpacing: '0.025em',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+        }}>
+          <svg style={{ width: 16, height: 16, color: '#6366f1' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
           Properties
         </h2>
         {classifier && (
-          <p className="text-xs text-gray-400 mt-0.5 truncate">
+          <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {classifier.name}
             {selectedType !== 'class' && selectedType !== 'enum' && selectedType !== 'dataType' && (
               <> · {selectedType}</>
@@ -675,7 +755,7 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
       </div>
 
       {/* Form */}
-      <div className="flex-1 overflow-y-auto p-4">{renderForm()}</div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>{renderForm()}</div>
     </div>
   );
 };
