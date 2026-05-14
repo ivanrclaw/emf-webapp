@@ -71,6 +71,10 @@ export function deleteProject(id: string): Promise<void> {
   return request<void>(`/projects/${id}`, { method: 'DELETE' });
 }
 
+export function exportProjectAsZip(projectId: string): void {
+  window.open(`${BASE_URL}/projects/${projectId}/export/zip`, '_blank');
+}
+
 // ── Metamodels ────────────────────────────────────────────────────
 
 export function getMetamodels(projectId: string): Promise<Metamodel[]> {

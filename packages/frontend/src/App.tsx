@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import ProjectList from './pages/ProjectList';
 import ProjectDetail from './pages/ProjectDetail';
 import EcoreEditor from './components/ecore-diagram/EcoreEditor';
@@ -7,12 +8,32 @@ import ModelEditor from './pages/ModelEditor';
 import SpecEditor from './pages/SpecEditor';
 import OCLConstraintPage from './pages/OCLConstraintPage';
 import CodeTemplatePage from './pages/CodeTemplatePage';
-import ToastProvider from './components/ToastProvider';
+import ToastProvider, { useToast } from './components/ToastProvider';
 import './App.css';
 
 function AppLayout() {
   const location = useLocation();
   const isEditor = location.pathname.includes('/edit');
+  const { addToast } = useToast();
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+
+  useEffect(() => {
+    const saved = localStorage.getItem('theme');
+    if (saved === 'light' || saved === 'dark') {
+      setTheme(saved);
+      document.documentElement.setAttribute('data-theme', saved);
+    } else {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  }, []);
+
+  function toggleTheme() {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+    addToast(`Switched to ${next} mode`, 'info');
+  }
 
   // Editor renders fullscreen (no app chrome)
   if (isEditor) {
@@ -41,6 +62,14 @@ function AppLayout() {
               Projects
             </Link>
           </nav>
+          <button
+            onClick={toggleTheme}
+            className="btn btn-ghost btn-icon"
+            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+            style={{ fontSize: 18 }}
+          >
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
         </div>
       </header>
       <main className="app-main">

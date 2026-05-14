@@ -18,12 +18,18 @@ import {
   Param,
   Body,
   Query,
+  Res,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { ProjectService } from './project.service.js';
+import { ProjectExportService } from './project-export.service.js';
 
 @Controller('projects')
 export class ProjectController {
-  constructor(private readonly service: ProjectService) {}
+  constructor(
+    private readonly service: ProjectService,
+    private readonly exportService: ProjectExportService,
+  ) {}
 
   @Get()
   findAll(
@@ -57,5 +63,16 @@ export class ProjectController {
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.service.remove(id);
+  }
+
+  @Get(':id/export/zip')
+  async exportZip(@Param('id') id: string, @Res() res: Response) {
+    const buffer = await this.exportService.exportProjectAsZip(id);
+    res.set({
+      'Content-Type': 'application/zip',
+      'Content-Disposition': `attachment; filename="project-${id}.zip"`,
+      'Content-Length': buffer.length,
+    });
+    res.end(buffer);
   }
 }

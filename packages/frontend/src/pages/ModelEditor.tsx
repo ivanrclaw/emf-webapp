@@ -133,10 +133,12 @@ function ModelEditorInner() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'unsaved' | ''>('');
   const [selectedNode, setSelectedNode] = useState<Node<M1ObjectNodeData> | null>(null);
   const [exportOutput, setExportOutput] = useState('');
 
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
+  const lastSavedRef = useRef('');
 
   const [nodes, setNodes, onNodesChange] = useNodesState<M1ObjectNodeData>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -183,6 +185,8 @@ function ModelEditorInner() {
     try {
       const content = JSON.stringify({ nodes, edges });
       await updateM1Model(pid, mmid, modelId, { content });
+      lastSavedRef.current = content;
+      setSaveStatus('saved');
       setError('');
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to save');
@@ -190,6 +194,17 @@ function ModelEditorInner() {
       setSaving(false);
     }
   }, [pid, mmid, modelId, nodes, edges]);
+
+  /* Auto-save every 30 seconds */
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const currentContent = JSON.stringify({ nodes, edges });
+      if (currentContent !== lastSavedRef.current) {
+        handleSave();
+      }
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [handleSave, nodes, edges]);
 
   /* Export */
   const handleExport = useCallback((format: 'json' | 'xmi') => {
@@ -322,6 +337,12 @@ function ModelEditorInner() {
           {m1Model?.name || 'Model Editor'}
         </span>
         <div style={{ flex: 1 }} />
+        {saveStatus === 'saved' && (
+          <span style={{ color: '#22c55e', fontSize: 12 }}>Saved</span>
+        )}
+        {saveStatus === 'unsaved' && (
+          <span style={{ color: '#f59e0b', fontSize: 12 }}>Unsaved changes</span>
+        )}
         <button className="btn btn-secondary btn-sm" onClick={() => handleExport('json')}>
           📥 JSON
         </button>

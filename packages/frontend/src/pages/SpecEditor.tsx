@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   getMetamodel,
@@ -117,7 +117,9 @@ export default function SpecEditor() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'unsaved' | ''>('');
   const [activeMapping, setActiveMapping] = useState<{ layerIdx: number; mappingIdx: number } | null>(null);
+  const lastSavedRef = useRef('');
 
   // ── Load ──────────────────────────────────────────────────────────
 
@@ -180,6 +182,8 @@ export default function SpecEditor() {
         });
         setActiveSpec(created);
       }
+      lastSavedRef.current = specPayload;
+      setSaveStatus('saved');
       setError('');
       // Refresh list
       const sList = await getGraphicalSpecs(mmid);
@@ -190,6 +194,18 @@ export default function SpecEditor() {
       setSaving(false);
     }
   }, [mmid, activeSpec, specData]);
+
+  // ── Auto-save every 30 seconds ────────────────────────────────────
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const currentContent = JSON.stringify(specData);
+      if (currentContent !== lastSavedRef.current) {
+        handleSave();
+      }
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [handleSave, specData]);
 
   // ── Add mapping ───────────────────────────────────────────────────
 
@@ -323,6 +339,9 @@ export default function SpecEditor() {
         <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving}>
           {saving ? 'Saving...' : '💾 Save Spec'}
         </button>
+        {saveStatus === 'saved' && (
+          <span style={{ color: '#22c55e', fontSize: 12 }}>Saved</span>
+        )}
 
         {activeSpec && (
           <button

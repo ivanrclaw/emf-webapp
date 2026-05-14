@@ -6,6 +6,7 @@ import {
   createMetamodel,
   deleteMetamodel,
   exportMetamodel,
+  exportProjectAsZip,
   Project,
   Metamodel,
 } from '../api/client';
@@ -207,6 +208,13 @@ export default function ProjectDetail() {
           <option value="xml">XML</option>
           <option value="xmi">XMI (Eclipse)</option>
         </select>
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={() => exportProjectAsZip(id!)}
+          title="Download entire project as ZIP"
+        >
+          📦 ZIP
+        </button>
       </div>
 
       {/* ── Empty State ────────────────────────────────────── */}
