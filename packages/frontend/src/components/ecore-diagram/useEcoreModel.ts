@@ -68,7 +68,7 @@ const _callbacks = {
   onClassifierChange: (() => {}) as (id: string, updates: any) => void,
   onAddAttribute: (() => {}) as (classId: string) => void,
   onAddReference: (() => {}) as (classId: string) => void,
-  onSelect: (() => {}) as (id: string | null) => void,
+  onSelect: (() => {}) as (id: string | null, type?: string | null) => void,
 };
 
 // ═══════════════════════════════════════════════════════════════

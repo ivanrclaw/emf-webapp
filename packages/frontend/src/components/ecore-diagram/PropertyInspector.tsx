@@ -315,7 +315,9 @@ const EClassForm: React.FC<EClassFormProps> = ({ cls, pkg, onChange, onAddAttrib
 const AttributeForm: React.FC<{
   attr: SerializableEAttribute;
   onChange: (updates: Partial<SerializableEAttribute>) => void;
-}> = ({ attr, onChange }) => (
+}> = ({ attr, onChange }) => {
+  const isPrimitive = STANDARD_DATATYPES.includes(attr.eType);
+  return (
   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
     <Section title="General">
       <TextInput label="Name" value={attr.name} onChange={(v) => onChange({ name: v })} />
@@ -327,20 +329,31 @@ const AttributeForm: React.FC<{
       />
     </Section>
 
-    <Section title="Bounds">
-      <div style={{ display: 'flex', gap: 12 }}>
-        <TextInput
-          label="Lower Bound"
-          value={boundDisplay(attr.lowerBound)}
-          onChange={(v) => onChange({ lowerBound: parseBound(v) })}
-        />
-        <TextInput
-          label="Upper Bound"
-          value={boundDisplay(attr.upperBound)}
-          onChange={(v) => onChange({ upperBound: parseBound(v) })}
-        />
-      </div>
-    </Section>
+    {isPrimitive ? (
+      <Section title="Multiplicity">
+        <p style={{ fontSize: 11, color: '#9ca3af', margin: 0 }}>
+          Single-valued <strong>{attr.eType}</strong> attribute<br />
+          <span style={{ fontSize: 10 }}>
+            To change multiplicity, use an EReference to a data type holder.
+          </span>
+        </p>
+      </Section>
+    ) : (
+      <Section title="Bounds">
+        <div style={{ display: 'flex', gap: 12 }}>
+          <TextInput
+            label="Lower Bound"
+            value={boundDisplay(attr.lowerBound)}
+            onChange={(v) => onChange({ lowerBound: parseBound(v) })}
+          />
+          <TextInput
+            label="Upper Bound"
+            value={boundDisplay(attr.upperBound)}
+            onChange={(v) => onChange({ upperBound: parseBound(v) })}
+          />
+        </div>
+      </Section>
+    )}
 
     <Section title="Options">
       <Checkbox label="ID" checked={attr.iD} onChange={(v) => onChange({ iD: v })} />
@@ -358,7 +371,7 @@ const AttributeForm: React.FC<{
       />
     </Section>
   </div>
-);
+);};
 
 const ReferenceForm: React.FC<{
   ref: SerializableEReference;

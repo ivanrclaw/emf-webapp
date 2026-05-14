@@ -182,6 +182,14 @@
   font-family: 'JetBrains Mono', monospace;
 }
 
+.badgeDerived {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fcd34d;
+  font-size: 9px;
+  font-weight: 700;
+}
+
 /* ── Add button ──────────────────────────────────────────────── */
 .addBtn {
   display: flex;

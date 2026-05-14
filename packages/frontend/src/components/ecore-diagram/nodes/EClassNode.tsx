@@ -3,6 +3,8 @@
  *
  * Nodo React Flow que representa un EClass del metamodelo Ecore.
  * Muestra el nombre, estereotipos (abstract/interface), atributos y referencias.
+ *
+ * Los atributos y referencias son clicables → seleccionan el feature en PropertyInspector.
  */
 import { useCallback, useState, type KeyboardEvent } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
@@ -73,20 +75,32 @@ export default function EClassNode(props: NodeProps) {
   );
 
   // ── Render helpers ──────────────────────────────────────────
-  const renderAttribute = (attr: SerializableEAttribute) => (
-    <div key={attr.id} className={styles.item}>
+
+  const renderAttribute = (a: SerializableEAttribute) => (
+    <div
+      key={a.id}
+      className={styles.item}
+      onClick={(e) => { e.stopPropagation(); onSelect(a.id, 'attribute'); }}
+    >
       <span className={styles.itemLabel}>
-        {attr.name}<span className={styles.typeName}>: {attr.eType}</span>
+        {a.name}<span className={styles.typeName}>: {a.eType}</span>
       </span>
-      {attr.iD && <span className={`${styles.itemBadge} ${styles.badgeId}`}>ID</span>}
-      {attr.lowerBound > 0 && (
+      {a.iD && <span className={`${styles.itemBadge} ${styles.badgeId}`}>ID</span>}
+      {a.lowerBound > 0 && (
         <span className={`${styles.itemBadge} ${styles.badgeRequired}`}>*</span>
+      )}
+      {a.derived && (
+        <span className={`${styles.itemBadge} ${styles.badgeDerived}`}>/</span>
       )}
     </div>
   );
 
   const renderReference = (ref: SerializableEReference) => (
-    <div key={ref.id} className={styles.item}>
+    <div
+      key={ref.id}
+      className={styles.item}
+      onClick={(e) => { e.stopPropagation(); onSelect(ref.id, 'reference'); }}
+    >
       <span className={styles.itemLabel}>
         {ref.name}<span className={styles.arrow}>→</span>
         <span className={styles.typeName}>{ref.targetId}</span>
@@ -98,7 +112,7 @@ export default function EClassNode(props: NodeProps) {
   );
 
   return (
-    <div className={styles.node} onClick={() => onSelect(classifier.id)}>
+    <div className={styles.node} onClick={() => onSelect(classifier.id, 'class')}>
       {/* ── Handles ──────────────────────────────────────── */}
       <Handle type="target" position={Position.Left} />
       <Handle type="source" position={Position.Right} />

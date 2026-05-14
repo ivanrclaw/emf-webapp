@@ -102,7 +102,7 @@ export type EcoreNodeData = {
   onClassifierChange: (id: string, updates: Partial<SerializableEClass | SerializableEEnum | SerializableEDataType>) => void;
   onAddAttribute: (classId: string) => void;
   onAddReference: (classId: string) => void;
-  onSelect: (id: string | null) => void;
+  onSelect: (id: string | null, type?: string | null) => void;
 };
 
 export type AppNode = Node<EcoreNodeData, EcoreNodeType> | BuiltInNode;
