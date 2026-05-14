@@ -42,7 +42,7 @@ async function bootstrap(): Promise<void> {
   }
 
   const port = process.env.PORT ? parseInt(process.env.PORT) : 3000;
-  await app.listen(port);
-  console.log(`Backend running on http://localhost:${port}/api`);
+  await app.listen(port, '0.0.0.0');
+  console.log(`Backend running on http://0.0.0.0:${port}/api`);
 }
 bootstrap();
