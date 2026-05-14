@@ -12,7 +12,7 @@ RUN npm ci
 
 # Copiar todo el código fuente
 COPY packages/core/src packages/core/src
-COPY packages/core/dist packages/core/dist || true
+COPY packages/core/dist packages/core/dist
 COPY packages/core/tsconfig.json packages/core/
 COPY packages/backend/src packages/backend/src
 COPY packages/backend/tsconfig.json packages/backend/
@@ -21,9 +21,8 @@ COPY packages/frontend/index.html packages/frontend/
 COPY packages/frontend/vite.config.ts packages/frontend/
 COPY packages/frontend/tsconfig.json packages/frontend/
 
-# Compilar en orden: core → frontend → backend
-RUN cd packages/core && rm -f tsconfig.tsbuildinfo && npx tsc && \
-    cd /app/packages/frontend && npx vite build && \
+# Compilar frontend y backend (core ya trae dist pre-compilado)
+RUN cd /app/packages/frontend && npx vite build && \
     cd /app/packages/backend && npx tsc
 
 RUN mkdir -p /app/data
