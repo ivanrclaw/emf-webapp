@@ -9,9 +9,12 @@ import {
   Project,
   Metamodel,
 } from '../api/client';
+import { formatDate } from '../utils/format';
+import { useToast } from '../components/ToastProvider';
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
+  const { addToast } = useToast();
 
   const [project, setProject] = useState<Project | null>(null);
   const [metamodels, setMetamodels] = useState<Metamodel[]>([]);
@@ -64,6 +67,7 @@ export default function ProjectDetail() {
       setShowCreate(false);
       setMmName(''); setMmNsUri(''); setMmNsPrefix('');
       await load();
+      addToast('Metamodel created successfully', 'success');
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to create metamodel');
     } finally {
@@ -78,6 +82,7 @@ export default function ProjectDetail() {
     try {
       await deleteMetamodel(id, mmid);
       await load();
+      addToast('Metamodel deleted successfully', 'success');
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to delete metamodel');
     } finally {
@@ -91,6 +96,7 @@ export default function ProjectDetail() {
     try {
       const result = await exportMetamodel(id, mmid, exportFormat);
       setExportOutput(result);
+      addToast('Metamodel exported successfully', 'success');
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to export metamodel');
     } finally {
@@ -159,11 +165,11 @@ export default function ProjectDetail() {
           </div>
           <div>
             <div className="text-xs text-muted" style={{ marginBottom: 4 }}>Created</div>
-            <div className="text-sm">{new Date(project.createdAt).toLocaleString()}</div>
+            <div className="text-sm">{formatDate(project.createdAt)}</div>
           </div>
           <div>
             <div className="text-xs text-muted" style={{ marginBottom: 4 }}>Last Updated</div>
-            <div className="text-sm">{new Date(project.updatedAt).toLocaleString()}</div>
+            <div className="text-sm">{formatDate(project.updatedAt)}</div>
           </div>
           <div>
             <div className="text-xs text-muted" style={{ marginBottom: 4 }}>Metamodels</div>

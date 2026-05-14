@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getProjects, createProject, Project } from '../api/client';
+import { formatDate } from '../utils/format';
+import { useToast } from '../components/ToastProvider';
 
 export default function ProjectList() {
   const [projects, setProjects] = useState<Project[]>([]);
+  const { addToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -36,6 +39,7 @@ export default function ProjectList() {
       setFormName('');
       setFormDesc('');
       await load();
+      addToast('Project created successfully', 'success');
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to create project');
     } finally {
@@ -120,9 +124,9 @@ export default function ProjectList() {
               <div className="project-card-name">{p.name}</div>
               {p.description && <div className="project-card-desc">{p.description}</div>}
               <div className="project-card-meta">
-                <span>📅 Created {new Date(p.createdAt).toLocaleDateString()}</span>
+                <span>📅 Created {formatDate(p.createdAt)}</span>
                 <span>·</span>
-                <span>🔄 Updated {new Date(p.updatedAt).toLocaleDateString()}</span>
+                <span>🔄 Updated {formatDate(p.updatedAt)}</span>
               </div>
             </Link>
           ))}

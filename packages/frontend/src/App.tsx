@@ -7,6 +7,7 @@ import ModelEditor from './pages/ModelEditor';
 import SpecEditor from './pages/SpecEditor';
 import OCLConstraintPage from './pages/OCLConstraintPage';
 import CodeTemplatePage from './pages/CodeTemplatePage';
+import ToastProvider from './components/ToastProvider';
 import './App.css';
 
 function AppLayout() {
@@ -60,7 +61,9 @@ function AppLayout() {
 export default function App() {
   return (
     <BrowserRouter>
-      <AppLayout />
+      <ToastProvider>
+        <AppLayout />
+      </ToastProvider>
     </BrowserRouter>
   );
 }
