@@ -19,6 +19,7 @@ import {
   Controls,
   MiniMap,
   BackgroundVariant,
+  ConnectionMode,
   SelectionMode,
   Panel,
   useReactFlow,
@@ -444,6 +445,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
             edgeTypes={edgeTypes as any}
             fitView
             selectionMode={SelectionMode.Partial}
+            connectionMode={ConnectionMode.Loose}
             deleteKeyCode={['Delete', 'Backspace']}
             multiSelectionKeyCode="Shift"
             panOnScroll
