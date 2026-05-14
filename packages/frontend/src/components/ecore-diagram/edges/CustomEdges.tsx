@@ -49,7 +49,7 @@ function edgeColors(type: string) {
   }
 }
 
-/** SVG marker: punta de flecha abierta (▶). La punta se renderiza en el TARGET */
+/** SVG marker: punta de flecha rellena (▶) estilo UML/Eclipse Ecore Tools */
 const ARROW_MARKER = (id: string, color: string) => (
   <marker
     key={`arrow-${id}`}
@@ -61,7 +61,7 @@ const ARROW_MARKER = (id: string, color: string) => (
     markerHeight="10"
     orient="auto"
   >
-    <path d="M 2 1 L 11 6 L 2 11" fill="none" stroke={color} strokeWidth={1.5} strokeLinejoin="round" />
+    <path d="M 1 1 L 11 6 L 1 11 Z" fill={color} />
   </marker>
 );
 
