@@ -16,10 +16,10 @@ export class Project {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column()
+  @Column({ type: 'text' })
   name!: string;
 
-  @Column({ nullable: true, type: 'text' })
+  @Column({ type: 'text', nullable: true })
   description?: string | null;
 
   @CreateDateColumn()

@@ -48,17 +48,18 @@ export class MetamodelService {
     projectId: string,
     data: {
       name: string;
-      nsURI: string;
-      nsPrefix: string;
-      content: Record<string, any>;
+      nsURI?: string;
+      nsPrefix?: string;
+      content?: Record<string, any>;
     },
   ): Promise<Metamodel> {
+    const safeName = data.name.trim().toLowerCase().replace(/\\s+/g, '-');
     const mm = this.repo.create({
       project_id: projectId,
       name: data.name,
-      ns_uri: data.nsURI,
-      ns_prefix: data.nsPrefix,
-      content: data.content,
+      ns_uri: data.nsURI || `http://${safeName}.emf-webapp/1.0`,
+      ns_prefix: data.nsPrefix || safeName,
+      content: data.content || {},
     });
     return this.repo.save(mm);
   }

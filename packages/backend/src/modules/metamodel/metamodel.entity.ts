@@ -18,22 +18,22 @@ export class Metamodel {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column({ name: 'project_id' })
+  @Column({ type: 'text' })
   project_id!: string;
 
   @ManyToOne(() => Project, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'project_id' })
   project?: Project;
 
-  @Column()
+  @Column({ type: 'text' })
   name!: string;
 
-  @Column({ name: 'ns_uri' })
+  @Column({ type: 'text', nullable: true, default: 'http://example.org/default', name: 'ns_uri' })
   ns_uri!: string;
 
-  @Column({ name: 'ns_prefix' })
+  @Column({ type: 'text', nullable: true, default: 'default', name: 'ns_prefix' })
   ns_prefix!: string;
 
-  @Column({ type: 'simple-json' })
+  @Column({ type: 'simple-json', default: '{}' })
   content!: Record<string, any>;
 }
