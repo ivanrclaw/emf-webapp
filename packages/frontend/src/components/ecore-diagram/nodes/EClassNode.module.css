@@ -213,37 +213,22 @@
 }
 
 /* ── Handles de conexión ───────────────────────────────────────── */
-
-/* Target handle (entrada, izquierda) — ⬅️ recibe conexiones */
-.node :global(.react-flow__handle[data-handlepos="left"]) {
+/* Ambos handles visualmente idénticos — la dirección depende de  */
+/* dónde empiezas a arrastrar, no del color del handle.          */
+/*     arrastras desde A → B → la referencia vive en A           */
+.node :global(.react-flow__handle) {
   width: 10px;
   height: 10px;
-  background: var(--primary, #818cf8);
+  background: #94a3b8;
   border: 2px solid #fff;
   border-radius: 50%;
-  left: -5px;
   cursor: crosshair;
-  transition: transform 0.15s;
+  transition: transform 0.15s, background 0.15s;
   z-index: 5;
 }
-.node :global(.react-flow__handle[data-handlepos="left"]):hover {
+.node :global(.react-flow__handle):hover {
   transform: scale(1.4);
-}
-
-/* Source handle (salida, derecha) — ➡️ inicia conexiones */
-.node :global(.react-flow__handle[data-handlepos="right"]) {
-  width: 10px;
-  height: 10px;
-  background: #22c55e;
-  border: 2px solid #fff;
-  border-radius: 50%;
-  right: -5px;
-  cursor: crosshair;
-  transition: transform 0.15s;
-  z-index: 5;
-}
-.node :global(.react-flow__handle[data-handlepos="right"]):hover {
-  transform: scale(1.4);
+  background: #64748b;
 }
 
 /* Connecting line durante el arrastre */
