@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   getProject,
   getMetamodels,
   createMetamodel,
   deleteMetamodel,
+  deleteProject,
   exportMetamodel,
   exportProjectAsZip,
   Project,
@@ -16,6 +17,7 @@ import { useToast } from '../components/ToastProvider';
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const { addToast } = useToast();
+  const navigate = useNavigate();
 
   const [project, setProject] = useState<Project | null>(null);
   const [metamodels, setMetamodels] = useState<Metamodel[]>([]);
@@ -91,6 +93,18 @@ export default function ProjectDetail() {
     }
   }
 
+  async function handleDeleteProject() {
+    if (!id) return;
+    if (!window.confirm(`Delete entire project "${project?.name}"? This action CANNOT be undone and will delete all metamodels and diagrams inside it.`)) return;
+    try {
+      await deleteProject(id);
+      addToast('Project deleted successfully', 'success');
+      navigate('/');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to delete project');
+    }
+  }
+
   async function handleExport(mmid: string) {
     if (!id) return;
     setExportingId(mmid);
@@ -152,6 +166,19 @@ export default function ProjectDetail() {
               <p className="page-subtitle" style={{ marginTop: 2 }}>{project.description}</p>
             )}
           </div>
+        </div>
+        <div className="detail-header-right">
+          <button
+            className="btn btn-sm"
+            style={{
+              color: 'var(--danger)',
+              border: '1px solid var(--danger)',
+              background: 'transparent',
+            }}
+            onClick={handleDeleteProject}
+          >
+            🗑️ Delete Project
+          </button>
         </div>
       </div>
 
