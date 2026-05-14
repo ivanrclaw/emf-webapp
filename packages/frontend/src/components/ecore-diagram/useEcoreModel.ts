@@ -140,6 +140,25 @@ function pkgToEdges(pkg: SerializableEPackage): AppEdge[] {
   const out: AppEdge[] = [];
   for (const c of pkg.eClassifiers ?? []) {
     if (!isClass(c)) continue;
+
+    // Inheritance edges: child → parent (source=child, target=parent)
+    if (c.eSuperTypes) {
+      for (const superTypeId of c.eSuperTypes) {
+        if (!superTypeId) continue;
+        const edgeId = `inh_${c.id}_${superTypeId}`;
+        // Avoid duplicates (when both classes declare the same super type)
+        if (out.some((e) => e.id === edgeId)) continue;
+        out.push({
+          id: edgeId,
+          source: c.id,
+          target: superTypeId,
+          type: 'inheritanceEdge',
+          data: { label: '', type: 'inheritanceEdge', sourceId: c.id, targetId: superTypeId } satisfies EcoreEdgeData,
+        } as AppEdge);
+      }
+    }
+
+    // Reference edges
     for (const ref of c.eReferences) {
       if (!ref.targetId) continue;
       const edgeType = ref.containment ? 'containmentEdge' as const : 'referenceEdge' as const;
