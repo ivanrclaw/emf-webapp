@@ -290,3 +290,81 @@ export function validateOCLConstraints(
     body: JSON.stringify({ modelContent }),
   });
 }
+
+// ── Code Templates ─────────────────────────────────────────────────
+
+export interface CodeTemplate {
+  id: string;
+  metamodelId: string;
+  name: string;
+  description?: string;
+  template: string;
+  language: string;
+  isPredefined: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GenerationFile {
+  name: string;
+  content: string;
+}
+
+export interface GenerationResult {
+  files: GenerationFile[];
+}
+
+export interface PredefinedGenerator {
+  type: string;
+  name: string;
+  description: string;
+}
+
+export function getCodeTemplates(mmid: string): Promise<CodeTemplate[]> {
+  return request<CodeTemplate[]>(`/metamodels/${mmid}/templates`);
+}
+
+export function createCodeTemplate(
+  mmid: string,
+  data: { name: string; description?: string; template: string; language?: string },
+): Promise<CodeTemplate> {
+  return request<CodeTemplate>(`/metamodels/${mmid}/templates`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateCodeTemplate(
+  mmid: string,
+  id: string,
+  data: { name?: string; description?: string; template?: string; language?: string },
+): Promise<CodeTemplate> {
+  return request<CodeTemplate>(`/metamodels/${mmid}/templates/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteCodeTemplate(mmid: string, id: string): Promise<void> {
+  return request<void>(`/metamodels/${mmid}/templates/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export function generateFromTemplate(mmid: string, templateId: string): Promise<GenerationResult> {
+  return request<GenerationResult>(`/metamodels/${mmid}/templates/${templateId}/generate`, {
+    method: 'POST',
+  });
+}
+
+export function getPredefinedGenerators(mmid: string): Promise<PredefinedGenerator[]> {
+  return request<PredefinedGenerator[]>(`/metamodels/${mmid}/templates/generate/predefined`, {
+    method: 'POST',
+  });
+}
+
+export function runPredefinedGenerator(mmid: string, type: string): Promise<GenerationResult> {
+  return request<GenerationResult>(`/metamodels/${mmid}/templates/generate/${type}`, {
+    method: 'POST',
+  });
+}

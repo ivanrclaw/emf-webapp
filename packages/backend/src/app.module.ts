@@ -9,18 +9,20 @@ import { MetamodelModule } from './modules/metamodel/metamodel.module.js';
 import { M1ModelModule } from './modules/m1model/m1model.module.js';
 import { GraphicalSpecModule } from './modules/graphicalspec/graphicalspec.module.js';
 import { OCLConstraintModule } from './modules/oclconstraint/oclconstraint.module.js';
+import { CodeTemplateModule } from './modules/codetemplate/codetemplate.module.js';
 import { Project } from './modules/project/project.entity.js';
 import { Metamodel } from './modules/metamodel/metamodel.entity.js';
 import { M1Model } from './modules/m1model/m1model.entity.js';
 import { GraphicalSpec } from './modules/graphicalspec/graphicalspec.entity.js';
 import { OCLConstraint } from './modules/oclconstraint/oclconstraint.entity.js';
+import { CodeTemplate } from './modules/codetemplate/codetemplate.entity.js';
 
 @Module({
   imports: [
     TypeOrmModule.forRoot({
       type: 'sqlite',
       database: './data/emf-webapp.db',
-      entities: [Project, Metamodel, M1Model, GraphicalSpec, OCLConstraint],
+      entities: [Project, Metamodel, M1Model, GraphicalSpec, OCLConstraint, CodeTemplate],
       synchronize: true,
     }),
     ProjectModule,
@@ -28,6 +30,7 @@ import { OCLConstraint } from './modules/oclconstraint/oclconstraint.entity.js';
     M1ModelModule,
     GraphicalSpecModule,
     OCLConstraintModule,
+    CodeTemplateModule,
   ],
 })
 export class AppModule {}

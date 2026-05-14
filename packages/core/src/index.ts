@@ -25,3 +25,4 @@ export * from './util/EList.js';
 export * from './serialization/JSONSerializer.js';
 export * from './serialization/XMISerializer.js';
 export * from './ocl/index.js';
+export * from './mtl/index.js';

@@ -265,6 +265,12 @@ export default function ProjectDetail() {
                 >
                   🔬 OCL
                 </Link>
+                <Link
+                  to={`/projects/${id}/metamodels/${mm.id}/templates`}
+                  className="btn btn-secondary btn-sm"
+                >
+                  📝 Code
+                </Link>
                 <button
                   className="btn btn-secondary btn-sm"
                   onClick={() => handleExport(mm.id)}
