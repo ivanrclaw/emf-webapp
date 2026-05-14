@@ -89,45 +89,6 @@ function renderCombinedLabel(
   );
 }
 
-/** SVG marker: punta de flecha rellena (▶) estilo UML/Eclipse Ecore Tools */
-function renderCombinedLabel(
-  label: string,
-  cardinality: string,
-  labelX: number,
-  labelY: number,
-  sourceX: number,
-  sourceY: number,
-  targetX: number,
-  targetY: number,
-  colors: { bg: string; text: string; border: string },
-) {
-  const combined = cardinality ? `${label} ${cardinality}` : label;
-  // Posición: 60% del camino desde source hacia target (ligeramente más cerca del source)
-  const px = labelX * 0.6 + sourceX * 0.4;
-  const py = labelY * 0.6 + sourceY * 0.4;
-  return (
-    <EdgeLabelRenderer>
-      <div
-        style={{
-          position: 'absolute',
-          transform: `translate(-50%, -50%) translate(${px}px,${py}px)`,
-          background: colors.bg,
-          border: `1px solid ${colors.border}`,
-          borderRadius: 4,
-          padding: '1px 6px',
-          fontSize: 11,
-          fontWeight: 600,
-          pointerEvents: 'none',
-          whiteSpace: 'nowrap',
-          color: colors.text,
-          zIndex: 10,
-        }}
-      >
-        {combined}
-      </div>
-    </EdgeLabelRenderer>
-  );
-}
 const ARROW_MARKER = (id: string, color: string) => (
   <marker
     key={`arrow-${id}`}
