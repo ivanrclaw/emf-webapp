@@ -211,3 +211,44 @@
   background: rgba(99, 102, 241, 0.04);
   color: #6366f1;
 }
+
+/* ── Handles de conexión ───────────────────────────────────────── */
+
+/* Target handle (entrada, izquierda) — ⬅️ recibe conexiones */
+.node :global(.react-flow__handle[data-handlepos="left"]) {
+  width: 10px;
+  height: 10px;
+  background: var(--primary, #818cf8);
+  border: 2px solid #fff;
+  border-radius: 50%;
+  left: -5px;
+  cursor: crosshair;
+  transition: transform 0.15s;
+  z-index: 5;
+}
+.node :global(.react-flow__handle[data-handlepos="left"]):hover {
+  transform: scale(1.4);
+}
+
+/* Source handle (salida, derecha) — ➡️ inicia conexiones */
+.node :global(.react-flow__handle[data-handlepos="right"]) {
+  width: 10px;
+  height: 10px;
+  background: #22c55e;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  right: -5px;
+  cursor: crosshair;
+  transition: transform 0.15s;
+  z-index: 5;
+}
+.node :global(.react-flow__handle[data-handlepos="right"]):hover {
+  transform: scale(1.4);
+}
+
+/* Connecting line durante el arrastre */
+.react-flow__connection-path {
+  stroke: var(--primary, #818cf8) !important;
+  stroke-width: 2 !important;
+  stroke-dasharray: 6 4 !important;
+}
