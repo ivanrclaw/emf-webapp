@@ -122,7 +122,7 @@ export interface EcoreEdgeData extends Record<string, unknown> {
   onSelect: (id: string | null) => void;
 }
 
-export type AppEdge = Edge<EcoreEdgeData> | BuiltInNode;
+export type AppEdge = Edge<EcoreEdgeData>;
 
 // ================================================================
 // Estado del editor
