@@ -27,6 +27,7 @@ import {
   type NodeMouseHandler,
   type EdgeMouseHandler,
 } from '@xyflow/react';
+import { useParams } from 'react-router-dom';
 import '@xyflow/react/dist/style.css';
 
 import { useEcoreModel } from './useEcoreModel';
@@ -451,7 +452,10 @@ export interface EcoreEditorProps {
   metamodelId: string;
 }
 
-export function EcoreEditor({ projectId, metamodelId }: EcoreEditorProps) {
+export function EcoreEditor(_props: EcoreEditorProps) {
+  const { pid, mmid } = useParams<{ pid: string; mmid: string }>();
+  const projectId = pid ?? '';
+  const metamodelId = mmid ?? '';
   // Reset component on route change
   const key = `${projectId}/${metamodelId}`;
 
