@@ -3,10 +3,7 @@ app = "emf-webapp"
 primary_region = "yyz"
 
 [build]
-  builder = "heroku/buildpacks:20"
-
-[build.env]
-  NODE_ENV = "production"
+  dockerfile = "Dockerfile"
 
 [http_service]
   internal_port = 3000
