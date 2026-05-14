@@ -12,6 +12,7 @@ RUN npm ci
 
 # Copiar todo el código fuente
 COPY packages/core/src packages/core/src
+COPY packages/core/dist packages/core/dist || true
 COPY packages/core/tsconfig.json packages/core/
 COPY packages/backend/src packages/backend/src
 COPY packages/backend/tsconfig.json packages/backend/
