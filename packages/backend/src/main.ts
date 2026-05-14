@@ -21,8 +21,13 @@ async function bootstrap(): Promise<void> {
   app.setGlobalPrefix('api');
 
   // Servir frontend estático si existe
-  const frontendDist = join(__dirname, '../../frontend/dist');
-  if (existsSync(frontendDist)) {
+  const possiblePaths = [
+    join(__dirname, '../../frontend'),       // monorepo layout
+    join(__dirname, '../frontend'),           // flat layout
+    '/app/frontend',                          // docker layout
+  ];
+  const frontendDist = possiblePaths.find(p => existsSync(p));
+  if (frontendDist) {
     app.use(express.static(frontendDist));
     // SPA fallback: cualquier ruta que no sea /api sirve index.html
     app.use((req: any, res: any, next: any) => {
