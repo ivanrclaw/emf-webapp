@@ -1,15 +1,11 @@
 /**
  * @emf-webapp/backend — ProjectExportService
- *
- * Genera un ZIP con el proyecto completo: proyecto, metamodelos, modelos,
- * especificaciones gráficas, constraints OCL y plantillas de código.
  */
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+import AdmZip = require('adm-zip');
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { createRequire } from 'module';
-const _require = createRequire(import.meta.url);
-const archiver = _require('archiver');
 import { Project } from './project.entity.js';
 import { Metamodel } from '../metamodel/metamodel.entity.js';
 import { M1Model } from '../m1model/m1model.entity.js';
@@ -40,57 +36,42 @@ export class ProjectExportService {
       throw new NotFoundException(`Project with id "${projectId}" not found`);
     }
 
-    return new Promise<Buffer>(async (resolve, reject) => {
-      const archive = archiver('zip', { zlib: { level: 9 } });
-      const chunks: Buffer[] = [];
+    const zip = new AdmZip();
 
-      archive.on('data', (chunk: Buffer) => chunks.push(chunk));
-      archive.on('end', () => resolve(Buffer.concat(chunks)));
-      archive.on('error', (err) => reject(err));
+    // Add project.json
+    zip.addFile('project.json', Buffer.from(JSON.stringify(project, null, 2)));
 
-      // Add project.json
-      archive.append(JSON.stringify(project, null, 2), { name: 'project.json' });
+    // Add metamodels
+    const metamodels = await this.metamodelRepo.find({ where: { project_id: projectId } });
+    for (const mm of metamodels) {
+      const dir = `metamodels/${mm.name}`;
+      zip.addFile(`${dir}/metamodel.json`, Buffer.from(JSON.stringify(mm, null, 2)));
 
-      // Add metamodels
-      const metamodels = await this.metamodelRepo.find({ where: { project_id: projectId } });
-      for (const mm of metamodels) {
-        const dir = `metamodels/${mm.name}`;
-        archive.append(JSON.stringify(mm, null, 2), { name: `${dir}/metamodel.json` });
-
-        // Models (M1)
-        const models = await this.modelRepo.find({ where: { metamodel_id: mm.id } });
-        for (const model of models) {
-          archive.append(JSON.stringify(model, null, 2), {
-            name: `${dir}/models/${model.name}.json`,
-          });
-        }
-
-        // Graphical Specs
-        const specs = await this.specRepo.find({ where: { metamodel_id: mm.id } });
-        for (const spec of specs) {
-          archive.append(JSON.stringify(spec, null, 2), {
-            name: `${dir}/specs/${spec.name}.json`,
-          });
-        }
-
-        // OCL Constraints
-        const constraints = await this.constraintRepo.find({ where: { metamodel_id: mm.id } });
-        for (const constraint of constraints) {
-          archive.append(JSON.stringify(constraint, null, 2), {
-            name: `${dir}/constraints/${constraint.name}.json`,
-          });
-        }
-
-        // Code Templates
-        const templates = await this.templateRepo.find({ where: { metamodel_id: mm.id } });
-        for (const template of templates) {
-          archive.append(JSON.stringify(template, null, 2), {
-            name: `${dir}/templates/${template.name}.json`,
-          });
-        }
+      // Models (M1)
+      const models = await this.modelRepo.find({ where: { metamodel_id: mm.id } });
+      for (const model of models) {
+        zip.addFile(`${dir}/models/${model.name}.json`, Buffer.from(JSON.stringify(model, null, 2)));
       }
 
-      await archive.finalize();
-    });
+      // Graphical Specs
+      const specs = await this.specRepo.find({ where: { metamodel_id: mm.id } });
+      for (const spec of specs) {
+        zip.addFile(`${dir}/specs/${spec.name}.json`, Buffer.from(JSON.stringify(spec, null, 2)));
+      }
+
+      // OCL Constraints
+      const constraints = await this.constraintRepo.find({ where: { metamodel_id: mm.id } });
+      for (const constraint of constraints) {
+        zip.addFile(`${dir}/constraints/${constraint.name}.json`, Buffer.from(JSON.stringify(constraint, null, 2)));
+      }
+
+      // Code Templates
+      const templates = await this.templateRepo.find({ where: { metamodel_id: mm.id } });
+      for (const template of templates) {
+        zip.addFile(`${dir}/templates/${template.name}.json`, Buffer.from(JSON.stringify(template, null, 2)));
+      }
+    }
+
+    return zip.toBuffer();
   }
 }
