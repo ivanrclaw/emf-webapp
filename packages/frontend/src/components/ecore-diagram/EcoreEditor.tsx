@@ -27,13 +27,13 @@ import {
   type NodeMouseHandler,
   type EdgeMouseHandler,
 } from '@xyflow/react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import '@xyflow/react/dist/style.css';
 
 import { useEcoreModel } from './useEcoreModel';
 import { nodeTypes } from './nodes/nodeTypes';
 import { edgeTypes } from './edges/CustomEdges';
-import { getMetamodel } from '../../api/client';
+import { getMetamodel, getProject } from '../../api/client';
 
 import type {
   SerializableEPackage,
@@ -138,15 +138,20 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
   const reactFlowInstance = useReactFlow();
   const [fetchedPkg, setFetchedPkg] = useState<SerializableEPackage | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [projectName, setProjectName] = useState('');
   const initialLoad = useRef(true);
 
-  // ── Fetch metamodel on mount ────────────────────────────────
+  // ── Fetch metamodel + project name on mount ─────────────────
   useEffect(() => {
     let cancelled = false;
     async function load() {
       try {
-        const mm = await getMetamodel(projectId, metamodelId);
+        const [mm, proj] = await Promise.all([
+          getMetamodel(projectId, metamodelId),
+          getProject(projectId),
+        ]);
         if (cancelled) return;
+        setProjectName(proj.name);
         const content = mm.content as any;
         if (content && typeof content === 'object' && content.name) {
           const pkg: SerializableEPackage = {
@@ -291,11 +296,49 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
       {/* ── Top Bar ─────────────────────────────────────────── */}
       <div style={styles.topbar}>
         <div style={styles.topbarLeft}>
-          <span style={styles.logo}>EMF <span style={styles.logoSub}>Editor</span></span>
-          <span style={{ color: '#cbd5e1', fontSize: 18, margin: '0 4px' }}>|</span>
-          <span style={{ fontSize: 14, color: '#334155', fontWeight: 600 }}>
+          {/* Back to project */}
+          <Link
+            to={`/projects/${projectId}`}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '6px 10px', borderRadius: 8, textDecoration: 'none',
+              fontSize: 13, fontWeight: 500,
+              color: 'var(--text-secondary)',
+              transition: 'all .15s',
+              marginRight: 8,
+            }}
+            title="Back to project"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
+            </svg>
+            Back
+          </Link>
+
+          {/* Breadcrumb-style separator */}
+          <span style={{ color: 'var(--border)', fontSize: 14, fontWeight: 300, marginRight: 8 }}>/</span>
+
+          {/* Project name */}
+          <Link
+            to={`/projects/${projectId}`}
+            style={{
+              fontSize: 14, fontWeight: 500, textDecoration: 'none',
+              color: 'var(--text-secondary)',
+              transition: 'color .15s',
+            }}
+          >
+            {projectName || 'Project'}
+          </Link>
+
+          <span style={{ color: 'var(--border)', fontSize: 14, fontWeight: 300, margin: '0 8px' }}>/</span>
+
+          {/* Current metamodel name */}
+          <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>
             {model.pkg.name || 'Untitled'}
           </span>
+
+          {/* Dirty indicator */}
           {model.isDirty && (
             <span style={{ ...styles.badge, background: 'var(--warning-bg)', color: 'var(--warning)', fontSize: 11 }}>
               ● Modified

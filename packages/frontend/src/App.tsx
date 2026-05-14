@@ -9,6 +9,7 @@ import SpecEditor from './pages/SpecEditor';
 import OCLConstraintPage from './pages/OCLConstraintPage';
 import CodeTemplatePage from './pages/CodeTemplatePage';
 import ToastProvider, { useToast } from './components/ToastProvider';
+import Breadcrumbs from './components/Breadcrumbs';
 import './App.css';
 
 function AppLayout() {
@@ -53,6 +54,7 @@ function AppLayout() {
             <div className="app-logo">E</div>
             EMF WebApp
           </Link>
+          <Breadcrumbs />
           <nav className="app-nav">
             <Link to="/" className="nav-link active">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
