@@ -256,10 +256,7 @@ export default function ProjectDetail() {
                   to={`/projects/${id}/metamodels/${mm.id}/edit`}
                   className="btn btn-primary btn-sm"
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
-                  </svg>
-                  Edit
+                  ✏️ Edit
                 </Link>
                 <Link
                   to={`/projects/${id}/metamodels/${mm.id}/models`}
@@ -290,16 +287,18 @@ export default function ProjectDetail() {
                   onClick={() => handleExport(mm.id)}
                   disabled={exportingId === mm.id}
                 >
-                  {exportingId === mm.id ? 'Exporting...' : '📥 Export'}
+                  {exportingId === mm.id ? '⏳' : '📥 Export'}
                 </button>
-                <button
-                  className="btn btn-sm btn-ghost"
-                  style={{ color: 'var(--danger)', marginLeft: 'auto' }}
-                  onClick={() => handleDelete(mm.id, mm.name)}
-                  disabled={deletingId === mm.id}
-                >
-                  {deletingId === mm.id ? '...' : '🗑️'}
-                </button>
+                <div className="mm-card-actions-delete">
+                  <button
+                    className="btn btn-sm btn-ghost"
+                    style={{ color: 'var(--danger)', fontSize: 11 }}
+                    onClick={() => handleDelete(mm.id, mm.name)}
+                    disabled={deletingId === mm.id}
+                  >
+                    🗑️ Remove
+                  </button>
+                </div>
               </div>
             </div>
           ))}
