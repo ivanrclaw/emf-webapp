@@ -2,6 +2,8 @@ import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-do
 import ProjectList from './pages/ProjectList';
 import ProjectDetail from './pages/ProjectDetail';
 import EcoreEditor from './components/ecore-diagram/EcoreEditor';
+import ModelList from './pages/ModelList';
+import ModelEditor from './pages/ModelEditor';
 import './App.css';
 
 function AppLayout() {
@@ -13,6 +15,7 @@ function AppLayout() {
     return (
       <Routes>
         <Route path="/projects/:pid/metamodels/:mmid/edit" element={<EcoreEditor />} />
+        <Route path="/projects/:pid/metamodels/:mmid/models/:modelId/edit" element={<ModelEditor />} />
       </Routes>
     );
   }
@@ -40,6 +43,7 @@ function AppLayout() {
         <Routes>
           <Route path="/" element={<ProjectList />} />
           <Route path="/projects/:id" element={<ProjectDetail />} />
+          <Route path="/projects/:pid/metamodels/:mmid/models" element={<ModelList />} />
         </Routes>
       </main>
     </div>

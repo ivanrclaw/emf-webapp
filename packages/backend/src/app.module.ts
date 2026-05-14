@@ -6,19 +6,22 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ProjectModule } from './modules/project/project.module.js';
 import { MetamodelModule } from './modules/metamodel/metamodel.module.js';
+import { M1ModelModule } from './modules/m1model/m1model.module.js';
 import { Project } from './modules/project/project.entity.js';
 import { Metamodel } from './modules/metamodel/metamodel.entity.js';
+import { M1Model } from './modules/m1model/m1model.entity.js';
 
 @Module({
   imports: [
     TypeOrmModule.forRoot({
       type: 'sqlite',
       database: './data/emf-webapp.db',
-      entities: [Project, Metamodel],
+      entities: [Project, Metamodel, M1Model],
       synchronize: true,
     }),
     ProjectModule,
     MetamodelModule,
+    M1ModelModule,
   ],
 })
 export class AppModule {}

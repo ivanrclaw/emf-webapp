@@ -124,3 +124,60 @@ export function exportMetamodel(
     { method: 'POST' },
   );
 }
+
+// ── M1 Models ──────────────────────────────────────────────────────
+
+export interface M1Model {
+  id: string;
+  projectId: string;
+  metamodelId: string;
+  name: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function getM1Models(projectId: string, mmid: string): Promise<M1Model[]> {
+  return request<M1Model[]>(`/projects/${projectId}/metamodels/${mmid}/models`);
+}
+
+export function createM1Model(
+  projectId: string,
+  mmid: string,
+  data: { name: string; content?: string },
+): Promise<M1Model> {
+  return request<M1Model>(`/projects/${projectId}/metamodels/${mmid}/models`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export function getM1Model(
+  projectId: string,
+  mmid: string,
+  modelId: string,
+): Promise<M1Model> {
+  return request<M1Model>(`/projects/${projectId}/metamodels/${mmid}/models/${modelId}`);
+}
+
+export function updateM1Model(
+  projectId: string,
+  mmid: string,
+  modelId: string,
+  data: { name?: string; content?: string },
+): Promise<M1Model> {
+  return request<M1Model>(`/projects/${projectId}/metamodels/${mmid}/models/${modelId}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteM1Model(
+  projectId: string,
+  mmid: string,
+  modelId: string,
+): Promise<void> {
+  return request<void>(`/projects/${projectId}/metamodels/${mmid}/models/${modelId}`, {
+    method: 'DELETE',
+  });
+}
