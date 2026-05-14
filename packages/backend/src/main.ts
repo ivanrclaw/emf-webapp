@@ -22,9 +22,10 @@ async function bootstrap(): Promise<void> {
 
   // Servir frontend estático si existe
   const possiblePaths = [
-    join(__dirname, '../../frontend'),       // monorepo layout
-    join(__dirname, '../frontend'),           // flat layout
-    '/app/frontend',                          // docker layout
+    join(__dirname, '../../frontend/dist'),    // monorepo layout
+    join(__dirname, '../frontend'),            // flat layout
+    '/app/frontend',                           // docker flat layout
+    join(__dirname, '../../../packages/frontend/dist'), // another monorepo layout
   ];
   const frontendDist = possiblePaths.find(p => existsSync(p));
   if (frontendDist) {

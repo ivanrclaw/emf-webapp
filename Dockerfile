@@ -1,58 +1,33 @@
-FROM node:22-alpine AS builder
+FROM node:22-alpine
 WORKDIR /app
 
-# Instalar pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
-# Copiar config de monorepo
-COPY pnpm-workspace.yaml package.json pnpm-lock.yaml turbo.json ./
+# Copiar archivos de dependencias primero (caching)
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY packages/core/package.json packages/core/
 COPY packages/backend/package.json packages/backend/
 COPY packages/frontend/package.json packages/frontend/
 
-# Instalar dep con dev
-RUN pnpm install --frozen-lockfile
+# Instalar TODO con shamefully-hoist para que node_modules sea plano
+RUN pnpm install --frozen-lockfile --shamefully-hoist
 
-# Copiar código fuente
+# Copiar todo el código fuente
 COPY packages/core/src packages/core/src
 COPY packages/core/tsconfig.json packages/core/
 COPY packages/backend/src packages/backend/src
 COPY packages/backend/tsconfig.json packages/backend/
-COPY packages/frontend/ packages/frontend/
+COPY packages/frontend/src packages/frontend/src
+COPY packages/frontend/index.html packages/frontend/
+COPY packages/frontend/vite.config.ts packages/frontend/
+COPY packages/frontend/tsconfig.json packages/frontend/
 
 # Compilar
 RUN cd packages/core && npx tsc && \
     cd /app/packages/frontend && npx vite build && \
     cd /app/packages/backend && npx tsc
 
-# --- Runner stage: usar npm para evitar problemas de ESM con pnpm ---
-FROM node:22-alpine AS runner
-WORKDIR /app
-
-COPY --from=builder /app/packages/backend/dist /app/backend
-COPY --from=builder /app/packages/frontend/dist /app/frontend
-
-# Generar un package.json mínimo para npm
-RUN echo '{"name":"emf-webapp","type":"module","dependencies":{}}' > /app/package.json
-
-# Instalar dependencias con npm (resuelve correctamente ESM)
-RUN npm install --save \
-    @nestjs/common@latest \
-    @nestjs/core@latest \
-    @nestjs/platform-express@latest \
-    @nestjs/typeorm@latest \
-    reflect-metadata \
-    rxjs \
-    typeorm@latest \
-    sqlite3@latest \
-    better-sqlite3@latest
-
-# Enlazar paquete core local
-RUN mkdir -p /app/node_modules/@emf-webapp
-COPY --from=builder /app/packages/core/dist /app/node_modules/@emf-webapp/core
-RUN echo '{"name":"@emf-webapp/core","type":"module","main":"index.js"}' > /app/node_modules/@emf-webapp/core/package.json
-
 RUN mkdir -p /app/data
 
 EXPOSE 3000
-CMD ["node", "backend/main.js"]
+CMD ["node", "packages/backend/dist/main.js"]
