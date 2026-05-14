@@ -49,7 +49,85 @@ function edgeColors(type: string) {
   }
 }
 
+/** Renderiza el label combinado (refName + cardinalidad) para edge reference/containment */
+function renderCombinedLabel(
+  label: string,
+  cardinality: string,
+  labelX: number,
+  labelY: number,
+  sourceX: number,
+  sourceY: number,
+  targetX: number,
+  targetY: number,
+  colors: { bg: string; text: string; border: string },
+) {
+  const combined = cardinality ? `${label} ${cardinality}` : label;
+  // Posición: 60% del camino desde source hacia target (ligeramente más cerca del source)
+  const px = labelX * 0.6 + sourceX * 0.4;
+  const py = labelY * 0.6 + sourceY * 0.4;
+  return (
+    <EdgeLabelRenderer>
+      <div
+        style={{
+          position: 'absolute',
+          transform: `translate(-50%, -50%) translate(${px}px,${py}px)`,
+          background: colors.bg,
+          border: `1px solid ${colors.border}`,
+          borderRadius: 4,
+          padding: '1px 6px',
+          fontSize: 11,
+          fontWeight: 600,
+          pointerEvents: 'none',
+          whiteSpace: 'nowrap',
+          color: colors.text,
+          zIndex: 10,
+        }}
+      >
+        {combined}
+      </div>
+    </EdgeLabelRenderer>
+  );
+}
+
 /** SVG marker: punta de flecha rellena (▶) estilo UML/Eclipse Ecore Tools */
+function renderCombinedLabel(
+  label: string,
+  cardinality: string,
+  labelX: number,
+  labelY: number,
+  sourceX: number,
+  sourceY: number,
+  targetX: number,
+  targetY: number,
+  colors: { bg: string; text: string; border: string },
+) {
+  const combined = cardinality ? `${label} ${cardinality}` : label;
+  // Posición: 60% del camino desde source hacia target (ligeramente más cerca del source)
+  const px = labelX * 0.6 + sourceX * 0.4;
+  const py = labelY * 0.6 + sourceY * 0.4;
+  return (
+    <EdgeLabelRenderer>
+      <div
+        style={{
+          position: 'absolute',
+          transform: `translate(-50%, -50%) translate(${px}px,${py}px)`,
+          background: colors.bg,
+          border: `1px solid ${colors.border}`,
+          borderRadius: 4,
+          padding: '1px 6px',
+          fontSize: 11,
+          fontWeight: 600,
+          pointerEvents: 'none',
+          whiteSpace: 'nowrap',
+          color: colors.text,
+          zIndex: 10,
+        }}
+      >
+        {combined}
+      </div>
+    </EdgeLabelRenderer>
+  );
+}
 const ARROW_MARKER = (id: string, color: string) => (
   <marker
     key={`arrow-${id}`}
@@ -144,48 +222,7 @@ function ReferenceEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
         markerEnd={`url(#arrow-${id})`}
       />
 
-      <EdgeLabelRenderer>
-        {/* Nombre de la referencia — cerca del SOURCE */}
-        {label && (
-          <div
-            style={{
-              position: 'absolute',
-              transform: `translate(-50%, -50%) translate(${labelX * 0.7 + sourceX * 0.3}px,${labelY * 0.7 + sourceY * 0.3}px)`,
-              background: colors.bg,
-              border: '1px solid var(--border)',
-              borderRadius: 4,
-              padding: '1px 6px',
-              fontSize: 11,
-              fontWeight: 600,
-              pointerEvents: 'none',
-              whiteSpace: 'nowrap',
-              color: colors.text,
-              zIndex: 10,
-            }}
-          >
-            {label}
-          </div>
-        )}
-
-        {/* Cardinalidad — cerca del TARGET */}
-        {cardinality && (
-          <div
-            style={{
-              position: 'absolute',
-              transform: `translate(-50%, -50%) translate(${labelX * 0.3 + sourceX * 0.7}px,${labelY * 0.3 + sourceY * 0.7}px)`,
-              fontSize: 10,
-              fontFamily: 'monospace',
-              fontWeight: 500,
-              color: 'var(--text-muted)',
-              pointerEvents: 'none',
-              whiteSpace: 'nowrap',
-              zIndex: 10,
-            }}
-          >
-            {cardinality}
-          </div>
-        )}
-      </EdgeLabelRenderer>
+      {renderCombinedLabel(label, cardinality, labelX, labelY, sourceX, sourceY, targetX, targetY, colors)}
     </>
   );
 }
@@ -239,48 +276,7 @@ function ContainmentEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
         markerEnd={`url(#arrow-${id})`}
       />
 
-      <EdgeLabelRenderer>
-        {/* Nombre del containment — cerca del SOURCE, ligeramente desplazado del diamante */}
-        {label && (
-          <div
-            style={{
-              position: 'absolute',
-              transform: `translate(-50%, -50%) translate(${labelX * 0.75 + sourceX * 0.25}px,${labelY * 0.75 + sourceY * 0.25}px)`,
-              background: colors.bg,
-              border: '1px solid var(--border)',
-              borderRadius: 4,
-              padding: '1px 6px',
-              fontSize: 11,
-              fontWeight: 600,
-              pointerEvents: 'none',
-              whiteSpace: 'nowrap',
-              color: colors.text,
-              zIndex: 10,
-            }}
-          >
-            {label}
-          </div>
-        )}
-
-        {/* Cardinalidad — cerca del TARGET */}
-        {cardinality && (
-          <div
-            style={{
-              position: 'absolute',
-              transform: `translate(-50%, -50%) translate(${labelX * 0.3 + sourceX * 0.7}px,${labelY * 0.3 + sourceY * 0.7}px)`,
-              fontSize: 10,
-              fontFamily: 'monospace',
-              fontWeight: 500,
-              color: 'var(--text-muted)',
-              pointerEvents: 'none',
-              whiteSpace: 'nowrap',
-              zIndex: 10,
-            }}
-          >
-            {cardinality}
-          </div>
-        )}
-      </EdgeLabelRenderer>
+      {renderCombinedLabel(label, cardinality, labelX, labelY, sourceX, sourceY, targetX, targetY, colors)}
     </>
   );
 }
