@@ -364,23 +364,6 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg }: UseEcoreMo
         const updated = applyNodeChanges(changes, curNodes) as AppNode[];
         return updated;
       });
-
-      // Let default handler handle selection properly
-      // We only mark selected on node click, let ReactFlow handle the visual
-      for (const ch of changes) {
-        if (ch.type === 'select' && 'selected' in ch) {
-          if (ch.selected) {
-            const found = findElement(pkgRef.current, ch.id);
-            if (found) {
-              setSelectedId(ch.id);
-              setSelectedType(found.type);
-            } else {
-              setSelectedId(ch.id);
-              setSelectedType(null);
-            }
-          }
-        }
-      }
     },
     [],
   );
@@ -391,15 +374,6 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg }: UseEcoreMo
         const updated = applyEdgeChanges(changes, curEdges) as AppEdge[];
         return updated;
       });
-
-      for (const ch of changes) {
-        if (ch.type === 'select' && 'selected' in ch) {
-          if (ch.selected) {
-            setSelectedId(ch.id);
-            setSelectedType('edge');
-          }
-        }
-      }
     },
     [],
   );
