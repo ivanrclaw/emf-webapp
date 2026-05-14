@@ -7,7 +7,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import archiver = require('archiver');
+import { createRequire } from 'module';
+const _require = createRequire(import.meta.url);
+const archiver = _require('archiver');
 import { Project } from './project.entity.js';
 import { Metamodel } from '../metamodel/metamodel.entity.js';
 import { M1Model } from '../m1model/m1model.entity.js';

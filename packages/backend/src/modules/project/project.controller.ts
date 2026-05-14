@@ -66,13 +66,17 @@ export class ProjectController {
   }
 
   @Get(':id/export/zip')
-  async exportZip(@Param('id') id: string, @Res() res: Response) {
-    const buffer = await this.exportService.exportProjectAsZip(id);
-    res.set({
-      'Content-Type': 'application/zip',
-      'Content-Disposition': `attachment; filename="project-${id}.zip"`,
-      'Content-Length': buffer.length,
-    });
-    res.end(buffer);
+  async exportZip(@Param('id') id: string, @Res() res: Response): Promise<void> {
+    try {
+      const buffer = await this.exportService.exportProjectAsZip(id);
+      res.set({
+        'Content-Type': 'application/zip',
+        'Content-Disposition': `attachment; filename="project-${id}.zip"`,
+        'Content-Length': buffer.length,
+      });
+      res.send(buffer);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to export project as ZIP', details: (err as Error).message });
+    }
   }
 }
