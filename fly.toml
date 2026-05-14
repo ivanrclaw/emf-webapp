@@ -1,0 +1,25 @@
+# fly.toml — emf-webapp
+app = "emf-webapp"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 512
+
+[autoscale]
+  min = 0
+  max = 1
+
+[mounts]
+  source = "emfdata"
+  destination = "/app/data"

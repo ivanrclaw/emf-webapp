@@ -1,0 +1,33 @@
+{
+  "name": "@emf-webapp/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./ecore": {
+      "import": "./dist/ecore/index.js",
+      "types": "./dist/ecore/index.d.ts"
+    },
+    "./serialization": {
+      "import": "./dist/serialization/index.js",
+      "types": "./dist/serialization/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "dev": "tsc --watch"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.2.4"
+  }
+}
