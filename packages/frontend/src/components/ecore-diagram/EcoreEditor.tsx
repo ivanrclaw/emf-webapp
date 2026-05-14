@@ -65,20 +65,20 @@ import { TreeView } from './TreeView';
 // ═══════════════════════════════════════════════════════════════
 
 const styles = {
-  wrapper: { width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column' as const, background: '#f8fafc' },
+  wrapper: { width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column' as const, background: 'var(--bg)' },
   // Top bar
   topbar: {
     display: 'flex', alignItems: 'center' as const, justifyContent: 'space-between' as const,
-    padding: '0 20px', height: 52, background: '#fff',
-    borderBottom: '1px solid #e2e8f0', flexShrink: 0, zIndex: 10,
+    padding: '0 20px', height: 52, background: 'var(--surface)',
+    borderBottom: '1px solid var(--border)', flexShrink: 0, zIndex: 10,
   },
   topbarLeft: { display: 'flex', alignItems: 'center' as const, gap: 12 },
   topbarRight: { display: 'flex', alignItems: 'center' as const, gap: 8 },
   logo: {
-    fontWeight: 800, fontSize: 16, color: '#4f46e5',
+    fontWeight: 800, fontSize: 16, color: 'var(--primary)',
     letterSpacing: '-0.5px', padding: '4px 0',
   },
-  logoSub: { color: '#94a3b8', fontWeight: 400, fontSize: 13 },
+  logoSub: { color: 'var(--text-secondary)', fontWeight: 400, fontSize: 13 },
   badge: {
     display: 'inline-flex', alignItems: 'center' as const,
     padding: '2px 10px', borderRadius: 999, fontSize: 11, fontWeight: 600,
@@ -87,29 +87,29 @@ const styles = {
   btn: {
     display: 'inline-flex', alignItems: 'center' as const, gap: 5,
     padding: '7px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600,
-    border: '1px solid #e2e8f0', background: '#fff', color: '#475569',
+    border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-secondary)',
     cursor: 'pointer', transition: 'all 0.15s',
   },
   btnPrimary: {
-    background: '#4f46e5', color: '#fff', border: '1px solid #4f46e5',
+    background: 'var(--primary)', color: '#fff', border: '1px solid var(--primary)',
   },
   btnDanger: {
-    background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca',
+    background: 'var(--danger-bg)', color: 'var(--danger)', border: `1px solid var(--danger)`,
   },
-  btnIcon: { width: 34, height: 34, padding: 0, display: 'flex', alignItems: 'center' as const, justifyContent: 'center' as const, borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', cursor: 'pointer', color: '#64748b', fontSize: 16, transition: 'all 0.15s' },
+  btnIcon: { width: 34, height: 34, padding: 0, display: 'flex', alignItems: 'center' as const, justifyContent: 'center' as const, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 16, transition: 'all 0.15s' },
   // Body layout
   body: { display: 'flex', flex: 1, overflow: 'hidden' },
   // Left sidebar
   sidebar: {
-    width: 260, flexShrink: 0, borderRight: '1px solid #e2e8f0',
-    display: 'flex', flexDirection: 'column' as const, background: '#fff',
+    width: 260, flexShrink: 0, borderRight: '1px solid var(--border)',
+    display: 'flex', flexDirection: 'column' as const, background: 'var(--surface)',
   },
   // Canvas area
   canvasArea: { flex: 1, position: 'relative' as const },
   // Right sidebar
   inspector: {
-    width: 320, flexShrink: 0, borderLeft: '1px solid #e2e8f0',
-    display: 'flex', flexDirection: 'column' as const, background: '#fff',
+    width: 320, flexShrink: 0, borderLeft: '1px solid var(--border)',
+    display: 'flex', flexDirection: 'column' as const, background: 'var(--surface)',
   },
   // Loading / Error overlays
   center: {
@@ -119,9 +119,9 @@ const styles = {
     textAlign: 'center' as const,
   },
   errorBox: {
-    background: '#fef2f2', border: '1px solid #fecaca',
+    background: 'var(--danger-bg)', border: '1px solid var(--danger)',
     borderRadius: 12, padding: '24px 32px',
-    maxWidth: 500, color: '#991b1b',
+    maxWidth: 500, color: 'var(--danger)',
   },
 };
 
@@ -297,7 +297,9 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
             {model.pkg.name || 'Untitled'}
           </span>
           {model.isDirty && (
-            <span style={{ ...styles.badge, background: '#fef9c3', color: '#a16207' }}>● Modified</span>
+            <span style={{ ...styles.badge, background: 'var(--warning-bg)', color: 'var(--warning)', fontSize: 11 }}>
+              ● Modified
+            </span>
           )}
         </div>
 
@@ -306,7 +308,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
           <span
             style={{
               ...styles.badge,
-              background: '#f0fdf4', color: '#16a34a',
+              background: 'var(--success-bg)', color: 'var(--success)',
               fontSize: 12, gap: 4, display: 'inline-flex', alignItems: 'center',
             }}
           >
@@ -316,12 +318,12 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
 
           {/* Dirty status pill */}
           {model.isDirty && (
-            <span style={{ ...styles.badge, background: '#fef9c3', color: '#a16207', fontSize: 11 }}>
+            <span style={{ ...styles.badge, background: 'var(--warning-bg)', color: 'var(--warning)', fontSize: 11 }}>
               Unsaved
             </span>
           )}
 
-          <div style={{ width: 1, height: 24, background: '#e2e8f0', margin: '0 4px' }} />
+          <div style={{ width: 1, height: 24, background: 'var(--border)', margin: '0 4px' }} />
 
           {/* Save button */}
           <button
@@ -351,7 +353,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
         {/* ── Left Sidebar ──────────────────────────────────── */}
         <div style={styles.sidebar}>
           <Toolbox onAdd={model.addClassifier} />
-          <div style={{ flex: 1, overflow: 'hidden', borderTop: '1px solid #e2e8f0' }}>
+          <div style={{ flex: 1, overflow: 'hidden', borderTop: '1px solid var(--border)' }}>
             <TreeView
               pkg={model.pkg}
               onSelect={(id) => {
@@ -408,19 +410,19 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
               animated: false,
               style: { stroke: '#94a3b8', strokeWidth: 2 },
             }}
-            style={{ background: '#f8fafc' }}
+            style={{ background: 'var(--bg)' }}
           >
             <Background
               variant={BackgroundVariant.Dots}
               gap={20}
               size={1}
-              color="#cbd5e1"
+              color="var(--border)"
             />
             <Controls
               style={{
                 borderRadius: 10,
                 boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-                border: '1px solid #e2e8f0',
+                border: '1px solid var(--border)',
                 overflow: 'hidden',
               }}
               showInteractive={false}
@@ -428,7 +430,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
             <MiniMap
               style={{
                 borderRadius: 10,
-                border: '1px solid #e2e8f0',
+                border: '1px solid var(--border)',
                 boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
               }}
               nodeColor={(n: any) => {
@@ -439,7 +441,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
                   default: return '#94a3b8';
                 }
               }}
-              maskColor="rgba(248,250,252,0.8)"
+              maskColor="rgba(15,23,42,0.7)"
               pannable
               zoomable
             />
@@ -449,9 +451,9 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
               <div
                 style={{
                   display: 'flex', alignItems: 'center', gap: 16,
-                  padding: '6px 14px', background: '#fff',
-                  border: '1px solid #e2e8f0', borderRadius: 10,
-                  fontSize: 12, color: '#64748b',
+                  padding: '6px 14px', background: 'var(--surface)',
+                  border: '1px solid var(--border)', borderRadius: 10,
+                  fontSize: 12, color: 'var(--text-secondary)',
                   boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
                 }}
               >

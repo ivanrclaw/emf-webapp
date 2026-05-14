@@ -63,6 +63,14 @@ function isDataType(c: any): c is SerializableEDataType {
 const DEFAULT_POS = { x: 250, y: 150 };
 const AUTO_SAVE_MS = 2000;
 
+// ── Module-level callback refs so pkgToNodes can wire real functions ──
+const _callbacks = {
+  onClassifierChange: (() => {}) as (id: string, updates: any) => void,
+  onAddAttribute: (() => {}) as (classId: string) => void,
+  onAddReference: (() => {}) as (classId: string) => void,
+  onSelect: (() => {}) as (id: string | null) => void,
+};
+
 // ═══════════════════════════════════════════════════════════════
 // Types
 // ═══════════════════════════════════════════════════════════════
@@ -116,10 +124,10 @@ function pkgToNodes(pkg: SerializableEPackage, posMap: Map<string, { x: number; 
       type: ecoreType,
       classifier: c,
       ePackage: pkg,
-      onClassifierChange: () => {},
-      onAddAttribute: () => {},
-      onAddReference: () => {},
-      onSelect: () => {},
+      onClassifierChange: _callbacks.onClassifierChange,
+      onAddAttribute: _callbacks.onAddAttribute,
+      onAddReference: _callbacks.onAddReference,
+      onSelect: _callbacks.onSelect,
     };
 
     out.push({ id: c.id, type: nodeType, position: pos, data } as AppNode);
@@ -399,6 +407,12 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg }: UseEcoreMo
     }));
     setIsDirty(true);
   }, []);
+
+  // ── Wire real callbacks into module-level references      ──
+  _callbacks.onAddAttribute = addAttribute;
+  _callbacks.onAddReference = addReference;
+  _callbacks.onClassifierChange = handleClassifierChange;
+  _callbacks.onSelect = (id: string | null) => setSelected(id, null);
 
   // ── Drop new classifier on canvas ──────────────────────────
   const onDropNode = useCallback(
