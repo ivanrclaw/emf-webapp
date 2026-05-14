@@ -17,7 +17,7 @@
  *   args              → expression ("," expression)*
  */
 
-import { Token, TokenType, OCLLexer } from './OCLLexer';
+import { Token, TokenType, OCLLexer } from './OCLLexer.js';
 
 export type ASTNode =
   | LiteralNode

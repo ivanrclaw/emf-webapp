@@ -8,7 +8,7 @@
  * - String operations
  * - Type operations (oclIsTypeOf, oclIsKindOf, etc.)
  */
-import { ASTNode } from './OCLParser';
+import { ASTNode } from './OCLParser.js';
 export type EValue = string | number | boolean | null | undefined | OCLEObject | OCLEObject[] | Map<string, EValue>;
 export interface OCLEObject {
     eClass: string;

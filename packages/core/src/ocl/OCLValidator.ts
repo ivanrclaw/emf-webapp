@@ -2,8 +2,8 @@
  * OCLValidator — Valida sintaxis de una expresión OCL y chequea tipado básico.
  */
 
-import { OCLLexer } from './OCLLexer';
-import { OCLParser } from './OCLParser';
+import { OCLLexer } from './OCLLexer.js';
+import { OCLParser } from './OCLParser.js';
 
 export interface OCLValidationError {
   message: string;

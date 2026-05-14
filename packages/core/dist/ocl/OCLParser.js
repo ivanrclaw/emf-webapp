@@ -16,7 +16,7 @@
  *   operation         → identifier ("(" args ")")?
  *   args              → expression ("," expression)*
  */
-import { TokenType, OCLLexer } from './OCLLexer';
+import { TokenType, OCLLexer } from './OCLLexer.js';
 export class OCLParser {
     tokens = [];
     pos = 0;

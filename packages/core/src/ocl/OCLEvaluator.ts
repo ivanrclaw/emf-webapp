@@ -18,7 +18,7 @@ import {
   BinaryOpNode,
   MethodCallNode,
   CollectionOpNode,
-} from './OCLParser';
+} from './OCLParser.js';
 
 export type EValue = string | number | boolean | null | undefined | OCLEObject | OCLEObject[] | Map<string, EValue>;
 

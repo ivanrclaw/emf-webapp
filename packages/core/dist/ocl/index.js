@@ -3,8 +3,8 @@
  *
  * Exporta Lexer, Parser, Evaluator y Validator.
  */
-export { OCLLexer, TokenType } from './OCLLexer';
-export { OCLParser } from './OCLParser';
-export { OCLEvaluator } from './OCLEvaluator';
-export { OCLValidator } from './OCLValidator';
+export { OCLLexer, TokenType } from './OCLLexer.js';
+export { OCLParser } from './OCLParser.js';
+export { OCLEvaluator } from './OCLEvaluator.js';
+export { OCLValidator } from './OCLValidator.js';
 //# sourceMappingURL=index.js.map
