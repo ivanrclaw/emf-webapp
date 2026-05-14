@@ -21,7 +21,7 @@ COPY packages/frontend/vite.config.ts packages/frontend/
 COPY packages/frontend/tsconfig.json packages/frontend/
 
 # Compilar en orden: core → frontend → backend
-RUN cd packages/core && npx tsc && \
+RUN cd packages/core && rm -f tsconfig.tsbuildinfo && npx tsc && \
     cd /app/packages/frontend && npx vite build && \
     cd /app/packages/backend && npx tsc
 
