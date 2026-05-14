@@ -253,6 +253,12 @@ export default function ProjectDetail() {
                 >
                   🗂️ Models
                 </Link>
+                <Link
+                  to={`/projects/${id}/metamodels/${mm.id}/specs`}
+                  className="btn btn-secondary btn-sm"
+                >
+                  🎨 Graphics
+                </Link>
                 <button
                   className="btn btn-secondary btn-sm"
                   onClick={() => handleExport(mm.id)}

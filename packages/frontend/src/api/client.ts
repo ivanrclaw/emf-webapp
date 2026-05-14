@@ -181,3 +181,49 @@ export function deleteM1Model(
     method: 'DELETE',
   });
 }
+
+// ── GraphicalSpecs (Sirius-like) ────────────────────────────────────
+
+export interface GraphicalSpec {
+  id: string;
+  metamodelId: string;
+  name: string;
+  spec: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function getGraphicalSpecs(mmid: string): Promise<GraphicalSpec[]> {
+  return request<GraphicalSpec[]>(`/metamodels/${mmid}/specs`);
+}
+
+export function createGraphicalSpec(
+  mmid: string,
+  data: { name: string; spec?: string },
+): Promise<GraphicalSpec> {
+  return request<GraphicalSpec>(`/metamodels/${mmid}/specs`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export function getGraphicalSpec(mmid: string, specId: string): Promise<GraphicalSpec> {
+  return request<GraphicalSpec>(`/metamodels/${mmid}/specs/${specId}`);
+}
+
+export function updateGraphicalSpec(
+  mmid: string,
+  specId: string,
+  data: { name?: string; spec?: string },
+): Promise<GraphicalSpec> {
+  return request<GraphicalSpec>(`/metamodels/${mmid}/specs/${specId}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteGraphicalSpec(mmid: string, specId: string): Promise<void> {
+  return request<void>(`/metamodels/${mmid}/specs/${specId}`, {
+    method: 'DELETE',
+  });
+}

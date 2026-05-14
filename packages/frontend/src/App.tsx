@@ -4,6 +4,7 @@ import ProjectDetail from './pages/ProjectDetail';
 import EcoreEditor from './components/ecore-diagram/EcoreEditor';
 import ModelList from './pages/ModelList';
 import ModelEditor from './pages/ModelEditor';
+import SpecEditor from './pages/SpecEditor';
 import './App.css';
 
 function AppLayout() {
@@ -44,6 +45,8 @@ function AppLayout() {
           <Route path="/" element={<ProjectList />} />
           <Route path="/projects/:id" element={<ProjectDetail />} />
           <Route path="/projects/:pid/metamodels/:mmid/models" element={<ModelList />} />
+          <Route path="/projects/:pid/metamodels/:mmid/specs" element={<SpecEditor />} />
+          <Route path="/projects/:pid/metamodels/:mmid/specs/:specId" element={<SpecEditor />} />
         </Routes>
       </main>
     </div>
