@@ -119,7 +119,7 @@ export interface EcoreEdgeData extends Record<string, unknown> {
   sourceId: string;
   targetId: string;
   reference?: SerializableEReference;
-  onSelect: (id: string | null) => void;
+  onSelect?: (id: string | null) => void;
 }
 
 export type AppEdge = Edge<EcoreEdgeData>;

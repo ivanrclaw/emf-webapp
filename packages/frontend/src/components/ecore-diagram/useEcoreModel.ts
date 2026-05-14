@@ -142,21 +142,20 @@ function pkgToEdges(pkg: SerializableEPackage): AppEdge[] {
     if (!isClass(c)) continue;
     for (const ref of c.eReferences) {
       if (!ref.targetId) continue;
+      const edgeType = ref.containment ? 'containmentEdge' as const : 'referenceEdge' as const;
       const data: EcoreEdgeData = {
         label: ref.name || ref.targetId,
-        type: ref.containment ? 'containmentEdge' as const : 'referenceEdge' as const,
+        type: edgeType,
         sourceId: c.id,
         targetId: ref.targetId,
-        onSelect: () => {},
+        reference: ref,
       };
       out.push({
         id: ref.id,
         source: c.id,
         target: ref.targetId,
-        type: 'smoothstep',
+        type: edgeType,
         animated: ref.containment,
-        style: ref.containment ? { stroke: '#4f46e5', strokeWidth: 2.5 } : { stroke: '#94a3b8', strokeWidth: 2 },
-        label: ref.name || '',
         data,
       } as AppEdge);
     }

@@ -1,18 +1,27 @@
 /**
  * @emf-webapp/frontend — Custom Edge Components for Ecore Diagram Editor
  *
- * Define tres tipos de edges personalizados para @xyflow/react:
- *   - referenceEdge:    línea sólida, flecha abierta en target, etiqueta + cardinalidad
- *   - containmentEdge:  línea sólida, diamante relleno en source + flecha abierta en target, etiqueta
- *   - inheritanceEdge:  línea discontinua, triángulo vacío en target, sin etiqueta
+ * Sigue las convenciones visuales del editor de diagramas .ecore de Eclipse:
+ *
+ *   referenceEdge  → línea sólida, punta de flecha (▶) en el TARGET
+ *                    etiqueta del nombre de la referencia cerca del SOURCE
+ *                    cardinalidad [lower..upper] cerca del TARGET
+ *
+ *   containmentEdge → línea sólida, diamante relleno (◆) en el SOURCE
+ *                    + punta de flecha (▶) en el TARGET
+ *                    etiqueta del nombre cerca del SOURCE
+ *
+ *   inheritanceEdge → línea discontinua, triángulo hueco (△) en el TARGET (padre)
+ *                    sin etiqueta (convención UML)
+ *
+ * Colores: modo oscuro/claro mediante CSS variables (var(--text), var(--border), etc.)
  */
-
 import React from 'react';
 import {
   BaseEdge,
   EdgeLabelRenderer,
-  getBezierPath,
   getSmoothStepPath,
+  getBezierPath,
   type EdgeProps,
   type Edge,
 } from '@xyflow/react';
@@ -22,363 +31,308 @@ import type { EcoreEdgeData } from '../types';
 // Helpers
 // ─────────────────────────────────────────────────────────────────
 
-/** Formatea la cardinalidad de una referencia EMF */
+/** Formatea la cardinalidad estilo UML: [0..1], [*], [1], [0..*] */
 function formatCardinality(lowerBound: number, upperBound: number): string {
-  const upper =
-    upperBound === -1
-      ? '*'
-      : upperBound === lowerBound
-        ? `${upperBound}`
-        : `${upperBound}`;
-  const lower = lowerBound === 0 && upperBound === -1 ? '' : `${lowerBound}`;
-  if (lowerBound === upperBound && upperBound !== -1) {
-    return `[${lowerBound}]`;
-  }
-  return `[${lowerBound}..${upper}]`;
+  const lo = `${lowerBound}`;
+  const hi = upperBound === -1 ? '*' : `${upperBound}`;
+  if (lo === hi && upperBound !== -1) return `[${lo}]`;
+  return `[${lo}..${hi}]`;
 }
 
+/** Color del texto/cardinalidad según el tipo de edge */
+function edgeColors(type: string) {
+  switch (type) {
+    case 'containmentEdge':
+      return { stroke: 'var(--primary)', text: 'var(--primary)', bg: 'var(--primary-bg)', diamond: 'var(--primary)' };
+    default:
+      return { stroke: 'var(--border)', text: 'var(--text-secondary)', bg: 'var(--surface)', diamond: '' };
+  }
+}
+
+/** SVG marker: punta de flecha abierta (▶). La punta se renderiza en el TARGET */
+const ARROW_MARKER = (id: string, color: string) => (
+  <marker
+    key={`arrow-${id}`}
+    id={`arrow-${id}`}
+    viewBox="0 0 12 12"
+    refX="10"
+    refY="6"
+    markerWidth="10"
+    markerHeight="10"
+    orient="auto"
+  >
+    <path d="M 2 1 L 11 6 L 2 11" fill="none" stroke={color} strokeWidth={1.5} strokeLinejoin="round" />
+  </marker>
+);
+
+/** SVG marker: diamante relleno (◆) para composición/containment */
+const DIAMOND_MARKER = (id: string, color: string) => (
+  <marker
+    key={`diamond-${id}`}
+    id={`diamond-${id}`}
+    viewBox="0 0 14 14"
+    refX="14"
+    refY="7"
+    markerWidth="12"
+    markerHeight="12"
+    orient="auto"
+  >
+    <polygon points="7,0 14,7 7,14 0,7" fill={color} stroke={color} strokeWidth={1} />
+  </marker>
+);
+
+/** SVG marker: triángulo hueco (△) para herencia */
+const HOLLOW_TRIANGLE = (id: string, color: string) => (
+  <marker
+    key={`hollow-${id}`}
+    id={`hollow-${id}`}
+    viewBox="0 0 14 14"
+    refX="12"
+    refY="7"
+    markerWidth="12"
+    markerHeight="12"
+    orient="auto"
+  >
+    <polygon points="2,1 12,7 2,13" fill="transparent" stroke={color} strokeWidth={1.5} strokeLinejoin="round" />
+  </marker>
+);
+
 // ─────────────────────────────────────────────────────────────────
-// 1. ReferenceEdge  —  línea sólida (indigo), flecha abierta en target
+// 1. ReferenceEdge — Eclipse Ecore Tools convention
+//
+//    ─────────────▶
+//   source        target
+//   (refName)
+//   [lower..upper]
 // ─────────────────────────────────────────────────────────────────
 
 function ReferenceEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
   const {
     id,
-    sourceX,
-    sourceY,
-    targetX,
-    targetY,
-    sourcePosition,
-    targetPosition,
-    data,
-    selected,
+    sourceX, sourceY,
+    targetX, targetY,
+    sourcePosition, targetPosition,
+    data, selected,
   } = props;
 
   const [edgePath, labelX, labelY] = getSmoothStepPath({
-    sourceX,
-    sourceY,
-    sourcePosition,
-    targetX,
-    targetY,
-    targetPosition,
+    sourceX, sourceY, sourcePosition,
+    targetX, targetY, targetPosition,
   });
 
-  const strokeColor = '#6366f1';
-  const strokeWidth = 2;
-
-  const reference = data?.reference;
+  const ref = data?.reference;
   const label = data?.label || '';
-  const cardinality =
-    reference
-      ? formatCardinality(reference.lowerBound, reference.upperBound)
-      : '';
+  const colors = edgeColors('referenceEdge');
+  const cardinality = ref ? formatCardinality(ref.lowerBound, ref.upperBound) : '';
 
   return (
     <>
       <defs>
-        <marker
-          id={`ref-arrow-${id}`}
-          viewBox="0 0 10 10"
-          refX="10"
-          refY="5"
-          markerWidth="8"
-          markerHeight="8"
-          orient="auto-start-reverse"
-        >
-          <path
-            d="M 0 0 L 10 5 L 0 10"
-            fill="none"
-            stroke={strokeColor}
-            strokeWidth={strokeWidth}
-          />
-        </marker>
+        {ARROW_MARKER(id, colors.stroke)}
       </defs>
 
       <BaseEdge
         path={edgePath}
         interactionWidth={20}
         style={{
-          stroke: strokeColor,
-          strokeWidth,
+          stroke: colors.stroke,
+          strokeWidth: 1.5,
           strokeLinecap: 'round',
           transition: 'opacity 0.15s',
           opacity: selected ? 0.85 : 1,
         }}
-        markerEnd={`url(#ref-arrow-${id})`}
+        markerEnd={`url(#arrow-${id})`}
       />
 
-      {label && (
-        <EdgeLabelRenderer>
+      <EdgeLabelRenderer>
+        {/* Nombre de la referencia — cerca del SOURCE */}
+        {label && (
           <div
             style={{
               position: 'absolute',
-              transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
-              background: selected ? '#eef2ff' : '#ffffff',
-              border: selected
-                ? '1.5px solid #6366f1'
-                : '1px solid #d4d4d8',
+              transform: `translate(-50%, -50%) translate(${labelX * 0.7 + sourceX * 0.3}px,${labelY * 0.7 + sourceY * 0.3}px)`,
+              background: colors.bg,
+              border: '1px solid var(--border)',
               borderRadius: 4,
-              padding: '2px 8px',
+              padding: '1px 6px',
               fontSize: 11,
-              pointerEvents: 'all',
-              cursor: 'pointer',
+              fontWeight: 600,
+              pointerEvents: 'none',
               whiteSpace: 'nowrap',
-              color: '#6366f1',
-              fontWeight: 500,
+              color: colors.text,
               zIndex: 10,
-              boxShadow: selected
-                ? '0 0 0 2px rgba(99,102,241,0.2)'
-                : '0 1px 2px rgba(0,0,0,0.05)',
-              transition: 'box-shadow 0.15s, border-color 0.15s',
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              data?.onSelect?.(id);
-            }}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                data?.onSelect?.(id);
-              }
             }}
           >
             {label}
-            {cardinality && (
-              <span
-                style={{
-                  marginLeft: 5,
-                  color: '#a1a1aa',
-                  fontSize: 10,
-                  fontFamily: 'monospace',
-                }}
-              >
-                {cardinality}
-              </span>
-            )}
           </div>
-        </EdgeLabelRenderer>
-      )}
+        )}
+
+        {/* Cardinalidad — cerca del TARGET */}
+        {cardinality && (
+          <div
+            style={{
+              position: 'absolute',
+              transform: `translate(-50%, -50%) translate(${labelX * 0.3 + sourceX * 0.7}px,${labelY * 0.3 + sourceY * 0.7}px)`,
+              fontSize: 10,
+              fontFamily: 'monospace',
+              fontWeight: 500,
+              color: 'var(--text-muted)',
+              pointerEvents: 'none',
+              whiteSpace: 'nowrap',
+              zIndex: 10,
+            }}
+          >
+            {cardinality}
+          </div>
+        )}
+      </EdgeLabelRenderer>
     </>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────
-// 2. ContainmentEdge  —  línea sólida (verde), diamante relleno en
-//    source + flecha abierta en target
+// 2. ContainmentEdge — Eclipse Ecore Tools convention
+//
+//    ◆─────────────▶
+//   source        target
+//   (refName)
+//   [0..*]
 // ─────────────────────────────────────────────────────────────────
 
 function ContainmentEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
   const {
     id,
-    sourceX,
-    sourceY,
-    targetX,
-    targetY,
-    sourcePosition,
-    targetPosition,
-    data,
-    selected,
+    sourceX, sourceY,
+    targetX, targetY,
+    sourcePosition, targetPosition,
+    data, selected,
   } = props;
 
-  const [edgePath, labelX, labelY] = getBezierPath({
-    sourceX,
-    sourceY,
-    sourcePosition,
-    targetX,
-    targetY,
-    targetPosition,
+  const [edgePath, labelX, labelY] = getSmoothStepPath({
+    sourceX, sourceY, sourcePosition,
+    targetX, targetY, targetPosition,
   });
 
-  const strokeColor = '#059669';
-  const strokeWidth = 2;
-
-  const reference = data?.reference;
+  const ref = data?.reference;
   const label = data?.label || '';
-  const cardinality =
-    reference
-      ? formatCardinality(reference.lowerBound, reference.upperBound)
-      : '';
+  const colors = edgeColors('containmentEdge');
+  const cardinality = ref ? formatCardinality(ref.lowerBound, ref.upperBound) : '';
 
   return (
     <>
       <defs>
-        <marker
-          id={`cont-target-${id}`}
-          viewBox="0 0 10 10"
-          refX="10"
-          refY="5"
-          markerWidth="8"
-          markerHeight="8"
-          orient="auto-start-reverse"
-        >
-          <path
-            d="M 0 0 L 10 5 L 0 10"
-            fill="none"
-            stroke={strokeColor}
-            strokeWidth={strokeWidth}
-          />
-        </marker>
-
-        <marker
-          id={`cont-source-${id}`}
-          viewBox="0 0 12 12"
-          refX="12"
-          refY="6"
-          markerWidth="10"
-          markerHeight="10"
-          orient="auto-start-reverse"
-        >
-          <polygon
-            points="6,0 12,6 6,12 0,6"
-            fill={strokeColor}
-            stroke={strokeColor}
-            strokeWidth={1}
-          />
-        </marker>
+        {DIAMOND_MARKER(id, colors.diamond)}
+        {ARROW_MARKER(id, colors.stroke)}
       </defs>
 
       <BaseEdge
         path={edgePath}
         interactionWidth={20}
         style={{
-          stroke: strokeColor,
-          strokeWidth,
+          stroke: colors.stroke,
+          strokeWidth: 2,
           strokeLinecap: 'round',
           transition: 'opacity 0.15s',
           opacity: selected ? 0.85 : 1,
         }}
-        markerEnd={`url(#cont-target-${id})`}
-        markerStart={`url(#cont-source-${id})`}
+        markerStart={`url(#diamond-${id})`}
+        markerEnd={`url(#arrow-${id})`}
       />
 
-      {label && (
-        <EdgeLabelRenderer>
+      <EdgeLabelRenderer>
+        {/* Nombre del containment — cerca del SOURCE, ligeramente desplazado del diamante */}
+        {label && (
           <div
             style={{
               position: 'absolute',
-              transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
-              background: selected ? '#ecfdf5' : '#ffffff',
-              border: selected
-                ? '1.5px solid #059669'
-                : '1px solid #d4d4d8',
+              transform: `translate(-50%, -50%) translate(${labelX * 0.75 + sourceX * 0.25}px,${labelY * 0.75 + sourceY * 0.25}px)`,
+              background: colors.bg,
+              border: '1px solid var(--border)',
               borderRadius: 4,
-              padding: '2px 8px',
+              padding: '1px 6px',
               fontSize: 11,
-              pointerEvents: 'all',
-              cursor: 'pointer',
+              fontWeight: 600,
+              pointerEvents: 'none',
               whiteSpace: 'nowrap',
-              color: '#059669',
-              fontWeight: 500,
+              color: colors.text,
               zIndex: 10,
-              boxShadow: selected
-                ? '0 0 0 2px rgba(5,150,105,0.2)'
-                : '0 1px 2px rgba(0,0,0,0.05)',
-              transition: 'box-shadow 0.15s, border-color 0.15s',
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              data?.onSelect?.(id);
-            }}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                data?.onSelect?.(id);
-              }
             }}
           >
             {label}
-            {cardinality && (
-              <span
-                style={{
-                  marginLeft: 5,
-                  color: '#a1a1aa',
-                  fontSize: 10,
-                  fontFamily: 'monospace',
-                }}
-              >
-                {cardinality}
-              </span>
-            )}
           </div>
-        </EdgeLabelRenderer>
-      )}
+        )}
+
+        {/* Cardinalidad — cerca del TARGET */}
+        {cardinality && (
+          <div
+            style={{
+              position: 'absolute',
+              transform: `translate(-50%, -50%) translate(${labelX * 0.3 + sourceX * 0.7}px,${labelY * 0.3 + sourceY * 0.7}px)`,
+              fontSize: 10,
+              fontFamily: 'monospace',
+              fontWeight: 500,
+              color: 'var(--text-muted)',
+              pointerEvents: 'none',
+              whiteSpace: 'nowrap',
+              zIndex: 10,
+            }}
+          >
+            {cardinality}
+          </div>
+        )}
+      </EdgeLabelRenderer>
     </>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────
-// 3. InheritanceEdge  —  línea discontinua (gris), triángulo vacío
-//    en target, sin etiqueta
+// 3. InheritanceEdge — Eclipse Ecore Tools convention
+//
+//    - - - - - - - △
+//   child          parent
 // ─────────────────────────────────────────────────────────────────
 
 function InheritanceEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
   const {
     id,
-    sourceX,
-    sourceY,
-    targetX,
-    targetY,
-    sourcePosition,
-    targetPosition,
+    sourceX, sourceY,
+    targetX, targetY,
+    sourcePosition, targetPosition,
     selected,
   } = props;
 
   const [edgePath] = getSmoothStepPath({
-    sourceX,
-    sourceY,
-    sourcePosition,
-    targetX,
-    targetY,
-    targetPosition,
+    sourceX, sourceY, sourcePosition,
+    targetX, targetY, targetPosition,
   });
 
-  const strokeColor = '#888888';
-  const strokeWidth = 1.5;
+  const color = 'var(--text-muted)';
 
   return (
     <>
       <defs>
-        <marker
-          id={`inherit-arrow-${id}`}
-          viewBox="0 0 10 10"
-          refX="10"
-          refY="5"
-          markerWidth="8"
-          markerHeight="8"
-          orient="auto-start-reverse"
-        >
-          <path
-            d="M 0 0 L 10 5 L 0 10"
-            fill="none"
-            stroke={strokeColor}
-            strokeWidth={strokeWidth}
-          />
-        </marker>
+        {HOLLOW_TRIANGLE(id, color)}
       </defs>
 
       <BaseEdge
         path={edgePath}
         interactionWidth={20}
         style={{
-          stroke: strokeColor,
-          strokeWidth,
+          stroke: color,
+          strokeWidth: 1.5,
           strokeLinecap: 'round',
-          strokeDasharray: '5 5',
+          strokeDasharray: '6 4',
           transition: 'opacity 0.15s',
-          opacity: selected ? 0.8 : 1,
+          opacity: selected ? 0.8 : 0.6,
         }}
-        markerEnd={`url(#inherit-arrow-${id})`}
+        markerEnd={`url(#hollow-${id})`}
       />
     </>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Edge type registry  —  impórtalo en el ReactFlow como edgeTypes
+// Edge type registry
 // ─────────────────────────────────────────────────────────────────
 
 export const edgeTypes = {
