@@ -1,5 +1,6 @@
 # fly.toml — emf-webapp
 app = "emf-webapp"
+primary_region = "yyz"
 
 [build]
   dockerfile = "Dockerfile"
@@ -15,10 +16,6 @@ app = "emf-webapp"
   cpu_kind = "shared"
   cpus = 1
   memory_mb = 512
-
-[autoscale]
-  min = 0
-  max = 1
 
 [mounts]
   source = "emfdata"
