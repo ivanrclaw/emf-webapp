@@ -259,6 +259,12 @@ export default function ProjectDetail() {
                 >
                   🎨 Graphics
                 </Link>
+                <Link
+                  to={`/projects/${id}/metamodels/${mm.id}/constraints`}
+                  className="btn btn-secondary btn-sm"
+                >
+                  🔬 OCL
+                </Link>
                 <button
                   className="btn btn-secondary btn-sm"
                   onClick={() => handleExport(mm.id)}

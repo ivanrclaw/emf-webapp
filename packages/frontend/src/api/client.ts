@@ -227,3 +227,66 @@ export function deleteGraphicalSpec(mmid: string, specId: string): Promise<void>
     method: 'DELETE',
   });
 }
+
+// ── OCL Constraints ────────────────────────────────────────────────
+
+export interface OCLConstraint {
+  id: string;
+  metamodelId: string;
+  name: string;
+  context: string;
+  expression: string;
+  severity: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OCLValidationResult {
+  constraintId: string;
+  name: string;
+  context: string;
+  expression: string;
+  passed: boolean;
+  error?: string;
+}
+
+export function getOCLConstraints(mmid: string): Promise<OCLConstraint[]> {
+  return request<OCLConstraint[]>(`/metamodels/${mmid}/constraints`);
+}
+
+export function createOCLConstraint(
+  mmid: string,
+  data: { name: string; context: string; expression: string; severity?: string },
+): Promise<OCLConstraint> {
+  return request<OCLConstraint>(`/metamodels/${mmid}/constraints`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateOCLConstraint(
+  mmid: string,
+  id: string,
+  data: { name?: string; context?: string; expression?: string; severity?: string },
+): Promise<OCLConstraint> {
+  return request<OCLConstraint>(`/metamodels/${mmid}/constraints/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteOCLConstraint(mmid: string, id: string): Promise<void> {
+  return request<void>(`/metamodels/${mmid}/constraints/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export function validateOCLConstraints(
+  mmid: string,
+  modelContent: string,
+): Promise<OCLValidationResult[]> {
+  return request<OCLValidationResult[]>(`/metamodels/${mmid}/constraints/validate`, {
+    method: 'POST',
+    body: JSON.stringify({ modelContent }),
+  });
+}

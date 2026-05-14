@@ -8,23 +8,26 @@ import { ProjectModule } from './modules/project/project.module.js';
 import { MetamodelModule } from './modules/metamodel/metamodel.module.js';
 import { M1ModelModule } from './modules/m1model/m1model.module.js';
 import { GraphicalSpecModule } from './modules/graphicalspec/graphicalspec.module.js';
+import { OCLConstraintModule } from './modules/oclconstraint/oclconstraint.module.js';
 import { Project } from './modules/project/project.entity.js';
 import { Metamodel } from './modules/metamodel/metamodel.entity.js';
 import { M1Model } from './modules/m1model/m1model.entity.js';
 import { GraphicalSpec } from './modules/graphicalspec/graphicalspec.entity.js';
+import { OCLConstraint } from './modules/oclconstraint/oclconstraint.entity.js';
 
 @Module({
   imports: [
     TypeOrmModule.forRoot({
       type: 'sqlite',
       database: './data/emf-webapp.db',
-      entities: [Project, Metamodel, M1Model, GraphicalSpec],
+      entities: [Project, Metamodel, M1Model, GraphicalSpec, OCLConstraint],
       synchronize: true,
     }),
     ProjectModule,
     MetamodelModule,
     M1ModelModule,
     GraphicalSpecModule,
+    OCLConstraintModule,
   ],
 })
 export class AppModule {}

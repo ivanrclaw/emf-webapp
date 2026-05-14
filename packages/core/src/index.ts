@@ -24,3 +24,4 @@ export * from './ecore/NotificationImpl.js';
 export * from './util/EList.js';
 export * from './serialization/JSONSerializer.js';
 export * from './serialization/XMISerializer.js';
+export * from './ocl/index.js';
