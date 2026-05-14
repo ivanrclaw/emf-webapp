@@ -194,7 +194,8 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
   // ── Node/Edge click handlers ────────────────────────────────
   const onNodeClick: NodeMouseHandler = useCallback(
     (_: any, node: Node) => {
-      model.setSelected(node.id, 'class');
+      const data = node.data as EcoreNodeData;
+      model.setSelected(node.id, data?.type ?? 'class');
     },
     [model],
   );
