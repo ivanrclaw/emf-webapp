@@ -49,7 +49,7 @@ export default function OCLConstraintPage() {
     setLoading(true);
     try {
       const [mm, cList] = await Promise.all([
-        getMetamodel('/' + pid!, mmid),
+        getMetamodel(pid!, mmid),
         getOCLConstraints(mmid),
       ]);
       setMetamodel(mm);
