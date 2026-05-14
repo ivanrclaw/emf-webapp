@@ -40,7 +40,7 @@ COPY --from=builder /app/packages/backend/package.json packages/backend/
 COPY --from=builder /app/packages/frontend/package.json packages/frontend/
 
 RUN corepack enable && corepack prepare pnpm@latest --activate && \
-    pnpm install --frozen-lockfile --prod
+    pnpm install --frozen-lockfile
 
 # Crear directorio de datos para SQLite
 RUN mkdir -p /app/data
