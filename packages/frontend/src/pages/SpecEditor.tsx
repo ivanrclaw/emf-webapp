@@ -129,7 +129,7 @@ export default function SpecEditor() {
       setLoading(true);
       try {
         const [mm, sList] = await Promise.all([
-          getMetamodel('/' + pid!, mmid),
+          getMetamodel(pid!, mmid),
           getGraphicalSpecs(mmid),
         ]);
         setMetamodel(mm);
