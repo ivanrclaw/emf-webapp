@@ -491,7 +491,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
             />
 
             {/* Status bar */}
-            <Panel position="bottom-left">
+            <Panel position="bottom-right">
               <div
                 style={{
                   display: 'flex', alignItems: 'center', gap: 16,
