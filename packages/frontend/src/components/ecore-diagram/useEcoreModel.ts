@@ -377,7 +377,7 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg }: UseEcoreMo
         } else if (type === 'enum') {
           newClassifier = { id, name: `NewEnum${count + 1}`, eLiterals: [{ id: genId('lit'), name: 'LITERAL1', value: 0 }] };
         } else {
-          newClassifier = { id, name: `NewType${count + 1}`, instanceTypeName: 'java.lang.String' };
+          newClassifier = { id, name: `NewType${count + 1}`, instanceClassName: 'java.lang.String' };
         }
 
         return { ...prev, eClassifiers: [...prev.eClassifiers, newClassifier] };
@@ -483,7 +483,7 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg }: UseEcoreMo
       } else if (type === 'enum') {
         newClassifier = { id, name: `NewEnum`, eLiterals: [{ id: genId('lit'), name: 'LITERAL1', value: 0 }] };
       } else {
-        newClassifier = { id, name: `NewType`, instanceTypeName: 'java.lang.String' };
+        newClassifier = { id, name: `NewType`, instanceClassName: 'java.lang.String' };
       }
       setPkg((prev) => ({ ...prev, eClassifiers: [...prev.eClassifiers, newClassifier] }));
       setIsDirty(true);
