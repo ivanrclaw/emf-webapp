@@ -136,7 +136,45 @@ function pkgToNodes(pkg: SerializableEPackage, posMap: Map<string, { x: number; 
   return out;
 }
 
-function pkgToEdges(pkg: SerializableEPackage): AppEdge[] {
+/**
+ * Determina la mejor posición de handles para un edge según la posición relativa de nodos.
+ * Si source está a la izquierda de target → source=right, target=left (flujo natural →)
+ * Si source está a la derecha → source=left, target=right (flujo inverso ←)
+ */
+function bestHandleForEdge(
+  sourceId: string,
+  targetId: string,
+  posMap: Map<string, { x: number; y: number }>,
+): { sourceHandlePos: 'left' | 'right'; targetHandlePos: 'left' | 'right' } {
+  const src = posMap.get(sourceId);
+  const tgt = posMap.get(targetId);
+
+  // Fallback si no hay posiciones
+  if (!src || !tgt) return { sourceHandlePos: 'right', targetHandlePos: 'left' };
+
+  const dx = tgt.x - src.x;
+  const dy = tgt.y - src.y;
+
+  // Si la diferencia horizontal es significativa, usar horizontal
+  if (Math.abs(dx) > 40) {
+    if (dx > 0) {
+      // Source a la izquierda → source=right, target=left
+      return { sourceHandlePos: 'right', targetHandlePos: 'left' };
+    } else {
+      // Source a la derecha → source=left, target=right
+      return { sourceHandlePos: 'left', targetHandlePos: 'right' };
+    }
+  }
+
+  // Alineación vertical: decidir por la dirección Y
+  if (dy > 0) {
+    return { sourceHandlePos: 'right', targetHandlePos: 'left' };
+  } else {
+    return { sourceHandlePos: 'left', targetHandlePos: 'right' };
+  }
+}
+
+function pkgToEdges(pkg: SerializableEPackage, posMap?: Map<string, { x: number; y: number }>): AppEdge[] {
   const out: AppEdge[] = [];
   for (const c of pkg.eClassifiers ?? []) {
     if (!isClass(c)) continue;
@@ -148,12 +186,18 @@ function pkgToEdges(pkg: SerializableEPackage): AppEdge[] {
         const edgeId = `inh_${c.id}_${superTypeId}`;
         // Avoid duplicates (when both classes declare the same super type)
         if (out.some((e) => e.id === edgeId)) continue;
+        const handles = bestHandleForEdge(c.id, superTypeId, posMap ?? new Map());
         out.push({
           id: edgeId,
           source: c.id,
           target: superTypeId,
           type: 'inheritanceEdge',
-          data: { label: '', type: 'inheritanceEdge', sourceId: c.id, targetId: superTypeId } satisfies EcoreEdgeData,
+          data: {
+            label: '', type: 'inheritanceEdge',
+            sourceId: c.id, targetId: superTypeId,
+            sourceHandlePos: handles.sourceHandlePos,
+            targetHandlePos: handles.targetHandlePos,
+          } satisfies EcoreEdgeData,
         } as AppEdge);
       }
     }
@@ -162,12 +206,15 @@ function pkgToEdges(pkg: SerializableEPackage): AppEdge[] {
     for (const ref of c.eReferences) {
       if (!ref.targetId) continue;
       const edgeType = ref.containment ? 'containmentEdge' as const : 'referenceEdge' as const;
+      const handles = bestHandleForEdge(c.id, ref.targetId, posMap ?? new Map());
       const data: EcoreEdgeData = {
         label: ref.name || ref.targetId,
         type: edgeType,
         sourceId: c.id,
         targetId: ref.targetId,
         reference: ref,
+        sourceHandlePos: handles.sourceHandlePos,
+        targetHandlePos: handles.targetHandlePos,
       };
       out.push({
         id: ref.id,
@@ -198,7 +245,7 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg }: UseEcoreMo
     return [];
   });
   const [edges, setEdges] = useState<AppEdge[]>(() => {
-    if (initialPkg) return pkgToEdges(initialPkg);
+    if (initialPkg) return pkgToEdges(initialPkg, new Map());
     return [];
   });
 
@@ -221,7 +268,7 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg }: UseEcoreMo
       initialLoadDone.current = true;
       const pos = new Map<string, { x: number; y: number }>();
       setNodes(pkgToNodes(initialPkg, pos));
-      setEdges(pkgToEdges(initialPkg));
+      setEdges(pkgToEdges(initialPkg, pos));
       posMap.current = pos;
       setPkg(initialPkg);
     }
@@ -230,7 +277,7 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg }: UseEcoreMo
   // ── Re-sync from pkg (recompute nodes/edges preserving positions) ─
   const resync = useCallback(() => {
     setNodes(pkgToNodes(pkgRef.current, posMap.current));
-    setEdges(pkgToEdges(pkgRef.current));
+    setEdges(pkgToEdges(pkgRef.current, posMap.current));
   }, []);
 
   // ── Auto-save ─────────────────────────────────────────────

@@ -120,6 +120,10 @@ export interface EcoreEdgeData extends Record<string, unknown> {
   targetId: string;
   reference?: SerializableEReference;
   onSelect?: (id: string | null) => void;
+  /** Posición óptima del handle source (calculada por pkgToEdges según posición de nodos) */
+  sourceHandlePos?: 'left' | 'right';
+  /** Posición óptima del handle target (calculada por pkgToEdges) */
+  targetHandlePos?: 'left' | 'right';
 }
 
 export type AppEdge = Edge<EcoreEdgeData>;

@@ -3,16 +3,17 @@
  *
  * Sigue las convenciones visuales del editor de diagramas .ecore de Eclipse:
  *
- *   referenceEdge  → línea sólida, punta de flecha (▶) en el TARGET
- *                    etiqueta del nombre de la referencia cerca del SOURCE
- *                    cardinalidad [lower..upper] cerca del TARGET
+ *   referenceEdge   → línea sólida, punta de flecha (▶) en el TARGET
+ *                     etiqueta del nombre + cardinalidad cerca del SOURCE
  *
  *   containmentEdge → línea sólida, diamante relleno (◆) en el SOURCE
- *                    + punta de flecha (▶) en el TARGET
- *                    etiqueta del nombre cerca del SOURCE
+ *                     + punta de flecha (▶) en el TARGET
  *
  *   inheritanceEdge → línea discontinua, triángulo hueco (△) en el TARGET (padre)
- *                    sin etiqueta (convención UML)
+ *
+ * La flecha siempre parte desde el handle exacto que pulsó el usuario
+ * y termina en el handle donde lo soltó. Si ambos están en el mismo lado,
+ * el auto‑routing invierte el target para que el path no cruce los nodos.
  *
  * Colores: modo oscuro/claro mediante CSS variables (var(--text), var(--border), etc.)
  */
@@ -21,7 +22,7 @@ import {
   BaseEdge,
   EdgeLabelRenderer,
   getSmoothStepPath,
-  getBezierPath,
+  Position,
   type EdgeProps,
   type Edge,
 } from '@xyflow/react';
@@ -49,7 +50,45 @@ function edgeColors(type: string) {
   }
 }
 
-/** Renderiza el label combinado (refName + cardinalidad) para edge reference/containment */
+/**
+ * Determina sourcePosition / targetPosition según el handle ID o los datos del edge.
+ *
+ * Los handles tienen ID "left" (Position.Left) o "right" (Position.Right).
+ * Si el edge tiene sourceHandlePos/targetHandlePos en data (calculado por
+ * pkgToEdges con smart-routing basado en posición de nodos), se usa eso.
+ * Como fallback se usa Position.Right para source y Position.Left para target.
+ *
+ * Auto‑routing: si source y target están en el MISMO lado, se invierte
+ * el target para que el path no atraviese los nodos.
+ */
+function resolvePositions(
+  sourceHandleId: string | null | undefined,
+  targetHandleId: string | null | undefined,
+  dataHandlePos?: { source: 'left' | 'right'; target: 'left' | 'right' },
+) {
+  // Prioridad: data (smart-routing) > handleId (arrastre) > default
+  if (dataHandlePos) {
+    const srcPos = dataHandlePos.source === 'left' ? Position.Left : Position.Right;
+    const tgtPos = dataHandlePos.target === 'left' ? Position.Left : Position.Right;
+    // Auto-flip si están en el mismo lado
+    const finalTarget = srcPos === tgtPos
+      ? (tgtPos === Position.Left ? Position.Right : Position.Left)
+      : tgtPos;
+    return { sourcePosition: srcPos, targetPosition: finalTarget };
+  }
+
+  const sourcePos = sourceHandleId === 'left' ? Position.Left : Position.Right;
+  const targetPosRaw = targetHandleId === 'left' ? Position.Left : Position.Right;
+
+  // Smart routing: same-side → flip target to avoid crossing nodes
+  const targetPos = sourcePos === targetPosRaw
+    ? (targetPosRaw === Position.Left ? Position.Right : Position.Left)
+    : targetPosRaw;
+
+  return { sourcePosition: sourcePos, targetPosition: targetPos };
+}
+
+/** Renderiza el label combinado (refName + cardinalidad) */
 function renderCombinedLabel(
   label: string,
   cardinality: string,
@@ -62,7 +101,7 @@ function renderCombinedLabel(
   colors: { bg: string; text: string; border: string },
 ) {
   const combined = cardinality ? `${label} ${cardinality}` : label;
-  // Posición: 60% del camino desde source hacia target (ligeramente más cerca del source)
+  // Posición: 60% del camino desde source hacia target
   const px = labelX * 0.6 + sourceX * 0.4;
   const py = labelY * 0.6 + sourceY * 0.4;
   return (
@@ -138,11 +177,6 @@ const HOLLOW_TRIANGLE = (id: string, color: string) => (
 
 // ─────────────────────────────────────────────────────────────────
 // 1. ReferenceEdge — Eclipse Ecore Tools convention
-//
-//    ─────────────▶
-//   source        target
-//   (refName)
-//   [lower..upper]
 // ─────────────────────────────────────────────────────────────────
 
 function ReferenceEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
@@ -150,9 +184,16 @@ function ReferenceEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
     id,
     sourceX, sourceY,
     targetX, targetY,
-    sourcePosition, targetPosition,
+    sourceHandleId,
+    targetHandleId,
     data, selected,
   } = props;
+
+  const { sourcePosition, targetPosition } = resolvePositions(
+    sourceHandleId,
+    targetHandleId,
+    data ? { source: data.sourceHandlePos || 'right', target: data.targetHandlePos || 'left' } : undefined,
+  );
 
   const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX, sourceY, sourcePosition,
@@ -190,11 +231,6 @@ function ReferenceEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
 
 // ─────────────────────────────────────────────────────────────────
 // 2. ContainmentEdge — Eclipse Ecore Tools convention
-//
-//    ◆─────────────▶
-//   source        target
-//   (refName)
-//   [0..*]
 // ─────────────────────────────────────────────────────────────────
 
 function ContainmentEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
@@ -202,9 +238,16 @@ function ContainmentEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
     id,
     sourceX, sourceY,
     targetX, targetY,
-    sourcePosition, targetPosition,
+    sourceHandleId,
+    targetHandleId,
     data, selected,
   } = props;
+
+  const { sourcePosition, targetPosition } = resolvePositions(
+    sourceHandleId,
+    targetHandleId,
+    data ? { source: data.sourceHandlePos || 'right', target: data.targetHandlePos || 'left' } : undefined,
+  );
 
   const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX, sourceY, sourcePosition,
@@ -244,9 +287,6 @@ function ContainmentEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
 
 // ─────────────────────────────────────────────────────────────────
 // 3. InheritanceEdge — Eclipse Ecore Tools convention
-//
-//    - - - - - - - △
-//   child          parent
 // ─────────────────────────────────────────────────────────────────
 
 function InheritanceEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
@@ -254,9 +294,17 @@ function InheritanceEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
     id,
     sourceX, sourceY,
     targetX, targetY,
-    sourcePosition, targetPosition,
+    sourceHandleId,
+    targetHandleId,
     selected,
+    data,
   } = props;
+
+  const { sourcePosition, targetPosition } = resolvePositions(
+    sourceHandleId,
+    targetHandleId,
+    data ? { source: data.sourceHandlePos || 'right', target: data.targetHandlePos || 'left' } : undefined,
+  );
 
   const [edgePath] = getSmoothStepPath({
     sourceX, sourceY, sourcePosition,
