@@ -60,7 +60,7 @@ export default function EDataTypeNode(props: NodeProps) {
   );
 
   return (
-    <div className={styles.node} onClick={() => onSelect(classifier.id)}>
+    <div className={styles.node} onClick={() => onSelect(classifier.id, 'dataType')}>
       {/* ── Handles ──────────────────────────────────────── */}
       <Handle type="target" position={Position.Left} />
       <Handle type="source" position={Position.Right} />

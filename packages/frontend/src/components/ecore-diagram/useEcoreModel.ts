@@ -471,7 +471,7 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg }: UseEcoreMo
   _callbacks.onAddAttribute = addAttribute;
   _callbacks.onAddReference = addReference;
   _callbacks.onClassifierChange = handleClassifierChange;
-  _callbacks.onSelect = (id: string | null) => setSelected(id, null);
+  _callbacks.onSelect = (id: string | null, type?: string | null) => setSelected(id, type ?? null);
 
   // ── Drop new classifier on canvas ──────────────────────────
   const onDropNode = useCallback(

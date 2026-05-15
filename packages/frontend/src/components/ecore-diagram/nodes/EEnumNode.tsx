@@ -58,7 +58,7 @@ export default function EEnumNode(props: NodeProps) {
   );
 
   return (
-    <div className={styles.node} onClick={() => onSelect(classifier.id)}>
+    <div className={styles.node} onClick={() => onSelect(classifier.id, 'enum')}>
       {/* ── Handles ──────────────────────────────────────── */}
       <Handle type="target" position={Position.Left} />
       <Handle type="source" position={Position.Right} />
