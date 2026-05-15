@@ -1,5 +1,29 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+/**
+ * @emf-webapp/frontend — SpecEditor
+ *
+ * Editor visual de sintaxis gráfica (Sirius-like) con canvas React Flow.
+ * Layout: Left sidebar (palette + layers) | Center (canvas) | Right (style editor)
+ */
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import {
+  ReactFlow,
+  ReactFlowProvider,
+  Background,
+  Controls,
+  MiniMap,
+  useNodesState,
+  useEdgesState,
+  addEdge,
+  type Node,
+  type Edge,
+  type Connection,
+  type OnNodesChange,
+  type OnEdgesChange,
+  type NodeMouseHandler,
+  type EdgeMouseHandler,
+} from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
 import {
   getMetamodel,
   getGraphicalSpec,
@@ -7,54 +31,17 @@ import {
   createGraphicalSpec,
   updateGraphicalSpec,
   deleteGraphicalSpec,
-  Metamodel,
-  GraphicalSpec,
+  type Metamodel,
+  type GraphicalSpec,
 } from '../api/client';
+import SpecNode, { type SpecNodeData } from '../components/spec-diagram/SpecNode';
+import SpecEdge, { type SpecEdgeData } from '../components/spec-diagram/SpecEdge';
+import SpecStylePanel from '../components/spec-diagram/SpecStylePanel';
+import type { SpecData, Mapping, ShapeStyle, EdgeStyle } from '../components/spec-diagram/types';
 
 /* ------------------------------------------------------------------ */
-/*  Types                                                              */
+/*  Constants                                                           */
 /* ------------------------------------------------------------------ */
-
-interface ShapeStyle {
-  shape: 'rectangle' | 'ellipse' | 'diamond';
-  color: string;
-  borderColor: string;
-  borderSize: number;
-  labelExpression: string;
-  labelPosition: 'inside' | 'top' | 'bottom';
-}
-
-interface EdgeStyle {
-  lineStyle: 'solid' | 'dash' | 'dot' | 'dash-dot';
-  sourceDecoration: 'none' | 'arrow' | 'diamond' | 'filled-diamond';
-  targetDecoration: 'none' | 'arrow' | 'diamond' | 'filled-diamond';
-  color: string;
-  labelExpression: string;
-}
-
-interface Mapping {
-  domainClass: string;
-  semanticCandidatesExpression: string;
-  style: ShapeStyle;
-  edgeMappings: {
-    domainClass: string;
-    sourceMapping: string;
-    targetMapping: string;
-    style: EdgeStyle;
-  }[];
-}
-
-interface Layer {
-  name: string;
-  default: boolean;
-  mappings: Mapping[];
-}
-
-interface SpecData {
-  name: string;
-  domain: string;
-  layers: Layer[];
-}
 
 const DEFAULT_SPEC: SpecData = {
   name: '',
@@ -93,35 +80,118 @@ function defaultEdgeStyle(): EdgeStyle {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Color preset                                                       */
+/*  Node & Edge Types Registry                                         */
 /* ------------------------------------------------------------------ */
 
-const COLORS = [
-  '#6366f1', '#8b5cf6', '#a855f7', '#d946ef', '#ec4899',
-  '#f43f5e', '#ef4444', '#f97316', '#eab308', '#22c55e',
-  '#14b8a6', '#06b6d4', '#3b82f6', '#64748b',
-];
+const nodeTypes = { specNode: SpecNode } as any;
+const edgeTypes = { specEdge: SpecEdge } as any;
 
 /* ------------------------------------------------------------------ */
-/*  SpecEditor Page                                                    */
+/*  Helpers                                                             */
 /* ------------------------------------------------------------------ */
 
-export default function SpecEditor() {
+/** Build React Flow nodes from spec data, preserving positions */
+function buildNodes(
+  mappings: Mapping[],
+  posMap: Map<string, { x: number; y: number }>,
+  selectedKey: string | null,
+): Node<SpecNodeData>[] {
+  return mappings.map((m, i) => {
+    const key = m.domainClass;
+    const savedPos = posMap.get(key);
+    return {
+      id: key,
+      type: 'specNode',
+      position: savedPos ?? { x: 80 + (i % 3) * 220, y: 80 + Math.floor(i / 3) * 160 },
+      data: {
+        label: m.domainClass,
+        shape: m.style.shape,
+        color: m.style.color,
+        borderColor: m.style.borderColor,
+        borderSize: m.style.borderSize,
+        labelPosition: m.style.labelPosition,
+        selected: key === selectedKey,
+      },
+    };
+  });
+}
+
+/** Build React Flow edges from spec data */
+function buildEdges(
+  mappings: Mapping[],
+  selectedKey: string | null,
+): Edge<SpecEdgeData>[] {
+  const edges: Edge<SpecEdgeData>[] = [];
+  for (const m of mappings) {
+    for (const em of m.edgeMappings || []) {
+      const edgeId = `edge-${m.domainClass}->${em.domainClass}`;
+      edges.push({
+        id: edgeId,
+        source: m.domainClass,
+        target: em.domainClass,
+        type: 'specEdge',
+        data: {
+          lineStyle: em.style.lineStyle,
+          sourceDecoration: em.style.sourceDecoration,
+          targetDecoration: em.style.targetDecoration,
+          color: em.style.color,
+          labelExpression: em.style.labelExpression,
+          label: em.domainClass,
+        },
+        selected: selectedKey === edgeId,
+      });
+    }
+  }
+  return edges;
+}
+
+/** Create a unique position for a new mapping */
+function nextPosition(posMap: Map<string, { x: number; y: number }>, count: number) {
+  const baseX = 80 + (count % 3) * 220;
+  const baseY = 80 + Math.floor(count / 3) * 160;
+  // Shift if overlapping
+  let x = baseX;
+  let y = baseY;
+  let tries = 0;
+  while (Array.from(posMap.values()).some(p => Math.abs(p.x - x) < 80 && Math.abs(p.y - y) < 60) && tries < 20) {
+    x += 240;
+    if (x > 700) { x = 80; y += 180; }
+    tries++;
+  }
+  return { x, y };
+}
+
+/* ------------------------------------------------------------------ */
+/*  SpecEditor (inner — inside ReactFlowProvider)                       */
+/* ------------------------------------------------------------------ */
+
+function SpecEditorInner() {
   const { pid, mmid, specId } = useParams<{ pid: string; mmid: string; specId?: string }>();
 
+  // Data
   const [metamodel, setMetamodel] = useState<Metamodel | null>(null);
   const [specs, setSpecs] = useState<GraphicalSpec[]>([]);
   const [activeSpec, setActiveSpec] = useState<GraphicalSpec | null>(null);
   const [specData, setSpecData] = useState<SpecData>(DEFAULT_SPEC);
   const [eclassNames, setEclassNames] = useState<string[]>([]);
+
+  // UI state
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'unsaved' | ''>('');
-  const [activeMapping, setActiveMapping] = useState<{ layerIdx: number; mappingIdx: number } | null>(null);
-  const lastSavedRef = useRef('');
+  const [selectionType, setSelectionType] = useState<'node' | 'edge' | null>(null);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
-  // ── Load ──────────────────────────────────────────────────────────
+  // Refs
+  const lastSavedRef = useRef('');
+  const posMapRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+
+  // Node/edge state for React Flow
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node<SpecNodeData>>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge<SpecEdgeData>>([]);
+
+  /* ── Load ─────────────────────────────────────────────────────── */
 
   useEffect(() => {
     async function load() {
@@ -135,27 +205,21 @@ export default function SpecEditor() {
         setMetamodel(mm);
         setSpecs(sList);
 
-        // Extract EClass names from metamodel content
         const content = mm.content || {};
-        const classifiers: { name: string; abstract?: boolean; interface?: boolean }[] =
-          content.eClassifiers || [];
-        setEclassNames(
-          classifiers
-            .filter((c) => !c.abstract && !c.interface)
-            .map((c) => c.name),
-        );
+        const classifiers: { name: string }[] = content.eClassifiers || [];
+        setEclassNames(classifiers.map((c) => c.name));
 
-        // If specId provided, load that spec
         if (specId) {
           const spec = sList.find((s) => s.id === specId) ||
             await getGraphicalSpec(mmid, specId);
           setActiveSpec(spec);
           const parsed = JSON.parse(spec.spec || '{}');
-          setSpecData({
+          const loadedData: SpecData = {
             name: parsed.name || spec.name,
             domain: parsed.domain || '',
             layers: parsed.layers || DEFAULT_SPEC.layers,
-          });
+          };
+          setSpecData(loadedData);
         }
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : 'Failed to load');
@@ -164,9 +228,19 @@ export default function SpecEditor() {
       }
     }
     load();
-  }, [mmid, specId]);
+  }, [mmid, specId, pid]);
 
-  // ── Save ──────────────────────────────────────────────────────────
+  /* ── Sync nodes/edges when specData or selection changes ──────── */
+
+  useEffect(() => {
+    const allMappings = specData.layers.flatMap((l) => l.mappings);
+    const newNodes = buildNodes(allMappings, posMapRef.current, selectedKey);
+    const newEdges = buildEdges(allMappings, selectedKey);
+    setNodes(newNodes as any);
+    setEdges(newEdges as any);
+  }, [specData, selectedKey, setNodes, setEdges]);
+
+  /* ── Save ─────────────────────────────────────────────────────── */
 
   const handleSave = useCallback(async () => {
     if (!mmid) return;
@@ -185,7 +259,6 @@ export default function SpecEditor() {
       lastSavedRef.current = specPayload;
       setSaveStatus('saved');
       setError('');
-      // Refresh list
       const sList = await getGraphicalSpecs(mmid);
       setSpecs(sList);
     } catch (e: unknown) {
@@ -195,7 +268,7 @@ export default function SpecEditor() {
     }
   }, [mmid, activeSpec, specData]);
 
-  // ── Auto-save every 30 seconds ────────────────────────────────────
+  /* ── Auto-save ────────────────────────────────────────────────── */
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -207,58 +280,196 @@ export default function SpecEditor() {
     return () => clearInterval(interval);
   }, [handleSave, specData]);
 
-  // ── Add mapping ───────────────────────────────────────────────────
+  /* ── Drag -> update posMap ────────────────────────────────────── */
 
-  const addMapping = useCallback((layerIdx: number, domainClass: string) => {
+  const onNodesChangeWithPos: OnNodesChange = useCallback((changes) => {
+    for (const ch of changes) {
+      if (ch.type === 'position' && ch.position) {
+        posMapRef.current.set(ch.id, ch.position);
+      }
+    }
+    onNodesChange(changes);
+  }, [onNodesChange]);
+
+  /* ── Connect nodes -> create edge mapping ─────────────────────── */
+
+  const onConnect = useCallback((conn: Connection) => {
+    if (!conn.source || !conn.target) return;
+
     setSpecData((prev) => {
       const layers = [...prev.layers];
-      layers[layerIdx] = {
-        ...layers[layerIdx],
-        mappings: [...layers[layerIdx].mappings, defaultMapping(domainClass)],
-      };
-      return { ...prev, layers };
-    });
-  }, []);
-
-  // ── Add edge mapping ──────────────────────────────────────────────
-
-  const addEdgeMapping = useCallback((layerIdx: number, mappingIdx: number, refClass: string) => {
-    setSpecData((prev) => {
-      const layers = [...prev.layers];
-      const mappings = [...layers[layerIdx].mappings];
-      mappings[mappingIdx] = {
-        ...mappings[mappingIdx],
+      layers[0] = { ...layers[0], mappings: [...layers[0].mappings] };
+      const sourceMap = layers[0].mappings.find((m) => m.domainClass === conn.source);
+      if (!sourceMap || sourceMap.edgeMappings.some((e) => e.domainClass === conn.target)) {
+        return prev; // edge already exists
+      }
+      const updatedMappings = [...layers[0].mappings];
+      const idx = updatedMappings.indexOf(sourceMap);
+      updatedMappings[idx] = {
+        ...sourceMap,
         edgeMappings: [
-          ...(mappings[mappingIdx].edgeMappings || []),
+          ...sourceMap.edgeMappings,
           {
-            domainClass: refClass,
-            sourceMapping: mappings[mappingIdx].domainClass,
-            targetMapping: refClass,
+            domainClass: conn.target,
+            sourceMapping: conn.source,
+            targetMapping: conn.target,
             style: defaultEdgeStyle(),
           },
         ],
       };
-      layers[layerIdx] = { ...layers[layerIdx], mappings };
+      layers[0] = { ...layers[0], mappings: updatedMappings };
       return { ...prev, layers };
     });
   }, []);
 
-  // ── Delete spec ───────────────────────────────────────────────────
+  /* ── Canvas click handlers ────────────────────────────────────── */
 
-  const handleDelete = useCallback(async (id: string) => {
-    if (!mmid) return;
-    if (!window.confirm('Delete this specification?')) return;
-    try {
-      await deleteGraphicalSpec(mmid, id);
-      setSpecs((s) => s.filter((x) => x.id !== id));
-      if (activeSpec?.id === id) {
-        setActiveSpec(null);
-        setSpecData(DEFAULT_SPEC);
-      }
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to delete');
+  const onNodeClick: NodeMouseHandler = useCallback((_: any, node: Node) => {
+    setSelectionType('node');
+    setSelectedKey(node.id);
+  }, []);
+
+  const onEdgeClick: EdgeMouseHandler = useCallback((_: any, edge: Edge) => {
+    setSelectionType('edge');
+    setSelectedKey(edge.id);
+  }, []);
+
+  const onPaneClick = useCallback(() => {
+    setSelectionType(null);
+    setSelectedKey(null);
+  }, []);
+
+  /* ── Add mapping ──────────────────────────────────────────────── */
+
+  const addMapping = useCallback((domainClass: string) => {
+    setSpecData((prev) => {
+      // Prevent duplicates
+      if (prev.layers[0].mappings.some((m) => m.domainClass === domainClass)) return prev;
+
+      const layers = [...prev.layers];
+      const newMapping = defaultMapping(domainClass);
+      layers[0] = {
+        ...layers[0],
+        mappings: [...layers[0].mappings, newMapping],
+      };
+      return { ...prev, layers };
+    });
+    // Also reserve a position for the new node
+    const count = specData.layers[0].mappings.length;
+    if (!posMapRef.current.has(domainClass)) {
+      posMapRef.current.set(domainClass, nextPosition(posMapRef.current, count));
     }
-  }, [mmid, activeSpec]);
+  }, [specData]);
+
+  /* ── Remove mapping ──────────────────────────────────────────── */
+
+  const removeMapping = useCallback((domainClass: string) => {
+    setSpecData((prev) => {
+      const layers = [...prev.layers];
+      layers[0] = {
+        ...layers[0],
+        mappings: layers[0].mappings.filter((m) => m.domainClass !== domainClass),
+      };
+      return { ...prev, layers };
+    });
+    posMapRef.current.delete(domainClass);
+    if (selectedKey === domainClass) {
+      setSelectionType(null);
+      setSelectedKey(null);
+    }
+  }, [selectedKey]);
+
+  /* ── Remove edge mapping ──────────────────────────────────────── */
+
+  const removeEdgeMapping = useCallback((sourceClass: string, targetClass: string) => {
+    setSpecData((prev) => {
+      const layers = [...prev.layers];
+      layers[0] = { ...layers[0], mappings: [...layers[0].mappings] };
+      const idx = layers[0].mappings.findIndex((m) => m.domainClass === sourceClass);
+      if (idx === -1) return prev;
+      const updatedMapping = {
+        ...layers[0].mappings[idx],
+        edgeMappings: layers[0].mappings[idx].edgeMappings.filter((e) => e.domainClass !== targetClass),
+      };
+      const updatedMappings = [...layers[0].mappings];
+      updatedMappings[idx] = updatedMapping;
+      layers[0] = { ...layers[0], mappings: updatedMappings };
+      return { ...prev, layers };
+    });
+  }, []);
+
+  /* ── Style changes (shape) ────────────────────────────────────── */
+
+  const handleShapeStyleChange = useCallback((patch: Partial<ShapeStyle>) => {
+    if (!selectedKey || selectionType !== 'node') return;
+    setSpecData((prev) => {
+      const layers = [...prev.layers];
+      layers[0] = { ...layers[0], mappings: [...layers[0].mappings] };
+      const idx = layers[0].mappings.findIndex((m) => m.domainClass === selectedKey);
+      if (idx === -1) return prev;
+      const updatedMappings = [...layers[0].mappings];
+      updatedMappings[idx] = {
+        ...updatedMappings[idx],
+        style: { ...updatedMappings[idx].style, ...patch },
+      };
+      layers[0] = { ...layers[0], mappings: updatedMappings };
+      return { ...prev, layers };
+    });
+  }, [selectedKey, selectionType]);
+
+  const handleEdgeStyleChange = useCallback((patch: Partial<EdgeStyle>) => {
+    if (!selectedKey || selectionType !== 'edge') return;
+    // Parse edge key: "edge-SourceClass->TargetClass"
+    const match = selectedKey.match(/^edge-(.+)→(.+)$/);
+    if (!match) return;
+    const [, sourceClass, targetClass] = match;
+    setSpecData((prev) => {
+      const layers = [...prev.layers];
+      layers[0] = { ...layers[0], mappings: [...layers[0].mappings] };
+      const mappingIdx = layers[0].mappings.findIndex((m) => m.domainClass === sourceClass);
+      if (mappingIdx === -1) return prev;
+      const updatedMapping = { ...layers[0].mappings[mappingIdx] };
+      updatedMapping.edgeMappings = [...updatedMapping.edgeMappings];
+      const edgeIdx = updatedMapping.edgeMappings.findIndex((e) => e.domainClass === targetClass);
+      if (edgeIdx === -1) return prev;
+      updatedMapping.edgeMappings[edgeIdx] = {
+        ...updatedMapping.edgeMappings[edgeIdx],
+        style: { ...updatedMapping.edgeMappings[edgeIdx].style, ...patch },
+      };
+      const updatedMappings = [...layers[0].mappings];
+      updatedMappings[mappingIdx] = updatedMapping;
+      layers[0] = { ...layers[0], mappings: updatedMappings };
+      return { ...prev, layers };
+    });
+  }, [selectedKey, selectionType]);
+
+  /* ── Resolve selected element info for style panel ────────────── */
+
+  const selectedMapping = useMemo(() => {
+    if (!selectedKey || selectionType !== 'node') return null;
+    for (const layer of specData.layers) {
+      const m = layer.mappings.find((x) => x.domainClass === selectedKey);
+      if (m) return m;
+    }
+    return null;
+  }, [selectedKey, selectionType, specData]);
+
+  const selectedEdge = useMemo(() => {
+    if (!selectedKey || selectionType !== 'edge') return null;
+    const match = selectedKey.match(/^edge-(.+)→(.+)$/);
+    if (!match) return null;
+    const [, sourceClass, targetClass] = match;
+    for (const layer of specData.layers) {
+      const m = layer.mappings.find((x) => x.domainClass === sourceClass);
+      if (m) {
+        const em = m.edgeMappings.find((e) => e.domainClass === targetClass);
+        if (em) return em;
+      }
+    }
+    return null;
+  }, [selectedKey, selectionType, specData]);
+
+  /* ── Loading state ────────────────────────────────────────────── */
 
   if (loading) {
     return (
@@ -269,32 +480,26 @@ export default function SpecEditor() {
     );
   }
 
+  /* ── Render ───────────────────────────────────────────────────── */
+
   return (
-    <div style={{ padding: 24 }}>
-      {/* Header */}
-      <div className="detail-header" style={{ marginBottom: 24 }}>
-        <div className="detail-header-left">
-          <Link to={`/projects/${pid}`} className="back-link">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
-            </svg>
-            Back
-          </Link>
-          <div>
-            <h1 className="page-title" style={{ margin: 0 }}>
-              Graphical Syntax — {metamodel?.name}
-            </h1>
-            <p className="page-subtitle" style={{ marginTop: 2 }}>
-              Sirius-like visual specification editor
-            </p>
-          </div>
-        </div>
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {/* ── Header ──────────────────────────────────────────────── */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px',
+        borderBottom: '1px solid var(--border)',
+        background: 'var(--surface)',
+        flexWrap: 'wrap',
+        flexShrink: 0,
+      }}>
+        <Link to={`/projects/${pid}`} className="back-link" style={{ fontSize: 13 }}>
+          ← Back
+        </Link>
+        <h1 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>
+          Graphical Syntax — {metamodel?.name}
+        </h1>
+        <div style={{ flex: 1 }} />
 
-      {error && <div className="msg msg-error" style={{ marginBottom: 16 }}>⚠️ {error}</div>}
-
-      {/* Spec Selector + Save */}
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 20, flexWrap: 'wrap' }}>
         <select
           value={activeSpec?.id || ''}
           onChange={(e) => {
@@ -302,6 +507,8 @@ export default function SpecEditor() {
             if (!id) {
               setActiveSpec(null);
               setSpecData(DEFAULT_SPEC);
+              setSelectionType(null);
+              setSelectedKey(null);
               return;
             }
             const spec = specs.find((s) => s.id === id);
@@ -313,11 +520,14 @@ export default function SpecEditor() {
                 domain: parsed.domain || '',
                 layers: parsed.layers || DEFAULT_SPEC.layers,
               });
+              setSelectionType(null);
+              setSelectedKey(null);
             }
           }}
           style={{
-            padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)',
-            fontSize: '.8125rem', fontFamily: 'inherit', background: 'var(--surface)', minWidth: 200,
+            padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)',
+            fontSize: 12, fontFamily: 'inherit', background: 'var(--bg)',
+            minWidth: 160, color: 'var(--text)',
           }}
         >
           <option value="">— New spec —</option>
@@ -331,377 +541,303 @@ export default function SpecEditor() {
           value={specData.name}
           onChange={(e) => setSpecData((p) => ({ ...p, name: e.target.value }))}
           style={{
-            padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)',
-            fontSize: '.8125rem', fontFamily: 'inherit', background: 'var(--surface)', width: 200,
+            padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)',
+            fontSize: 12, fontFamily: 'inherit', background: 'var(--bg)',
+            width: 180, color: 'var(--text)',
           }}
         />
 
-        <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving}>
-          {saving ? 'Saving...' : '💾 Save Spec'}
+        <button className="btn btn-sm btn-primary" onClick={handleSave} disabled={saving}>
+          {saving ? 'Saving...' : '💾 Save'}
         </button>
         {saveStatus === 'saved' && (
-          <span style={{ color: '#22c55e', fontSize: 12 }}>Saved</span>
+          <span style={{ color: '#22c55e', fontSize: 11 }}>Saved</span>
         )}
 
         {activeSpec && (
           <button
             className="btn btn-sm btn-ghost"
-            style={{ color: 'var(--danger)' }}
-            onClick={() => handleDelete(activeSpec.id)}
+            style={{ color: 'var(--danger)', fontSize: 12 }}
+            onClick={() => {
+              if (!window.confirm('Delete this specification?')) return;
+              deleteGraphicalSpec(mmid!, activeSpec.id)
+                .then(() => {
+                  setSpecs((s) => s.filter((x) => x.id !== activeSpec.id));
+                  setActiveSpec(null);
+                  setSpecData(DEFAULT_SPEC);
+                  setSelectionType(null);
+                  setSelectedKey(null);
+                })
+                .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to delete'));
+            }}
           >
             🗑️ Delete
           </button>
         )}
       </div>
 
-      {/* Main layout: left = mappings config, right = preview */}
-      <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-        {/* Left: Configuration */}
-        <div style={{ flex: 1, minWidth: 400 }}>
-          {/* Domain */}
-          <div className="card" style={{ marginBottom: 16, padding: 16 }}>
-            <div className="form-field">
-              <label>Domain URI</label>
+      {error && (
+        <div className="msg msg-error" style={{ margin: '8px 16px 0' }}>
+          ⚠️ {error}
+        </div>
+      )}
+
+      {/* ── 3-Panel Layout ────────────────────────────────────────── */}
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+
+        {/* Left Sidebar — Palette + Layer Info */}
+        {specData.layers.map((layer, li) => (
+          <div key={li} style={{
+            width: 240, flexShrink: 0, overflow: 'auto',
+            borderRight: '1px solid var(--border)',
+            background: 'var(--surface)',
+            display: 'flex', flexDirection: 'column',
+          }}>
+            {/* Layer header */}
+            <div style={{
+              padding: '12px 14px', borderBottom: '1px solid var(--border)',
+              fontSize: 12, fontWeight: 600, textTransform: 'uppercase',
+              letterSpacing: '0.05em', color: 'var(--text-secondary)',
+              display: 'flex', alignItems: 'center', gap: 8,
+            }}>
               <input
-                value={specData.domain}
-                onChange={(e) => setSpecData((p) => ({ ...p, domain: e.target.value }))}
-                placeholder="http://example.org/1.0"
-                style={{
-                  width: '100%', padding: '8px 12px', borderRadius: 6,
-                  border: '1px solid var(--border)', fontSize: '.8125rem',
-                  fontFamily: 'inherit', background: 'var(--surface)',
+                type="checkbox"
+                checked={layer.default}
+                onChange={(e) => {
+                  setSpecData((prev) => {
+                    const layers = [...prev.layers];
+                    layers[li] = { ...layers[li], default: e.target.checked };
+                    return { ...prev, layers };
+                  });
                 }}
               />
+              {layer.name}
             </div>
-          </div>
 
-          {/* Layers */}
-          {specData.layers.map((layer, li) => (
-            <div key={li} className="card" style={{ marginBottom: 16, padding: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                <input
-                  value={layer.name}
-                  onChange={(e) => {
-                    setSpecData((prev) => {
-                      const layers = [...prev.layers];
-                      layers[li] = { ...layers[li], name: e.target.value };
-                      return { ...prev, layers };
-                    });
-                  }}
-                  placeholder="Layer name"
-                  style={{
-                    padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)',
-                    fontSize: '.8125rem', fontFamily: 'inherit', background: 'var(--surface)', flex: 1,
-                  }}
-                />
-                <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <input
-                    type="checkbox"
-                    checked={layer.default}
-                    onChange={(e) => {
-                      setSpecData((prev) => {
-                        const layers = [...prev.layers];
-                        layers[li] = { ...layers[li], default: e.target.checked };
-                        return { ...prev, layers };
-                      });
-                    }}
-                  />
-                  Default
-                </label>
-              </div>
-
-              {/* Mappings */}
-              {layer.mappings.map((mapping, mi) => (
-                <div
-                  key={mi}
-                  style={{
-                    background: 'var(--surface)', borderRadius: 8, padding: 12, marginBottom: 8,
-                    border: activeMapping?.layerIdx === li && activeMapping?.mappingIdx === mi
-                      ? '2px solid #6366f1' : '1px solid var(--border)',
-                    cursor: 'pointer',
-                  }}
-                  onClick={() => setActiveMapping({ layerIdx: li, mappingIdx: mi })}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                    <span style={{ fontWeight: 600, fontSize: 13 }}>{mapping.domainClass}</span>
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSpecData((prev) => {
-                          const layers = [...prev.layers];
-                          layers[li] = {
-                            ...layers[li],
-                            mappings: layers[li].mappings.filter((_, i) => i !== mi),
-                          };
-                          return { ...prev, layers };
-                        });
-                      }}
-                      style={{ color: '#ef4444' }}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                    <div>
-                      <label style={{ fontSize: 11, color: '#94a3b8' }}>Shape</label>
-                      <select
-                        value={mapping.style.shape}
-                        onChange={(e) => {
-                          const val = e.target.value as ShapeStyle['shape'];
-                          setSpecData((prev) => {
-                            const layers = [...prev.layers];
-                            layers[li].mappings[mi].style.shape = val;
-                            return { ...prev, layers };
-                          });
-                        }}
-                        style={{
-                          width: '100%', padding: '4px 6px', borderRadius: 4,
-                          border: '1px solid var(--border)', fontSize: 12,
-                          fontFamily: 'inherit', background: 'var(--surface)',
-                        }}
-                      >
-                        <option value="rectangle">Rectangle</option>
-                        <option value="ellipse">Ellipse</option>
-                        <option value="diamond">Diamond</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label style={{ fontSize: 11, color: '#94a3b8' }}>Label Position</label>
-                      <select
-                        value={mapping.style.labelPosition}
-                        onChange={(e) => {
-                          const val = e.target.value as ShapeStyle['labelPosition'];
-                          setSpecData((prev) => {
-                            const layers = [...prev.layers];
-                            layers[li].mappings[mi].style.labelPosition = val;
-                            return { ...prev, layers };
-                          });
-                        }}
-                        style={{
-                          width: '100%', padding: '4px 6px', borderRadius: 4,
-                          border: '1px solid var(--border)', fontSize: 12,
-                          fontFamily: 'inherit', background: 'var(--surface)',
-                        }}
-                      >
-                        <option value="inside">Inside</option>
-                        <option value="top">Top</option>
-                        <option value="bottom">Bottom</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label style={{ fontSize: 11, color: '#94a3b8' }}>Fill Color</label>
-                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                        <input
-                          type="color"
-                          value={mapping.style.color}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setSpecData((prev) => {
-                              const layers = [...prev.layers];
-                              layers[li].mappings[mi].style.color = val;
-                              return { ...prev, layers };
-                            });
-                          }}
-                          style={{ width: 32, height: 24, border: 'none', padding: 0, cursor: 'pointer' }}
-                        />
-                        {COLORS.map((c) => (
-                          <div
-                            key={c}
-                            onClick={() => {
-                              setSpecData((prev) => {
-                                const layers = [...prev.layers];
-                                layers[li].mappings[mi].style.color = c;
-                                return { ...prev, layers };
-                              });
-                            }}
-                            style={{
-                              width: 18, height: 18, borderRadius: 3, background: c, cursor: 'pointer',
-                              border: mapping.style.color === c ? '2px solid white' : '1px solid #334155',
-                            }}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <label style={{ fontSize: 11, color: '#94a3b8' }}>Border Color</label>
-                      <input
-                        type="color"
-                        value={mapping.style.borderColor}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setSpecData((prev) => {
-                            const layers = [...prev.layers];
-                            layers[li].mappings[mi].style.borderColor = val;
-                            return { ...prev, layers };
-                          });
-                        }}
-                        style={{ width: 32, height: 24, border: 'none', padding: 0, cursor: 'pointer' }}
-                      />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: 11, color: '#94a3b8' }}>Border Size</label>
-                      <input
-                        type="number"
-                        min={0}
-                        max={10}
-                        value={mapping.style.borderSize}
-                        onChange={(e) => {
-                          const val = Number(e.target.value);
-                          setSpecData((prev) => {
-                            const layers = [...prev.layers];
-                            layers[li].mappings[mi].style.borderSize = val;
-                            return { ...prev, layers };
-                          });
-                        }}
-                        style={{
-                          width: '100%', padding: '4px 6px', borderRadius: 4,
-                          border: '1px solid var(--border)', fontSize: 12,
-                          fontFamily: 'inherit', background: 'var(--surface)',
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Edge Mappings */}
-                  {(mapping.edgeMappings || []).length > 0 && (
-                    <div style={{ marginTop: 12 }}>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: '#64748b', marginBottom: 6 }}>
-                        Edge Mappings ({mapping.edgeMappings.length})
-                      </div>
-                      {mapping.edgeMappings.map((edge, ei) => (
-                        <div key={ei} style={{
-                          background: '#0f172a', borderRadius: 6, padding: 8, marginBottom: 6,
-                          border: '1px solid #334155',
-                        }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                            <span style={{ fontSize: 12, fontWeight: 500 }}>{edge.domainClass}</span>
-                            <button
-                              className="btn btn-ghost btn-sm"
-                              onClick={() => {
-                                setSpecData((prev) => {
-                                  const layers = [...prev.layers];
-                                  layers[li].mappings[mi].edgeMappings =
-                                    layers[li].mappings[mi].edgeMappings.filter((_, i) => i !== ei);
-                                  return { ...prev, layers };
-                                });
-                              }}
-                              style={{ color: '#ef4444', fontSize: 11 }}
-                            >
-                              ✕
-                            </button>
-                          </div>
-                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                            <select
-                              value={edge.style.lineStyle}
-                              onChange={(e) => {
-                                const val = e.target.value as EdgeStyle['lineStyle'];
-                                setSpecData((prev) => {
-                                  const layers = [...prev.layers];
-                                  layers[li].mappings[mi].edgeMappings[ei].style.lineStyle = val;
-                                  return { ...prev, layers };
-                                });
-                              }}
-                              style={{
-                                padding: '3px 5px', borderRadius: 4, border: '1px solid #334155',
-                                fontSize: 11, fontFamily: 'inherit', background: '#1e293b', color: '#e2e8f0',
-                              }}
-                            >
-                              <option value="solid">─ Solid</option>
-                              <option value="dash">┅ Dash</option>
-                              <option value="dot">┈ Dot</option>
-                              <option value="dash-dot">┅ Dot</option>
-                            </select>
-                            <input
-                              type="color"
-                              value={edge.style.color}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                setSpecData((prev) => {
-                                  const layers = [...prev.layers];
-                                  layers[li].mappings[mi].edgeMappings[ei].style.color = val;
-                                  return { ...prev, layers };
-                                });
-                              }}
-                              style={{ width: 24, height: 20, border: 'none', padding: 0, cursor: 'pointer' }}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-
-              {/* Add mapping button */}
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-                <span style={{ fontSize: 12, color: '#64748b', alignSelf: 'center' }}>Add mapping for:</span>
-                {eclassNames.map((ec) => (
-                  <button
-                    key={ec}
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => addMapping(li, ec)}
-                    style={{ fontSize: 11 }}
-                  >
-                    + {ec}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Right: Preview */}
-        <div style={{ width: 300, flexShrink: 0 }}>
-          <div className="card" style={{ padding: 16 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
-              Preview
-            </div>
-            {specData.layers.flatMap((l) => l.mappings).map((m, i) => (
-              <div key={i} style={{
-                display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', marginBottom: 6,
-                borderRadius: 8, background: '#1e293b', border: `2px solid ${m.style.borderColor}`,
+            {/* Palette: Available EClasses */}
+            <div style={{ padding: '10px 14px' }}>
+              <div style={{
+                fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)',
+                marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.04em',
               }}>
-                <div style={{
-                  width: 32, height: 32,
-                  borderRadius: m.style.shape === 'ellipse' ? '50%' : m.style.shape === 'diamond' ? '4px' : 6,
-                  background: m.style.color,
-                  border: `${m.style.borderSize}px solid ${m.style.borderColor}`,
-                  transform: m.style.shape === 'diamond' ? 'rotate(45deg)' : 'none',
-                }} />
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 500 }}>{m.domainClass}</div>
-                  <div style={{ fontSize: 11, color: '#94a3b8' }}>{m.style.shape} · {m.style.labelPosition}</div>
-                  {(m.edgeMappings || []).length > 0 && (
-                    <div style={{ fontSize: 10, color: '#64748b' }}>
-                      {m.edgeMappings.length} edge(s)
-                    </div>
-                  )}
-                </div>
+                Palette
               </div>
-            ))}
-            {specData.layers.flatMap((l) => l.mappings).length === 0 && (
-              <div style={{ fontSize: 12, color: '#64748b', textAlign: 'center', padding: 24 }}>
-                Add mappings from the left panel
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {eclassNames.map((ec) => {
+                  const isActive = layer.mappings.some((m) => m.domainClass === ec);
+                  return (
+                    <button
+                      key={ec}
+                      onClick={() => addMapping(ec)}
+                      disabled={isActive}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        padding: '6px 10px', borderRadius: 6,
+                        border: '1px solid transparent',
+                        background: isActive ? 'var(--primary-bg)' : 'transparent',
+                        color: isActive ? 'var(--primary)' : 'var(--text)',
+                        fontSize: 12, cursor: isActive ? 'default' : 'pointer',
+                        textAlign: 'left', fontFamily: 'inherit',
+                        transition: 'background 0.15s',
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isActive) (e.target as HTMLElement).style.background = 'var(--bg)';
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isActive) (e.target as HTMLElement).style.background = 'transparent';
+                      }}
+                    >
+                      <span style={{
+                        width: 8, height: 8, borderRadius: 2, flexShrink: 0,
+                        background: isActive ? 'var(--primary)' : 'var(--text-muted)',
+                      }} />
+                      {ec}
+                      {isActive && <span style={{ marginLeft: 'auto', fontSize: 10, opacity: 0.6 }}>✓</span>}
+                    </button>
+                  );
+                })}
               </div>
-            )}
-          </div>
-
-          {/* Spec JSON (read-only) */}
-          <div className="card" style={{ padding: 16, marginTop: 16 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
-              Spec JSON
             </div>
-            <pre style={{
-              background: '#0f172a', color: '#e2e8f0', padding: 8, borderRadius: 6,
-              fontSize: 11, overflow: 'auto', maxHeight: 300, fontFamily: "'JetBrains Mono', monospace",
-              lineHeight: 1.4, whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0,
-            }}>
-              {JSON.stringify(specData, null, 2)}
-            </pre>
+
+            {/* Divider */}
+            <div style={{ height: 1, background: 'var(--border)', margin: '4px 14px' }} />
+
+            {/* Active Mappings list */}
+            <div style={{ padding: '10px 14px', flex: 1, overflow: 'auto' }}>
+              <div style={{
+                fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)',
+                marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.04em',
+                display: 'flex', justifyContent: 'space-between',
+              }}>
+                <span>Mappings ({layer.mappings.length})</span>
+              </div>
+              {layer.mappings.length === 0 ? (
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', padding: '8px 0' }}>
+                  Click a class in the palette to add it to the canvas
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  {layer.mappings.map((m) => (
+                    <div
+                      key={m.domainClass}
+                      onClick={() => {
+                        setSelectionType('node');
+                        setSelectedKey(m.domainClass);
+                      }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        padding: '5px 8px', borderRadius: 5, cursor: 'pointer',
+                        fontSize: 12,
+                        background: selectedKey === m.domainClass ? 'var(--primary-bg)' : 'transparent',
+                        border: selectedKey === m.domainClass
+                          ? '1px solid var(--primary)'
+                          : '1px solid transparent',
+                      }}
+                    >
+                      <div style={{
+                        width: 12, height: 12, borderRadius: 2, flexShrink: 0,
+                        background: m.style.color,
+                        border: `2px solid ${m.style.borderColor}`,
+                      }} />
+                      <span style={{ flex: 1 }}>{m.domainClass}</span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeMapping(m.domainClass);
+                        }}
+                        style={{
+                          background: 'none', border: 'none', color: 'var(--text-muted)',
+                          cursor: 'pointer', fontSize: 11, padding: 2,
+                        }}
+                        title="Remove mapping"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Edge Mappings sub-list */}
+              {layer.mappings.filter((m) => m.edgeMappings.length > 0).length > 0 && (
+                <>
+                  <div style={{
+                    fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)',
+                    marginTop: 12, marginBottom: 6,
+                    textTransform: 'uppercase', letterSpacing: '0.04em',
+                  }}>
+                    Connections
+                  </div>
+                  {layer.mappings.map((m) =>
+                    m.edgeMappings.map((em) => (
+                      <div key={`${m.domainClass}->${em.domainClass}`} style={{
+                        display: 'flex', alignItems: 'center', gap: 6,
+                        padding: '3px 8px', fontSize: 11,
+                        color: 'var(--text-secondary)',
+                      }}>
+                        <span>{m.domainClass}</span>
+                        <span style={{ opacity: 0.5 }}>→</span>
+                        <span>{em.domainClass}</span>
+                        <button
+                          onClick={() => removeEdgeMapping(m.domainClass, em.domainClass)}
+                          style={{
+                            marginLeft: 'auto', background: 'none', border: 'none',
+                            color: 'var(--text-muted)', cursor: 'pointer', fontSize: 10,
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </>
+              )}
+            </div>
           </div>
+        ))}
+
+        {/* Center — React Flow Canvas */}
+        <div style={{ flex: 1, position: 'relative' }}>
+          <ReactFlow
+            nodes={nodes as any}
+            edges={edges as any}
+            onNodesChange={onNodesChangeWithPos}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            onNodeClick={onNodeClick}
+            onEdgeClick={onEdgeClick}
+            onPaneClick={onPaneClick}
+            nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
+            fitView
+            fitViewOptions={{ padding: 0.3 }}
+            connectionMode="loose"
+            deleteKeyCode={['Backspace', 'Delete']}
+            style={{ background: 'var(--bg)' }}
+          >
+            <Background variant="dots" gap={20} size={1} color="var(--border)" />
+            <Controls position="bottom-left" style={{ background: 'var(--surface)' }} />
+            <MiniMap
+              position="bottom-right"
+              style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+              nodeColor={(n) => (n.data as SpecNodeData)?.color || '#6366f1'}
+              maskColor="rgba(0,0,0,0.15)"
+            />
+            {/* Info panel bottom-center */}
+            <div style={{
+              position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)',
+              fontSize: 11, color: 'var(--text-muted)',
+              background: 'var(--surface)', padding: '4px 12px',
+              borderRadius: 6, border: '1px solid var(--border)',
+              pointerEvents: 'none',
+            }}>
+              {specData.layers.flatMap((l) => l.mappings).length} mappings ·{' '}
+              {specData.layers.flatMap((l) => l.mappings).reduce((a, m) => a + (m.edgeMappings?.length || 0), 0)} edges
+              · Drop to connect
+            </div>
+          </ReactFlow>
         </div>
+
+        {/* Right Sidebar — Style Editor */}
+        <SpecStylePanel
+          selectionType={selectionType}
+          selectionLabel={selectedKey ?? undefined}
+          shapeStyle={selectedMapping?.style}
+          edgeStyle={selectedEdge?.style}
+          edgeInfo={
+            selectionType === 'edge' && selectedKey
+              ? (() => {
+                  const match = selectedKey.match(/^edge-(.+)→(.+)$/);
+                  return match
+                    ? { source: match[1], target: match[2], sourceMapping: match[1], targetMapping: match[2] }
+                    : undefined;
+                })()
+              : undefined
+          }
+          onShapeStyleChange={handleShapeStyleChange}
+          onEdgeStyleChange={handleEdgeStyleChange}
+        />
       </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  SpecEditor (exported — wraps in ReactFlowProvider)                  */
+/* ------------------------------------------------------------------ */
+
+export default function SpecEditor() {
+  // Override parent constraints (max-width and padding from .app-main)
+  return (
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      top: 60, // app-header height
+      zIndex: 10,
+    }}>
+      <ReactFlowProvider>
+        <SpecEditorInner />
+      </ReactFlowProvider>
     </div>
   );
 }
