@@ -11,9 +11,9 @@
  *
  *   inheritanceEdge → línea discontinua, triángulo hueco (△) en el TARGET (padre)
  *
- * La flecha siempre parte desde el handle exacto que pulsó el usuario
- * y termina en el handle donde lo soltó. Si ambos están en el mismo lado,
- * el auto‑routing invierte el target para que el path no cruce los nodos.
+ * AMBOS handles son type="source" (connectionMode="loose" permite source→source).
+ * Calculamos las coordenadas de los handles manualmente desde la posición de
+ * los nodos, porque React Flow no puede calcularlas correctamente con source→source.
  *
  * Colores: modo oscuro/claro mediante CSS variables (var(--text), var(--border), etc.)
  */
@@ -23,14 +23,39 @@ import {
   EdgeLabelRenderer,
   getSmoothStepPath,
   Position,
+  useNodes,
   type EdgeProps,
   type Edge,
+  type Node,
 } from '@xyflow/react';
-import type { EcoreEdgeData } from '../types';
+import type { EcoreEdgeData, AppNode } from '../types';
 
 // ─────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────
+
+/** Ancho por defecto de un nodo EClass (lo usamos para calcular posiciones de handles) */
+const DEFAULT_NODE_WIDTH = 180;
+const DEFAULT_NODE_HEIGHT = 140;
+
+/**
+ * Calcula las coordenadas (x, y, position) de un handle dado el lado del nodo.
+ * Usa la posición real del nodo + dimensiones estimadas.
+ */
+function calcHandlePos(
+  node: Node,
+  side: 'left' | 'right',
+): { x: number; y: number; position: Position } {
+  const measured = (node as any)?.measured;
+  const w = measured?.width ?? DEFAULT_NODE_WIDTH;
+  const h = measured?.height ?? DEFAULT_NODE_HEIGHT;
+
+  const x = side === 'left' ? node.position.x : node.position.x + w;
+  const y = node.position.y + h / 2;
+  const position = side === 'left' ? Position.Left : Position.Right;
+
+  return { x, y, position };
+}
 
 /** Formatea la cardinalidad estilo UML: [0..1], [*], [1], [0..*] */
 function formatCardinality(lowerBound: number, upperBound: number): string {
@@ -48,20 +73,6 @@ function edgeColors(type: string) {
     default:
       return { stroke: 'var(--border)', text: 'var(--text-secondary)', bg: 'var(--surface)', diamond: '' };
   }
-}
-
-/**
- * Determina sourcePosition / targetPosition para el edge.
- * Con la configuración actual:
- *   - source handle: siempre Position.Right (id="right", type="source")
- *   - target handle: siempre Position.Left  (id="left",  type="target")
- *
- * React Flow calcula sourceX/Y y targetX/Y en las coordenadas correctas
- * según sourceHandle='right' y targetHandle='left' en los datos del edge.
- * getSmoothStepPath usa estos valores para generar un path limpio.
- */
-function resolvePositions(): { sourcePosition: Position; targetPosition: Position } {
-  return { sourcePosition: Position.Right, targetPosition: Position.Left };
 }
 
 /** Renderiza el label combinado (refName + cardinalidad) */
@@ -152,18 +163,55 @@ const HOLLOW_TRIANGLE = (id: string, color: string) => (
 );
 
 // ─────────────────────────────────────────────────────────────────
+// Common edge logic
+// ─────────────────────────────────────────────────────────────────
+
+/**
+ * Hook que calcula las coordenadas de source y target handle
+ * usando la posición de los nodos en lugar de confiar en
+ * sourceX/sourceY/targetX/targetY de React Flow (que son incorrectos
+ * con handles source→source en connectionMode='loose').
+ */
+function useEdgeCoords(data: EcoreEdgeData | undefined) {
+  const nodes = useNodes();
+  const sourceNode = nodes.find((n) => n.id === data?.sourceId);
+  const targetNode = nodes.find((n) => n.id === data?.targetId);
+
+  if (!sourceNode || !targetNode) {
+    return null;
+  }
+
+  const sourceSide = data?.sourceHandlePos ?? 'right';
+  const targetSide = data?.targetHandlePos ?? 'left';
+
+  const s = calcHandlePos(sourceNode, sourceSide);
+  const t = calcHandlePos(targetNode, targetSide);
+
+  return {
+    sourceX: s.x,
+    sourceY: s.y,
+    sourcePosition: s.position,
+    targetX: t.x,
+    targetY: t.y,
+    targetPosition: t.position,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────
 // 1. ReferenceEdge — Eclipse Ecore Tools convention
 // ─────────────────────────────────────────────────────────────────
 
 function ReferenceEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
-  const {
-    id,
-    sourceX, sourceY,
-    targetX, targetY,
-    data, selected,
-  } = props;
+  const { id, data, selected } = props;
+  const coords = useEdgeCoords(data);
 
-  const { sourcePosition, targetPosition } = resolvePositions();
+  // Fallback: usa las props de React Flow (pueden ser incorrectas pero evita crash)
+  const sourceX = coords?.sourceX ?? props.sourceX;
+  const sourceY = coords?.sourceY ?? props.sourceY;
+  const targetX = coords?.targetX ?? props.targetX;
+  const targetY = coords?.targetY ?? props.targetY;
+  const sourcePosition = coords?.sourcePosition ?? Position.Right;
+  const targetPosition = coords?.targetPosition ?? Position.Left;
 
   const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX, sourceY, sourcePosition,
@@ -204,14 +252,15 @@ function ReferenceEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
 // ─────────────────────────────────────────────────────────────────
 
 function ContainmentEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
-  const {
-    id,
-    sourceX, sourceY,
-    targetX, targetY,
-    data, selected,
-  } = props;
+  const { id, data, selected } = props;
+  const coords = useEdgeCoords(data);
 
-  const { sourcePosition, targetPosition } = resolvePositions();
+  const sourceX = coords?.sourceX ?? props.sourceX;
+  const sourceY = coords?.sourceY ?? props.sourceY;
+  const targetX = coords?.targetX ?? props.targetX;
+  const targetY = coords?.targetY ?? props.targetY;
+  const sourcePosition = coords?.sourcePosition ?? Position.Right;
+  const targetPosition = coords?.targetPosition ?? Position.Left;
 
   const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX, sourceY, sourcePosition,
@@ -254,14 +303,15 @@ function ContainmentEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
 // ─────────────────────────────────────────────────────────────────
 
 function InheritanceEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
-  const {
-    id,
-    sourceX, sourceY,
-    targetX, targetY,
-    selected,
-  } = props;
+  const { id, data, selected } = props;
+  const coords = useEdgeCoords(data);
 
-  const { sourcePosition, targetPosition } = resolvePositions();
+  const sourceX = coords?.sourceX ?? props.sourceX;
+  const sourceY = coords?.sourceY ?? props.sourceY;
+  const targetX = coords?.targetX ?? props.targetX;
+  const targetY = coords?.targetY ?? props.targetY;
+  const sourcePosition = coords?.sourcePosition ?? Position.Right;
+  const targetPosition = coords?.targetPosition ?? Position.Left;
 
   const [edgePath] = getSmoothStepPath({
     sourceX, sourceY, sourcePosition,

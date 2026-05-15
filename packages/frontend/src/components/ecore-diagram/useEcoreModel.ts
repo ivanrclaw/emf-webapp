@@ -137,12 +137,31 @@ function pkgToNodes(pkg: SerializableEPackage, posMap: Map<string, { x: number; 
 }
 
 /**
- * Determinación de handles para edges.
- * Siempre source=right, target=left según la configuración actual de handles.
- * React Flow usa estos IDs para calcular sourceX/Y y targetX/Y correctamente.
+ * Determinación de handles para edges con smart routing.
+ * Escoge source/target handle según la posición relativa de los nodos:
+ *   - Source a la izquierda del target → source=Right, target=Left (flujo natural →)
+ *   - Source a la derecha del target → source=Left, target=Right (flujo inverso ←)
+ * Esto evita que las aristas crucen los nodos sin importar desde qué handle
+ * arrastró el usuario (connectionMode='loose' permite cualquier handle).
  */
-function bestHandleForEdge() {
-  return { sourceHandlePos: 'right', targetHandlePos: 'left' } as const;
+function bestHandleForEdge(
+  sourceId: string,
+  targetId: string,
+  posMap?: Map<string, { x: number; y: number }>,
+): { sourceHandlePos: 'left' | 'right'; targetHandlePos: 'left' | 'right' } {
+  const sourcePos = posMap?.get(sourceId);
+  const targetPos = posMap?.get(targetId);
+
+  if (!sourcePos || !targetPos) {
+    // Fallback: flujo natural derecha
+    return { sourceHandlePos: 'right', targetHandlePos: 'left' } as const;
+  }
+
+  if (sourcePos.x < targetPos.x) {
+    return { sourceHandlePos: 'right', targetHandlePos: 'left' } as const;
+  } else {
+    return { sourceHandlePos: 'left', targetHandlePos: 'right' } as const;
+  }
 }
 
 function pkgToEdges(pkg: SerializableEPackage, _posMap?: Map<string, { x: number; y: number }>): AppEdge[] {
@@ -157,7 +176,7 @@ function pkgToEdges(pkg: SerializableEPackage, _posMap?: Map<string, { x: number
         const edgeId = `inh_${c.id}_${superTypeId}`;
         // Avoid duplicates (when both classes declare the same super type)
         if (out.some((e) => e.id === edgeId)) continue;
-        const handles = bestHandleForEdge();
+        const handles = bestHandleForEdge(c.id, superTypeId, _posMap);
         out.push({
           id: edgeId,
           source: c.id,
@@ -179,7 +198,7 @@ function pkgToEdges(pkg: SerializableEPackage, _posMap?: Map<string, { x: number
     for (const ref of c.eReferences) {
       if (!ref.targetId) continue;
       const edgeType = ref.containment ? 'containmentEdge' as const : 'referenceEdge' as const;
-      const handles = bestHandleForEdge();
+      const handles = bestHandleForEdge(c.id, ref.targetId, _posMap);
       const data: EcoreEdgeData = {
         label: ref.name || ref.targetId,
         type: edgeType,

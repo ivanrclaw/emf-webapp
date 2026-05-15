@@ -443,6 +443,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
             nodeTypes={nodeTypes as any}
             edgeTypes={edgeTypes as any}
             fitView
+            connectionMode="loose"
             selectionMode={SelectionMode.Partial}
             deleteKeyCode={['Delete', 'Backspace']}
             multiSelectionKeyCode="Shift"
