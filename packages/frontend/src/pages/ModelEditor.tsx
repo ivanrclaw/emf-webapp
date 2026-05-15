@@ -84,8 +84,51 @@ interface M1ObjectNodeData {
 /* ------------------------------------------------------------------ */
 
 function parseMetamodel(content: Record<string, any>): EPackage | null {
-  if (!content || !content.eClass) return null;
-  return content as unknown as EPackage;
+  if (!content || !content.eClassifiers) return null;
+
+  // Format A: ya tiene eClass (EPackage nativo)
+  if (content.eClass) return content as unknown as EPackage;
+
+  // Format B: SerializableEPackage del editor Ecore (sin eClass, usa eAttributes/eReferences)
+  return {
+    eClass: 'ecore:EPackage',
+    name: content.name || '',
+    nsURI: content.nsURI || '',
+    nsPrefix: content.nsPrefix || '',
+    eClassifiers: (content.eClassifiers || [])
+      .filter((c: any) => 'abstract' in c || 'interface' in c) // solo EClass (no EEnum/EDataType)
+      .map((c: any) => {
+        const features: (EAttribute | EReference)[] = [];
+        for (const attr of c.eAttributes || []) {
+          features.push({
+            eClass: 'ecore:EAttribute',
+            name: attr.name,
+            eType: { eClass: 'ecore:EDataType', name: attr.eType || 'EString' },
+            lowerBound: attr.lowerBound ?? 0,
+            upperBound: attr.upperBound ?? 1,
+            defaultValueLiteral: attr.defaultValueLiteral,
+          });
+        }
+        for (const ref of c.eReferences || []) {
+          features.push({
+            eClass: 'ecore:EReference',
+            name: ref.name,
+            eType: { eClass: 'ecore:EClass', name: ref.targetId, $ref: ref.targetId },
+            lowerBound: ref.lowerBound ?? 0,
+            upperBound: ref.upperBound ?? 1,
+            containment: ref.containment,
+            eOpposite: ref.eOpposite ? { eClass: 'ecore:EReference', name: ref.eOpposite } : undefined,
+          });
+        }
+        return {
+          eClass: 'ecore:EClass',
+          name: c.name,
+          eStructuralFeatures: features,
+          abstract: c.abstract ?? false,
+          interface: c.interface ?? false,
+        } as EClassData;
+      }),
+  } as EPackage;
 }
 
 function concreteEClasses(epkg: EPackage): EClassData[] {
