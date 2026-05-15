@@ -114,7 +114,7 @@ export default function EClassNode(props: NodeProps) {
   return (
     <div className={styles.node} onClick={() => onSelect(classifier.id, 'class')}>
       {/* ── Handles ──────────────────────────────────────── */}
-      <Handle type="source" position={Position.Left} id="left" />
+      <Handle type="target" position={Position.Left} id="left" />
       <Handle type="source" position={Position.Right} id="right" />
 
       {/* ── Header ───────────────────────────────────────── */}

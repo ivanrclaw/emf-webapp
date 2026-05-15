@@ -51,41 +51,17 @@ function edgeColors(type: string) {
 }
 
 /**
- * Determina sourcePosition / targetPosition según el handle ID o los datos del edge.
+ * Determina sourcePosition / targetPosition para el edge.
+ * Con la configuración actual:
+ *   - source handle: siempre Position.Right (id="right", type="source")
+ *   - target handle: siempre Position.Left  (id="left",  type="target")
  *
- * Los handles tienen ID "left" (Position.Left) o "right" (Position.Right).
- * Si el edge tiene sourceHandlePos/targetHandlePos en data (calculado por
- * pkgToEdges con smart-routing basado en posición de nodos), se usa eso.
- * Como fallback se usa Position.Right para source y Position.Left para target.
- *
- * Auto‑routing: si source y target están en el MISMO lado, se invierte
- * el target para que el path no atraviese los nodos.
+ * React Flow calcula sourceX/Y y targetX/Y en las coordenadas correctas
+ * según sourceHandle='right' y targetHandle='left' en los datos del edge.
+ * getSmoothStepPath usa estos valores para generar un path limpio.
  */
-function resolvePositions(
-  sourceHandleId: string | null | undefined,
-  targetHandleId: string | null | undefined,
-  dataHandlePos?: { source: 'left' | 'right'; target: 'left' | 'right' },
-) {
-  // Prioridad: data (smart-routing) > handleId (arrastre) > default
-  if (dataHandlePos) {
-    const srcPos = dataHandlePos.source === 'left' ? Position.Left : Position.Right;
-    const tgtPos = dataHandlePos.target === 'left' ? Position.Left : Position.Right;
-    // Auto-flip si están en el mismo lado
-    const finalTarget = srcPos === tgtPos
-      ? (tgtPos === Position.Left ? Position.Right : Position.Left)
-      : tgtPos;
-    return { sourcePosition: srcPos, targetPosition: finalTarget };
-  }
-
-  const sourcePos = sourceHandleId === 'left' ? Position.Left : Position.Right;
-  const targetPosRaw = targetHandleId === 'left' ? Position.Left : Position.Right;
-
-  // Smart routing: same-side → flip target to avoid crossing nodes
-  const targetPos = sourcePos === targetPosRaw
-    ? (targetPosRaw === Position.Left ? Position.Right : Position.Left)
-    : targetPosRaw;
-
-  return { sourcePosition: sourcePos, targetPosition: targetPos };
+function resolvePositions(): { sourcePosition: Position; targetPosition: Position } {
+  return { sourcePosition: Position.Right, targetPosition: Position.Left };
 }
 
 /** Renderiza el label combinado (refName + cardinalidad) */
@@ -184,16 +160,10 @@ function ReferenceEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
     id,
     sourceX, sourceY,
     targetX, targetY,
-    sourceHandleId,
-    targetHandleId,
     data, selected,
   } = props;
 
-  const { sourcePosition, targetPosition } = resolvePositions(
-    sourceHandleId,
-    targetHandleId,
-    data ? { source: data.sourceHandlePos || 'right', target: data.targetHandlePos || 'left' } : undefined,
-  );
+  const { sourcePosition, targetPosition } = resolvePositions();
 
   const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX, sourceY, sourcePosition,
@@ -238,16 +208,10 @@ function ContainmentEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
     id,
     sourceX, sourceY,
     targetX, targetY,
-    sourceHandleId,
-    targetHandleId,
     data, selected,
   } = props;
 
-  const { sourcePosition, targetPosition } = resolvePositions(
-    sourceHandleId,
-    targetHandleId,
-    data ? { source: data.sourceHandlePos || 'right', target: data.targetHandlePos || 'left' } : undefined,
-  );
+  const { sourcePosition, targetPosition } = resolvePositions();
 
   const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX, sourceY, sourcePosition,
@@ -294,17 +258,10 @@ function InheritanceEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
     id,
     sourceX, sourceY,
     targetX, targetY,
-    sourceHandleId,
-    targetHandleId,
     selected,
-    data,
   } = props;
 
-  const { sourcePosition, targetPosition } = resolvePositions(
-    sourceHandleId,
-    targetHandleId,
-    data ? { source: data.sourceHandlePos || 'right', target: data.targetHandlePos || 'left' } : undefined,
-  );
+  const { sourcePosition, targetPosition } = resolvePositions();
 
   const [edgePath] = getSmoothStepPath({
     sourceX, sourceY, sourcePosition,
