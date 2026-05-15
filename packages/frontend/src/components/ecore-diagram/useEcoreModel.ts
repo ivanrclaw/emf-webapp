@@ -191,6 +191,8 @@ function pkgToEdges(pkg: SerializableEPackage, posMap?: Map<string, { x: number;
           id: edgeId,
           source: c.id,
           target: superTypeId,
+          sourceHandle: handles.sourceHandlePos,
+          targetHandle: handles.targetHandlePos,
           type: 'inheritanceEdge',
           data: {
             label: '', type: 'inheritanceEdge',
@@ -220,6 +222,8 @@ function pkgToEdges(pkg: SerializableEPackage, posMap?: Map<string, { x: number;
         id: ref.id,
         source: c.id,
         target: ref.targetId,
+        sourceHandle: handles.sourceHandlePos,
+        targetHandle: handles.targetHandlePos,
         type: edgeType,
         animated: ref.containment,
         data,
