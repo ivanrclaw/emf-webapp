@@ -216,7 +216,7 @@ export const WelcomeTab: React.FC<WelcomeTabProps> = ({
 
             {/* Documentation */}
             <a
-              href="https://github.com/emf-webapp/docs"
+              href="https://github.com/ivanrclaw/emf-webapp"
               target="_blank"
               rel="noopener noreferrer"
               style={{
