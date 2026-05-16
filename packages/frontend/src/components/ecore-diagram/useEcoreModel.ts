@@ -40,6 +40,7 @@ import type {
   EcoreNodeType,
 } from './types';
 import { updateMetamodelContent } from '../../api/client';
+import { computeAutoLayout } from './autoLayout';
 
 // ═══════════════════════════════════════════════════════════════
 // Helpers
@@ -116,6 +117,7 @@ export interface UseEcoreModelReturn {
   redo: () => void;
   canUndo: boolean;
   canRedo: boolean;
+  autoLayout: (direction?: 'TB' | 'LR') => void;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -569,6 +571,19 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg, violationsMa
     [],
   );
 
+  // ── Auto Layout ─────────────────────────────────────────────
+  const autoLayout = useCallback((direction: 'TB' | 'LR' = 'TB') => {
+    const currentNodes = nodesRef.current;
+    const currentEdges = pkgToEdges(pkgRef.current, posMap.current);
+    const positions = computeAutoLayout(currentNodes, currentEdges, { direction });
+    // Apply positions to posMap and trigger resync
+    positions.forEach((pos, id) => {
+      posMap.current.set(id, pos);
+    });
+    resync();
+    setIsDirty(true);
+  }, [resync]);
+
   // ── Save ───────────────────────────────────────────────────
   const save = useCallback(async () => {
     setLoading(true);
@@ -610,6 +625,7 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg, violationsMa
     redo: redoFn,
     canUndo,
     canRedo,
+    autoLayout,
   };
 }
 

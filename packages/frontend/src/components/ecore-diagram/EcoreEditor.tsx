@@ -246,6 +246,10 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
         exportEcore: () => exportEcore(projectId, metamodelId),
         exportZip: () => exportXmiZip(projectId, metamodelId),
         exportGenmodel: () => exportGenmodel(projectId, metamodelId),
+        autoLayout: (direction?: 'TB' | 'LR') => {
+          model.autoLayout(direction);
+          setTimeout(() => reactFlowInstance.fitView({ padding: 0.15, duration: 300 }), 50);
+        },
         importEcore: () => {
           const input = document.createElement('input');
           input.type = 'file';
@@ -579,6 +583,34 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
             <span>{model.edges?.length ?? 0} edges</span>
             <span style={{ color: 'var(--border)' }}>·</span>
             <span>{model.pkg.nsPrefix || 'no nsPrefix'}</span>
+          </div>
+        </Panel>
+        <Panel position="top-right">
+          <div style={{ display: 'flex', gap: 4 }}>
+            <button
+              onClick={() => { model.autoLayout('TB'); setTimeout(() => reactFlowInstance.fitView({ padding: 0.15, duration: 300 }), 50); }}
+              title="Auto Layout (Top → Bottom)"
+              style={{
+                padding: '6px 10px', fontSize: 12, fontWeight: 600,
+                background: 'var(--surface)', border: '1px solid var(--border)',
+                borderRadius: 8, cursor: 'pointer', color: 'var(--text)',
+                boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+              }}
+            >
+              ↕ Layout
+            </button>
+            <button
+              onClick={() => { model.autoLayout('LR'); setTimeout(() => reactFlowInstance.fitView({ padding: 0.15, duration: 300 }), 50); }}
+              title="Auto Layout (Left → Right)"
+              style={{
+                padding: '6px 10px', fontSize: 12, fontWeight: 600,
+                background: 'var(--surface)', border: '1px solid var(--border)',
+                borderRadius: 8, cursor: 'pointer', color: 'var(--text)',
+                boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+              }}
+            >
+              ↔ Layout
+            </button>
           </div>
         </Panel>
       </ReactFlow>
