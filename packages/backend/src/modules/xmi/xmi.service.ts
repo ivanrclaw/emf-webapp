@@ -59,15 +59,15 @@ export class XmiService {
     }
 
     const content = mm.content as any;
-    if (!content || !content.name) {
-      this.logger.warn(`Metamodel ${metamodelId} has no valid content`);
+    if (!content) {
+      this.logger.warn(`Metamodel ${metamodelId} has no content`);
       return null;
     }
 
     const serializable: any = {
-      name: content.name || 'model',
-      nsURI: content.nsURI || (mm as any).nsUri || '',
-      nsPrefix: content.nsPrefix || (mm as any).nsPrefix || 'model',
+      name: content.name || mm.name || 'model',
+      nsURI: content.nsURI || (mm as any).ns_uri || '',
+      nsPrefix: content.nsPrefix || (mm as any).ns_prefix || 'model',
       eClassifiers: Array.isArray(content.eClassifiers) ? content.eClassifiers : [],
     };
 
@@ -203,9 +203,9 @@ ${nestedContent}
     if (!mm) return null;
 
     const content = mm.content as any;
-    if (!content || !content.name) return null;
+    if (!content) return null;
 
-    const pkgName = content.name || 'model';
+    const pkgName = content.name || mm.name || 'model';
     const nsURI = content.nsURI || '';
     const nsPrefix = content.nsPrefix || pkgName.toLowerCase();
     const pluginId = `org.eclipse.emf.${nsPrefix}`;
