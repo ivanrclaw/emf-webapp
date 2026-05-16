@@ -40,6 +40,7 @@ interface SidebarProps {
   onOpenTab: (tab: TabDescriptor) => void;
   currentProjectId?: string;
   currentMetamodelId?: string;
+  projectRefreshKey?: number;
 }
 
 interface ProjectNode {
@@ -58,6 +59,7 @@ export default function Sidebar({
   onOpenTab,
   currentProjectId,
   currentMetamodelId,
+  projectRefreshKey,
 }: SidebarProps) {
   const [projects, setProjects] = useState<ProjectNode[]>([]);
   const [loading, setLoading] = useState(true);
@@ -89,7 +91,7 @@ export default function Sidebar({
 
   useEffect(() => {
     fetchProjects();
-  }, [fetchProjects]);
+  }, [fetchProjects, projectRefreshKey]);
 
   const toggleProject = async (index: number) => {
     setProjects((prev) => {

@@ -485,6 +485,7 @@ function WorkspaceInner() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [showImportEcore, setShowImportEcore] = useState(false);
+  const [projectRefreshKey, setProjectRefreshKey] = useState(0);
 
   // Responsive sidebar: auto-collapse < 1024px, restore >= 1024px
   const isDesktop = useMediaQuery('(min-width: 1024px)');
@@ -682,6 +683,7 @@ function WorkspaceInner() {
               onOpenTab={handleOpenTab}
               currentProjectId={workspace.currentProjectId || undefined}
               currentMetamodelId={workspace.currentMetamodelId || undefined}
+              projectRefreshKey={projectRefreshKey}
             />
             {/* Portal target for editor panels (Toolbox + TreeView) */}
             <div ref={panels.leftPanelRef} style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', borderTop: '1px solid var(--border)' }} />
@@ -748,6 +750,7 @@ function WorkspaceInner() {
         onClose={() => setShowCreateProject(false)}
         onCreated={(projectId, projectName) => {
           setShowCreateProject(false);
+          setProjectRefreshKey((k) => k + 1);
           workspace.setContext(projectId);
           workspace.openTab({
             type: 'project-info',
@@ -766,6 +769,7 @@ function WorkspaceInner() {
         addToast={addToast}
         onCreated={(projectId, projectName) => {
           setShowImportEcore(false);
+          setProjectRefreshKey((k) => k + 1);
           workspace.setContext(projectId);
           workspace.openTab({
             type: 'project-info',
