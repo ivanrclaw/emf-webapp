@@ -16,13 +16,17 @@ import { M1Model } from './modules/m1model/m1model.entity.js';
 import { GraphicalSpec } from './modules/graphicalspec/graphicalspec.entity.js';
 import { OCLConstraint } from './modules/oclconstraint/oclconstraint.entity.js';
 import { CodeTemplate } from './modules/codetemplate/codetemplate.entity.js';
+import { CollaborationModule } from './modules/collaboration/collaboration.module.js';
+import { ModelVersionModule } from './modules/modelversion/modelversion.module.js';
+import { ModelVersion } from './modules/modelversion/modelversion.entity.js';
+import { XmiModule } from './modules/xmi/xmi.module.js';
 
 @Module({
   imports: [
     TypeOrmModule.forRoot({
       type: 'sqlite',
       database: './data/emf-webapp.db',
-      entities: [Project, Metamodel, M1Model, GraphicalSpec, OCLConstraint, CodeTemplate],
+      entities: [Project, Metamodel, M1Model, GraphicalSpec, OCLConstraint, CodeTemplate, ModelVersion],
       synchronize: true,
     }),
     ProjectModule,
@@ -31,6 +35,9 @@ import { CodeTemplate } from './modules/codetemplate/codetemplate.entity.js';
     GraphicalSpecModule,
     OCLConstraintModule,
     CodeTemplateModule,
+    CollaborationModule,
+    ModelVersionModule,
+    XmiModule,
   ],
 })
 export class AppModule {}

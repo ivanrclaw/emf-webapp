@@ -34,4 +34,16 @@ export declare function serializeToXMI(obj: EObject, options?: {
  * @returns El EObject deserializado
  */
 export declare function deserializeFromXMI(xml: string, registry?: PackageRegistry): EObject;
+/**
+ * Creates a default PackageRegistry containing the Ecore metamodel types.
+ *
+ * This enables deserialization of .ecore files without an external registry.
+ * Each EClass is built using createMinimalEObject so no static class setup
+ * is needed — the registry is self-contained.
+ *
+ * @returns A PackageRegistry mapping ECORE_NS to an EPackage with
+ *          EPackage, EClass, EAttribute, EReference, EEnum, EOperation,
+ *          EParameter, and EAnnotation EClasses.
+ */
+export declare function getDefaultEcoreRegistry(): PackageRegistry;
 //# sourceMappingURL=XMISerializer.d.ts.map

@@ -1,7 +1,7 @@
 /* ── EClassNode ────────────────────────────────────────────────── */
 .node {
-  background: #ffffff;
-  border: 2px solid #818cf8;
+  background: var(--node-bg);
+  border: 2px solid var(--eclass-border);
   border-radius: 12px;
   min-width: 210px;
   max-width: 330px;
@@ -20,11 +20,11 @@
   box-shadow:
     0 6px 20px rgba(99, 102, 241, 0.18),
     0 2px 6px rgba(0, 0, 0, 0.06);
-  border-color: #6366f1;
+  border-color: var(--eclass-border-hover);
 }
 
 .node:global(.selected) {
-  border-color: #4f46e5;
+  border-color: var(--eclass-border-selected);
   box-shadow:
     0 0 0 3px rgba(99, 102, 241, 0.2),
     0 6px 20px rgba(99, 102, 241, 0.15);
@@ -32,9 +32,9 @@
 
 /* ── Header ──────────────────────────────────────────────────── */
 .header {
-  background: linear-gradient(135deg, #eef2ff, #e0e7ff);
+  background: var(--eclass-header-bg);
   padding: 10px 14px;
-  border-bottom: 1px solid #c7d2fe;
+  border-bottom: 1px solid var(--eclass-header-border);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -44,7 +44,8 @@
 .name {
   font-weight: 700;
   font-size: 14px;
-  color: #3730a3;
+  color: var(--eclass-name-color);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
   cursor: text;
   flex: 1;
   min-width: 0;
@@ -57,9 +58,9 @@
 .nameInput {
   font-weight: 700;
   font-size: 14px;
-  color: #3730a3;
-  background: #fff;
-  border: 1.5px solid #818cf8;
+  color: var(--eclass-name-color);
+  background: var(--eclass-name-input-bg);
+  border: 1.5px solid var(--eclass-border);
   border-radius: 6px;
   padding: 3px 8px;
   outline: none;
@@ -78,15 +79,39 @@
 }
 
 .badgeAbstract {
-  background: #fef3c7;
-  color: #92400e;
-  border: 1px solid #fbbf24;
+  background: var(--eclass-badge-abstract-bg);
+  color: var(--eclass-badge-abstract-color);
+  border: 1px solid var(--eclass-badge-abstract-border);
 }
 
 .badgeInterface {
-  background: #ede9fe;
-  color: #5b21b6;
-  border: 1px solid #a78bfa;
+  background: var(--eclass-badge-interface-bg);
+  color: var(--eclass-badge-interface-color);
+  border: 1px solid var(--eclass-badge-interface-border);
+}
+
+/* ── OCL Violation Badge ────────────────────────────────────── */
+.violationBadge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #ef4444;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(239, 68, 68, 0.4);
+  z-index: 20;
+  line-height: 1;
+  cursor: help;
+}
+.node:has(.violationBadge) {
+  border-color: #ef4444;
 }
 
 /* ── Sections ────────────────────────────────────────────────── */
@@ -95,11 +120,11 @@
 }
 
 .sectionAttributes {
-  background: #f0fdf4;
+  background: var(--eclass-section-attr);
 }
 
 .sectionReferences {
-  background: #fffbeb;
+  background: var(--eclass-section-ref);
 }
 
 .sectionTitle {
@@ -107,9 +132,9 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.8px;
-  color: #6b7280;
+  color: var(--node-text-muted);
   padding: 5px 14px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--node-border-sep);
 }
 
 /* ── Items ───────────────────────────────────────────────────── */
@@ -119,13 +144,13 @@
   gap: 4px;
   padding: 4px 14px;
   font-size: 12px;
-  color: #374151;
-  border-bottom: 1px solid #f3f4f6;
+  color: var(--node-text);
+  border-bottom: 1px solid var(--node-border-sep);
   transition: background 0.1s;
 }
 
 .item:hover {
-  background: rgba(0, 0, 0, 0.02);
+  background: var(--node-item-hover);
 }
 
 .item:last-child {
@@ -141,13 +166,13 @@
 }
 
 .typeName {
-  color: #6b7280;
+  color: var(--node-text-secondary);
   font-size: 11px;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
 }
 
 .arrow {
-  color: #9ca3af;
+  color: var(--node-text-muted);
   margin: 0 2px;
 }
 
@@ -163,29 +188,29 @@
 }
 
 .badgeId {
-  background: #fef2f2;
-  color: #dc2626;
-  border: 1px solid #fca5a5;
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
 .badgeRequired {
-  background: #f3e8ff;
-  color: #7c3aed;
-  border: 1px solid #c4b5fd;
+  background: rgba(124, 58, 237, 0.1);
+  color: #a78bfa;
+  border: 1px solid rgba(124, 58, 237, 0.3);
 }
 
 .badgeCardinality {
-  background: #dbeafe;
-  color: #1d4ed8;
-  border: 1px solid #93c5fd;
+  background: rgba(59, 130, 246, 0.1);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.3);
   font-size: 9px;
   font-family: 'JetBrains Mono', monospace;
 }
 
 .badgeDerived {
-  background: #fef3c7;
-  color: #92400e;
-  border: 1px solid #fcd34d;
+  background: rgba(251, 191, 36, 0.1);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.3);
   font-size: 9px;
   font-weight: 700;
 }
@@ -199,8 +224,8 @@
   padding: 5px 14px;
   background: transparent;
   border: none;
-  border-top: 1px dashed #d1d5db;
-  color: #9ca3af;
+  border-top: 1px dashed var(--eclass-add-border);
+  color: var(--node-text-muted);
   font-size: 15px;
   font-weight: 500;
   cursor: pointer;
@@ -208,19 +233,16 @@
 }
 
 .addBtn:hover {
-  background: rgba(99, 102, 241, 0.04);
-  color: #6366f1;
+  background: var(--eclass-add-hover-bg);
+  color: var(--eclass-border-hover);
 }
 
 /* ── Handles de conexión ───────────────────────────────────────── */
-/* Ambos handles visualmente idénticos — la dirección depende de  */
-/* dónde empiezas a arrastrar, no del color del handle.          */
-/*     arrastras desde A → B → la referencia vive en A           */
 .node :global(.react-flow__handle) {
   width: 10px;
   height: 10px;
-  background: #94a3b8;
-  border: 2px solid #fff;
+  background: var(--node-handle-bg);
+  border: 2px solid var(--node-handle-border);
   border-radius: 50%;
   cursor: crosshair;
   transition: transform 0.15s, background 0.15s;
@@ -228,7 +250,7 @@
 }
 .node :global(.react-flow__handle):hover {
   transform: scale(1.4);
-  background: #64748b;
+  background: var(--node-text-secondary);
 }
 
 /* Connecting line durante el arrastre */

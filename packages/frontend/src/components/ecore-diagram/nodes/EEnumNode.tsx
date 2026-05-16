@@ -8,6 +8,7 @@ import { useCallback, useState, type KeyboardEvent } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { EcoreNodeData, SerializableEEnum } from '../types';
 import styles from './EEnumNode.module.css';
+import { AlertTriangle } from '../../icons';
 
 // ── Type guard ─────────────────────────────────────────────────
 function isEEnum(c: unknown): c is SerializableEEnum {
@@ -24,7 +25,7 @@ export default function EEnumNode(props: NodeProps) {
   const classifier = data.classifier;
 
   if (!isEEnum(classifier)) {
-    return <div className={styles.node}>⚠️ Invalid EEnum data</div>;
+    return <div className={styles.node}><AlertTriangle size={14} /> Invalid EEnum data</div>;
   }
 
   const { onClassifierChange, onSelect } = data;

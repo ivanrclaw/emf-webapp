@@ -33,6 +33,54 @@
   --shadow-md: 0 4px 6px -1px rgba(0,0,0,.07), 0 2px 4px -2px rgba(0,0,0,.05);
   --shadow-lg: 0 10px 15px -3px rgba(0,0,0,.08), 0 4px 6px -4px rgba(0,0,0,.04);
   --shadow-xl: 0 20px 25px -5px rgba(0,0,0,.08), 0 8px 10px -6px rgba(0,0,0,.04);
+
+  /* ── Node diagram tokens (dark default) ── */
+  --node-bg: #1e293b;
+  --node-border-sep: #334155;
+  --node-text: #f1f5f9;
+  --node-text-secondary: #94a3b8;
+  --node-text-muted: #94a3b8;
+  --node-item-hover: rgba(255,255,255,0.04);
+  --node-handle-bg: #94a3b8;
+  --node-handle-border: #1e293b;
+
+  /* EClass */
+  --eclass-border: #818cf8;
+  --eclass-border-hover: #6366f1;
+  --eclass-border-selected: #4f46e5;
+  --eclass-header-bg: linear-gradient(135deg, #312e81, #3730a3);
+  --eclass-header-border: #4338ca;
+  --eclass-name-color: #e0e7ff;
+  --eclass-name-input-bg: #1e1b4b;
+  --eclass-section-attr: rgba(52, 211, 153, 0.06);
+  --eclass-section-ref: rgba(251, 191, 36, 0.06);
+  --eclass-badge-abstract-bg: rgba(251, 191, 36, 0.15);
+  --eclass-badge-abstract-color: #fbbf24;
+  --eclass-badge-abstract-border: rgba(251, 191, 36, 0.3);
+  --eclass-badge-interface-bg: rgba(167, 139, 250, 0.15);
+  --eclass-badge-interface-color: #a78bfa;
+  --eclass-badge-interface-border: rgba(167, 139, 250, 0.3);
+  --eclass-add-border: #334155;
+  --eclass-add-hover-bg: rgba(99, 102, 241, 0.08);
+
+  /* EEnum */
+  --eenum-border: #fb923c;
+  --eenum-border-hover: #f97316;
+  --eenum-border-selected: #ea580c;
+  --eenum-header-bg: linear-gradient(135deg, #7c2d12, #9a3412);
+  --eenum-header-border: #c2410c;
+  --eenum-name-color: #fed7aa;
+  --eenum-name-input-bg: #431407;
+  --eenum-literal-border: #334155;
+
+  /* EDataType */
+  --edatatype-border: #9ca3af;
+  --edatatype-border-hover: #6b7280;
+  --edatatype-border-selected: #4b5563;
+  --edatatype-header-bg: linear-gradient(135deg, #374151, #4b5563);
+  --edatatype-header-border: #6b7280;
+  --edatatype-name-color: #e5e7eb;
+  --edatatype-name-input-bg: #1f2937;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -893,4 +941,133 @@ tbody td {
   --text-muted: #94a3b8;
   --border: #e2e8f0;
   --border-light: #f1f5f9;
+
+  /* ── Node diagram tokens (light) ── */
+  --node-bg: #ffffff;
+  --node-border-sep: #e5e7eb;
+  --node-text: #1f2937;
+  --node-text-secondary: #6b7280;
+  --node-text-muted: #9ca3af;
+  --node-item-hover: rgba(0,0,0,0.02);
+  --node-handle-bg: #94a3b8;
+  --node-handle-border: #ffffff;
+
+  /* EClass */
+  --eclass-border: #818cf8;
+  --eclass-border-hover: #6366f1;
+  --eclass-border-selected: #4f46e5;
+  --eclass-header-bg: linear-gradient(135deg, #eef2ff, #e0e7ff);
+  --eclass-header-border: #c7d2fe;
+  --eclass-name-color: #3730a3;
+  --eclass-name-input-bg: #ffffff;
+  --eclass-section-attr: #f0fdf4;
+  --eclass-section-ref: #fffbeb;
+  --eclass-badge-abstract-bg: #fef3c7;
+  --eclass-badge-abstract-color: #92400e;
+  --eclass-badge-abstract-border: #fbbf24;
+  --eclass-badge-interface-bg: #ede9fe;
+  --eclass-badge-interface-color: #5b21b6;
+  --eclass-badge-interface-border: #a78bfa;
+  --eclass-add-border: #d1d5db;
+  --eclass-add-hover-bg: rgba(99, 102, 241, 0.04);
+
+  /* EEnum */
+  --eenum-border: #fb923c;
+  --eenum-border-hover: #f97316;
+  --eenum-border-selected: #ea580c;
+  --eenum-header-bg: linear-gradient(135deg, #fff7ed, #ffedd5);
+  --eenum-header-border: #fed7aa;
+  --eenum-name-color: #9a3412;
+  --eenum-name-input-bg: #ffffff;
+  --eenum-literal-border: #f3f4f6;
+
+  /* EDataType */
+  --edatatype-border: #9ca3af;
+  --edatatype-border-hover: #6b7280;
+  --edatatype-border-selected: #4b5563;
+  --edatatype-header-bg: linear-gradient(135deg, #f9fafb, #f3f4f6);
+  --edatatype-header-border: #e5e7eb;
+  --edatatype-name-color: #1f2937;
+  --edatatype-name-input-bg: #ffffff;
+}
+
+/* ── Font family for code ──────────────────────────────────────── */
+:root { --code-font: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace; }
+
+/* ── Scrollbar styling ──────────────────────────────────────────── */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+* { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+
+/* ── Selection ──────────────────────────────────────────────────── */
+::selection { background: var(--primary-bg); color: var(--primary); }
+
+/* ── Animations ─────────────────────────────────────────────────── */
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.spin { animation: spin 1s linear infinite; }
+
+/* ── React Flow theme override (dark) ──────────────────────────── */
+.react-flow__background { background: var(--bg) !important; }
+.react-flow__minimap { border-radius: 8px; overflow: hidden; }
+.react-flow__controls button {
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text-secondary) !important;
+  fill: var(--text-secondary) !important;
+}
+.react-flow__controls button:hover {
+  background: var(--surface-hover) !important;
+  color: var(--text) !important;
+}
+.react-flow__selection { background: color-mix(in srgb, var(--primary) 15%, transparent) !important; border: 1px solid var(--primary) !important; }
+.react-flow__edge.selected .react-flow__edge-path { stroke: var(--primary) !important; }
+.react-flow__edge-path { stroke: var(--text-muted) !important; }
+.react-flow__node.selected > div { box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 40%, transparent) !important; }
+
+/* ── Workspace ─────────────────────────────────────────────── */
+
+/* Hide scrollbar on tab bar but allow scroll */
+.workspace-tabbar::-webkit-scrollbar { display: none; }
+.workspace-tabbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Sidebar skeleton pulse */
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: .4; }
+  50% { opacity: .8; }
+}
+.skeleton-pulse {
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+  background: var(--surface-hover);
+  border-radius: var(--radius-sm);
+}
+
+/* Workspace ensures full viewport */
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Smooth transitions for sidebar collapse */
+.workspace-sidebar {
+  transition: width .2s ease;
+}
+
+/* Tab close button visibility */
+.workspace-tab .tab-close {
+  opacity: 0;
+  transition: opacity .1s;
+}
+.workspace-tab:hover .tab-close,
+.workspace-tab.active .tab-close {
+  opacity: 1;
 }

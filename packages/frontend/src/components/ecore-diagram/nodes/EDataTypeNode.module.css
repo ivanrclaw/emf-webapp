@@ -1,7 +1,7 @@
 /* ── EDataTypeNode ────────────────────────────────────────────── */
 .node {
-  background: #ffffff;
-  border: 2px solid #9ca3af;
+  background: var(--node-bg);
+  border: 2px solid var(--edatatype-border);
   border-radius: 12px;
   min-width: 170px;
   max-width: 250px;
@@ -20,20 +20,20 @@
   box-shadow:
     0 6px 20px rgba(0, 0, 0, 0.08),
     0 2px 6px rgba(0, 0, 0, 0.04);
-  border-color: #6b7280;
+  border-color: var(--edatatype-border-hover);
 }
 
 .node:global(.selected) {
-  border-color: #4b5563;
+  border-color: var(--edatatype-border-selected);
   box-shadow:
     0 0 0 3px rgba(107, 114, 128, 0.15),
     0 6px 20px rgba(0, 0, 0, 0.08);
 }
 
 .header {
-  background: linear-gradient(135deg, #f9fafb, #f3f4f6);
+  background: var(--edatatype-header-bg);
   padding: 10px 14px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--edatatype-header-border);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -42,7 +42,7 @@
 .name {
   font-weight: 700;
   font-size: 14px;
-  color: #1f2937;
+  color: var(--edatatype-name-color);
   cursor: text;
   flex: 1;
   min-width: 0;
@@ -55,9 +55,9 @@
 .nameInput {
   font-weight: 700;
   font-size: 14px;
-  color: #1f2937;
-  background: #fff;
-  border: 1.5px solid #9ca3af;
+  color: var(--edatatype-name-color);
+  background: var(--edatatype-name-input-bg);
+  border: 1.5px solid var(--edatatype-border);
   border-radius: 6px;
   padding: 3px 8px;
   outline: none;
@@ -67,7 +67,7 @@
 
 .instanceClass {
   font-size: 11px;
-  color: #6b7280;
+  color: var(--node-text-secondary);
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   margin-top: 3px;
   overflow: hidden;

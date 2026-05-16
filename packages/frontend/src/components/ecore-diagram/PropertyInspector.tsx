@@ -71,7 +71,7 @@ const TextInput: React.FC<{
   placeholder?: string;
 }> = ({ label, value, onChange, placeholder }) => (
   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-    <label style={{ fontSize: 11, fontWeight: 500, color: '#6b7280' }}>{label}</label>
+    <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)' }}>{label}</label>
     <input
       type="text"
       value={value}
@@ -81,10 +81,10 @@ const TextInput: React.FC<{
         width: '100%',
         padding: '6px 8px',
         fontSize: 13,
-        border: '1px solid #d1d5db',
+        border: '1px solid var(--border)',
         borderRadius: 4,
         outline: 'none',
-        background: '#fff',
+        background: 'var(--surface)',
       }}
     />
   </div>
@@ -96,12 +96,12 @@ const Checkbox: React.FC<{
   checked: boolean;
   onChange: (v: boolean) => void;
 }> = ({ label, checked, onChange }) => (
-  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#374151', cursor: 'pointer', userSelect: 'none' }}>
+  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text)', cursor: 'pointer', userSelect: 'none' }}>
     <input
       type="checkbox"
       checked={checked}
       onChange={(e) => onChange(e.target.checked)}
-      style={{ borderRadius: 4, border: '1px solid #d1d5db', accentColor: '#2563eb' }}
+      style={{ borderRadius: 4, border: '1px solid var(--border)', accentColor: 'var(--primary)' }}
     />
     {label}
   </label>
@@ -115,7 +115,7 @@ const SelectInput: React.FC<{
   onChange: (v: string) => void;
 }> = ({ label, value, options, onChange }) => (
   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-    <label style={{ fontSize: 11, fontWeight: 500, color: '#6b7280' }}>{label}</label>
+    <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)' }}>{label}</label>
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
@@ -123,10 +123,10 @@ const SelectInput: React.FC<{
         width: '100%',
         padding: '6px 8px',
         fontSize: 13,
-        border: '1px solid #d1d5db',
+        border: '1px solid var(--border)',
         borderRadius: 4,
         outline: 'none',
-        background: '#fff',
+        background: 'var(--surface)',
       }}
     >
       {options.map((opt) => (
@@ -140,11 +140,11 @@ const SelectInput: React.FC<{
 
 /** Sección de propiedades agrupadas */
 const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
-  <div style={{ borderBottom: '1px solid #e5e7eb', paddingBottom: 12, marginBottom: 12 }}>
+  <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 12, marginBottom: 12 }}>
     <h4 style={{
       fontSize: 11,
       fontWeight: 600,
-      color: '#9ca3af',
+      color: 'var(--text-muted)',
       textTransform: 'uppercase',
       letterSpacing: '0.05em',
       marginBottom: 8,
@@ -202,7 +202,7 @@ const EClassForm: React.FC<EClassFormProps> = ({ cls, pkg, onChange, onAddAttrib
 
       <Section title="Super Types">
         {cls.eSuperTypes.length === 0 && (
-          <p style={{ fontSize: 11, color: '#9ca3af', fontStyle: 'italic' }}>No super types</p>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>No super types</p>
         )}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {cls.eSuperTypes.map((superId) => {
@@ -216,17 +216,17 @@ const EClassForm: React.FC<EClassFormProps> = ({ cls, pkg, onChange, onAddAttrib
                   gap: 4,
                   padding: '2px 8px',
                   fontSize: 11,
-                  background: '#eff6ff',
-                  color: '#1d4ed8',
+                  background: 'var(--primary-bg)',
+                  color: 'var(--primary)',
                   borderRadius: 9999,
-                  border: '1px solid #bfdbfe',
+                  border: '1px solid var(--primary-light)',
                 }}
               >
                 {superCls?.name ?? superId}
                 <button
                   type="button"
                   onClick={() => removeSuperType(superId)}
-                  style={{ color: '#60a5fa', fontWeight: 700, lineHeight: 1, border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }}
+                  style={{ color: 'var(--primary-light)', fontWeight: 700, lineHeight: 1, border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }}
                   title="Remove super type"
                 >
                   ×
@@ -245,10 +245,10 @@ const EClassForm: React.FC<EClassFormProps> = ({ cls, pkg, onChange, onAddAttrib
               width: '100%',
               padding: '6px 8px',
               fontSize: 13,
-              border: '1px solid #d1d5db',
+              border: '1px solid var(--border)',
               borderRadius: 4,
               outline: 'none',
-              background: '#fff',
+              background: 'var(--surface)',
               marginTop: 4,
             }}
           >
@@ -274,7 +274,7 @@ const EClassForm: React.FC<EClassFormProps> = ({ cls, pkg, onChange, onAddAttrib
                 fontSize: 11,
                 fontWeight: 500,
                 color: '#fff',
-                background: '#2563eb',
+                background: 'var(--primary)',
                 borderRadius: 4,
                 border: 'none',
                 cursor: 'pointer',
@@ -293,7 +293,7 @@ const EClassForm: React.FC<EClassFormProps> = ({ cls, pkg, onChange, onAddAttrib
                 fontSize: 11,
                 fontWeight: 500,
                 color: '#fff',
-                background: '#16a34a',
+                background: 'var(--success)',
                 borderRadius: 4,
                 border: 'none',
                 cursor: 'pointer',
@@ -303,7 +303,7 @@ const EClassForm: React.FC<EClassFormProps> = ({ cls, pkg, onChange, onAddAttrib
             </button>
           )}
         </div>
-        <div style={{ fontSize: 11, color: '#9ca3af' }}>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
           {cls.eAttributes.length} attribute{cls.eAttributes.length !== 1 ? 's' : ''},{' '}
           {cls.eReferences.length} reference{cls.eReferences.length !== 1 ? 's' : ''}
         </div>
@@ -331,7 +331,7 @@ const AttributeForm: React.FC<{
 
     {isPrimitive ? (
       <Section title="Multiplicity">
-        <p style={{ fontSize: 11, color: '#9ca3af', margin: 0 }}>
+        <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>
           Single-valued <strong>{attr.eType}</strong> attribute<br />
           <span style={{ fontSize: 10 }}>
             To change multiplicity, use an EReference to a data type holder.
@@ -399,7 +399,7 @@ const ReferenceForm: React.FC<{
           onChange={(v) => onChange({ targetId: v })}
         />
         {currentTarget && (
-          <p style={{ fontSize: 11, color: '#9ca3af' }}>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>
             → {currentTarget.name} ({ref.targetId.slice(0, 12)}…)
           </p>
         )}
@@ -428,8 +428,8 @@ const ReferenceForm: React.FC<{
 
       {ref.eOpposite && (
         <Section title="Opposite">
-          <p style={{ fontSize: 11, color: '#4b5563' }}>
-            eOpposite: <code style={{ background: '#f3f4f6', padding: '0 4px', borderRadius: 4 }}>{ref.eOpposite}</code>
+          <p style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+            eOpposite: <code style={{ background: 'var(--border-light)', padding: '0 4px', borderRadius: 4 }}>{ref.eOpposite}</code>
           </p>
         </Section>
       )}
@@ -448,7 +448,7 @@ const EnumForm: React.FC<{
 
     <Section title="Literals">
       {enm.eLiterals.length === 0 && (
-        <p style={{ fontSize: 11, color: '#9ca3af', fontStyle: 'italic' }}>No literals defined</p>
+        <p style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>No literals defined</p>
       )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         {enm.eLiterals.map((lit) => (
@@ -460,13 +460,13 @@ const EnumForm: React.FC<{
               gap: 8,
               padding: '4px 8px',
               fontSize: 11,
-              background: '#f9fafb',
+              background: 'var(--surface-hover)',
               borderRadius: 4,
-              border: '1px solid #e5e7eb',
+              border: '1px solid var(--border)',
             }}
           >
-            <span style={{ fontFamily: 'monospace', color: '#6b7280' }}>{lit.value}</span>
-            <span style={{ color: '#374151' }}>{lit.name}</span>
+            <span style={{ fontFamily: 'monospace', color: 'var(--text-muted)' }}>{lit.value}</span>
+            <span style={{ color: 'var(--text)' }}>{lit.name}</span>
           </div>
         ))}
       </div>
@@ -524,10 +524,10 @@ const EdgeForm: React.FC<{
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <Section title="Edge">
-        <div style={{ fontSize: 11, color: '#6b7280', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: 8 }}>
           <p>
             <span style={{ fontWeight: 500 }}>ID:</span>{' '}
-            <code style={{ background: '#f3f4f6', padding: '0 4px', borderRadius: 4 }}>{edgeId}</code>
+            <code style={{ background: 'var(--border-light)', padding: '0 4px', borderRadius: 4 }}>{edgeId}</code>
           </p>
           {ref && (
             <>
@@ -570,7 +570,7 @@ const EdgeForm: React.FC<{
 };
 
 const NoSelection: React.FC = () => (
-  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#9ca3af' }}>
+  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)' }}>
     <svg style={{ width: 40, height: 40, marginBottom: 8 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path
         strokeLinecap="round"
@@ -669,35 +669,35 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
             onAddReference={onAddReference}
           />
         ) : (
-          <p style={{ fontSize: 13, color: '#ef4444' }}>Selected element is not a class</p>
+          <p style={{ fontSize: 13, color: 'var(--danger)' }}>Selected element is not a class</p>
         );
 
       case 'attribute':
         return attribute ? (
           <AttributeForm attr={attribute} onChange={handleAttributeChange} />
         ) : (
-          <p style={{ fontSize: 13, color: '#ef4444' }}>Attribute not found</p>
+          <p style={{ fontSize: 13, color: 'var(--danger)' }}>Attribute not found</p>
         );
 
       case 'reference':
         return reference ? (
           <ReferenceForm ref={reference} pkg={pkg} onChange={handleReferenceChange} />
         ) : (
-          <p style={{ fontSize: 13, color: '#ef4444' }}>Reference not found</p>
+          <p style={{ fontSize: 13, color: 'var(--danger)' }}>Reference not found</p>
         );
 
       case 'enum':
         return classifier && isEEnum(classifier) ? (
           <EnumForm enm={classifier} onChange={handleClassifierChange} />
         ) : (
-          <p style={{ fontSize: 13, color: '#ef4444' }}>Selected element is not an enum</p>
+          <p style={{ fontSize: 13, color: 'var(--danger)' }}>Selected element is not an enum</p>
         );
 
       case 'dataType':
         return classifier && isEDataType(classifier) ? (
           <DataTypeForm dt={classifier} onChange={handleClassifierChange} />
         ) : (
-          <p style={{ fontSize: 13, color: '#ef4444' }}>Selected element is not a data type</p>
+          <p style={{ fontSize: 13, color: 'var(--danger)' }}>Selected element is not a data type</p>
         );
 
       case 'edge':
@@ -709,27 +709,27 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
   };
 
   return (
-    <div style={{ width: 320, background: '#fff', borderLeft: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div style={{ width: 320, background: 'var(--surface)', borderLeft: '1px solid var(--border)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* Header */}
-      <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', background: 'linear-gradient(to right, #f9fafb, #fff)' }}>
+      <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', background: 'var(--surface)' }}>
         <h2 style={{
           fontSize: 13,
           fontWeight: 600,
-          color: '#374151',
+          color: 'var(--text)',
           textTransform: 'uppercase',
           letterSpacing: '0.025em',
           display: 'flex',
           alignItems: 'center',
           gap: 8,
         }}>
-          <svg style={{ width: 16, height: 16, color: '#6366f1' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg style={{ width: 16, height: 16, color: 'var(--primary)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
           Properties
         </h2>
         {classifier && (
-          <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {classifier.name}
             {selectedType !== 'class' && selectedType !== 'enum' && selectedType !== 'dataType' && (
               <> · {selectedType}</>

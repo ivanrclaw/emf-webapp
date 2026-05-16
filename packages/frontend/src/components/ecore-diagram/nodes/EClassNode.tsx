@@ -10,6 +10,7 @@ import { useCallback, useState, type KeyboardEvent } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { EcoreNodeData, SerializableEClass, SerializableEAttribute, SerializableEReference } from '../types';
 import styles from './EClassNode.module.css';
+import { AlertTriangle } from '../../icons';
 
 // ── Type guard ─────────────────────────────────────────────────
 function isEClass(c: unknown): c is SerializableEClass {
@@ -36,7 +37,7 @@ export default function EClassNode(props: NodeProps) {
   const classifier = data.classifier;
 
   if (!isEClass(classifier)) {
-    return <div className={styles.node}>⚠️ Invalid EClass data</div>;
+    return <div className={styles.node}><AlertTriangle size={14} /> Invalid EClass data</div>;
   }
 
   const {
@@ -116,6 +117,13 @@ export default function EClassNode(props: NodeProps) {
       {/* ── Handles ──────────────────────────────────────── */}
       <Handle type="source" position={Position.Left} id="left" />
       <Handle type="source" position={Position.Right} id="right" />
+
+      {/* ── OCL Violation Badge ─────────────────────────── */}
+      {data.violations && data.violations.length > 0 && (
+        <div className={styles.violationBadge} title={data.violations.map(v => `${v.constraintName}: ${v.error || 'evaluated to false'}`).join('\n')}>
+          <span>{data.violations.length}</span>
+        </div>
+      )}
 
       {/* ── Header ───────────────────────────────────────── */}
       <div className={styles.header} onDoubleClick={handleDoubleClick}>

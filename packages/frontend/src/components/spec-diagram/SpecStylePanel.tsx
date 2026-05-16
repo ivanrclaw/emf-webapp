@@ -5,6 +5,7 @@
  * seleccionado en el canvas de especificación gráfica.
  */
 import type { ShapeStyle, EdgeStyle } from './types';
+import { Link2 } from '../icons';
 
 /* ------------------------------------------------------------------ */
 /*  Color Presets                                                       */
@@ -311,9 +312,9 @@ export default function SpecStylePanel({
 
         {selectionType === 'edge' && edgeStyle && (
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
-              🔗 {selectionLabel || 'Edge'}
-            </div>
+           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Link2 size={14} /> {selectionLabel || 'Edge'}</span>
+           </div>
             {edgeInfo && <EdgeInfo edge={edgeInfo} />}
             <EdgeStyleSection style={edgeStyle} onChange={onEdgeStyleChange} />
           </div>

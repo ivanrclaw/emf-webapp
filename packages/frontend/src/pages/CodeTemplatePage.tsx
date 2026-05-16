@@ -15,6 +15,8 @@ import {
   GenerationFile,
   PredefinedGenerator,
 } from '../api/client';
+import { Save, Plus, FileText, FileCode, Trash2 } from '../components/icons';
+import ErrorPanel from '../components/feedback/ErrorPanel';
 
 /* ------------------------------------------------------------------ */
 /*  Code Generator Page                                                 */
@@ -28,8 +30,15 @@ const LANGUAGE_SYNTAXES: Record<string, string> = {
   plantuml: 'plantuml',
 };
 
-export default function CodeTemplatePage() {
-  const { pid, mmid } = useParams<{ pid: string; mmid: string }>();
+interface CodeTemplatePageProps {
+  projectId?: string;
+  metamodelId?: string;
+}
+
+export default function CodeTemplatePage(props: CodeTemplatePageProps) {
+  const params = useParams<{ pid: string; mmid: string }>();
+  const projectId = props.projectId || params.pid || '';
+  const metamodelId = props.metamodelId || params.mmid || '';
   const [monacoTheme, setMonacoTheme] = useState(() =>
     document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'vs-dark'
   );
@@ -65,13 +74,13 @@ export default function CodeTemplatePage() {
   // ── Load ──────────────────────────────────────────────────────────
 
   const load = useCallback(async () => {
-    if (!mmid || !pid) return;
+    if (!metamodelId || !projectId) return;
     setLoading(true);
     try {
       const [mm, tList, preds] = await Promise.all([
-        getMetamodel(pid, mmid),
-        getCodeTemplates(mmid),
-        getPredefinedGenerators(mmid),
+        getMetamodel(projectId, metamodelId),
+        getCodeTemplates(metamodelId),
+        getPredefinedGenerators(metamodelId),
       ]);
       setMetamodel(mm);
       setTemplates(tList);
@@ -81,7 +90,7 @@ export default function CodeTemplatePage() {
     } finally {
       setLoading(false);
     }
-  }, [mmid, pid]);
+  }, [metamodelId, projectId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -94,13 +103,13 @@ export default function CodeTemplatePage() {
   // ── Save template ─────────────────────────────────────────────────
 
   const handleSave = useCallback(async () => {
-    if (!mmid || !formName || !formContent) return;
+    if (!metamodelId || !formName || !formContent) return;
     setSaving(true);
     try {
       if (editingId) {
-        await updateCodeTemplate(mmid, editingId, { name: formName, language: formLang, template: formContent });
+        await updateCodeTemplate(metamodelId, editingId, { name: formName, language: formLang, template: formContent });
       } else {
-        await createCodeTemplate(mmid, { name: formName, language: formLang, template: formContent });
+        await createCodeTemplate(metamodelId, { name: formName, language: formLang, template: formContent });
       }
       resetForm();
       await load();
@@ -109,37 +118,37 @@ export default function CodeTemplatePage() {
     } finally {
       setSaving(false);
     }
-  }, [mmid, editingId, formName, formLang, formContent, load]);
+  }, [metamodelId, editingId, formName, formLang, formContent, load]);
 
   // ── Generate ──────────────────────────────────────────────────────
 
   const handleGenerate = useCallback(async (templateId: string) => {
-    if (!mmid) return;
+    if (!metamodelId) return;
     setGenerating(true);
     setOutput(null);
     try {
-      const res = await generateFromTemplate(mmid, templateId);
+      const res = await generateFromTemplate(metamodelId, templateId);
       setOutput(res.files);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Generation failed');
     } finally {
       setGenerating(false);
     }
-  }, [mmid]);
+  }, [metamodelId]);
 
   const handleRunPredefined = useCallback(async (type: string) => {
-    if (!mmid) return;
+    if (!metamodelId) return;
     setGenerating(true);
     setOutput(null);
     try {
-      const res = await runPredefinedGenerator(mmid, type);
+      const res = await runPredefinedGenerator(metamodelId, type);
       setOutput(res.files);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Generation failed');
     } finally {
       setGenerating(false);
     }
-  }, [mmid]);
+  }, [metamodelId]);
 
   // ── Edit / Delete ─────────────────────────────────────────────────
 
@@ -151,10 +160,10 @@ export default function CodeTemplatePage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!mmid) return;
+    if (!metamodelId) return;
     if (!window.confirm('Delete this template?')) return;
     try {
-      await deleteCodeTemplate(mmid, id);
+      await deleteCodeTemplate(metamodelId, id);
       setTemplates((s) => s.filter((x) => x.id !== id));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to delete');
@@ -182,12 +191,14 @@ export default function CodeTemplatePage() {
       {/* Header */}
       <div className="detail-header" style={{ marginBottom: 24 }}>
         <div className="detail-header-left">
-          <Link to={`/projects/${pid}`} className="back-link">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
-            </svg>
-            Back
-          </Link>
+          {!props.projectId && (
+            <Link to={`/projects/${projectId}`} className="back-link">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
+              </svg>
+              Back
+            </Link>
+          )}
           <div>
             <h1 className="page-title" style={{ margin: 0 }}>
               Code Generation — {metamodel?.name}
@@ -199,12 +210,12 @@ export default function CodeTemplatePage() {
         </div>
       </div>
 
-      {error && <div className="msg msg-error" style={{ marginBottom: 16 }}>⚠️ {error}</div>}
+      {error && <ErrorPanel title="Error" message={error} compact />}
 
       {/* Template Editor */}
       <div className="card" style={{ padding: 16, marginBottom: 20 }}>
         <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
-          {editingId ? '✏️ Edit Template' : '➕ New Template'}
+          {editingId ? 'Edit Template' : 'New Template'}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: 12, marginBottom: 12 }}>
           <div className="form-field">
@@ -260,7 +271,7 @@ export default function CodeTemplatePage() {
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving || !formName || !formContent}>
-            {saving ? 'Saving...' : editingId ? '💾 Update' : '➕ Create'}
+            {saving ? 'Saving...' : editingId ? <><Save size={14} /> Update</> : <><Plus size={14} /> Create</>}
           </button>
           {editingId && (
             <button className="btn btn-ghost btn-sm" onClick={resetForm}>Cancel</button>
@@ -285,12 +296,12 @@ export default function CodeTemplatePage() {
       </div>
 
       {/* Generation Output */}
-      {generating && <div style={{ padding: 20, textAlign: 'center', color: '#64748b' }}>⏳ Generating...</div>}
+      {generating && <div style={{ padding: 20, textAlign: 'center', color: '#64748b' }}>Generating...</div>}
 
       {output && output.length > 0 && (
         <div className="card" style={{ padding: 16, marginBottom: 20 }}>
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
-            📄 Generated Files ({output.length})
+            <FileText size={14} /> Generated Files ({output.length})
           </div>
           {/* File tabs */}
           <div style={{ display: 'flex', gap: 4, marginBottom: 8, flexWrap: 'wrap' }}>
@@ -321,7 +332,7 @@ export default function CodeTemplatePage() {
       </div>
       {templates.length === 0 ? (
         <div className="empty-state" style={{ padding: '48px 24px' }}>
-          <span style={{ fontSize: 32 }}>📝</span>
+          <FileCode size={32} />
           <p>No custom templates yet</p>
           <p style={{ color: '#64748b', marginTop: 4 }}>
             Create MTL templates above to generate code
@@ -348,11 +359,9 @@ export default function CodeTemplatePage() {
                 <button className="btn btn-secondary btn-sm" onClick={() => handleGenerate(t.id)} disabled={generating}>
                   ▶ Generate
                 </button>
-                <button className="btn btn-ghost btn-sm" onClick={() => startEdit(t)}>
-                  ✏️
-                </button>
+                <button className="btn btn-ghost btn-sm" onClick={() => startEdit(t)}>Edit\n                </button>
                 <button className="btn btn-ghost btn-sm" onClick={() => handleDelete(t.id)} style={{ color: '#ef4444' }}>
-                  🗑️
+                  <Trash2 size={14} />
                 </button>
               </div>
             </div>

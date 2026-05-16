@@ -8,9 +8,18 @@ import {
   Metamodel,
   M1Model,
 } from '../api/client';
+import { AlertTriangle, Layers, Box, Calendar, Trash2 } from '../components/icons';
+import ErrorPanel from '../components/feedback/ErrorPanel';
 
-export default function ModelList() {
-  const { pid, mmid } = useParams<{ pid: string; mmid: string }>();
+interface ModelListProps {
+  projectId?: string;
+  metamodelId?: string;
+}
+
+export default function ModelList(props: ModelListProps) {
+  const params = useParams<{ pid: string; mmid: string }>();
+  const projectId = props.projectId || params.pid || '';
+  const metamodelId = props.metamodelId || params.mmid || '';
 
   const [metamodel, setMetamodel] = useState<Metamodel | null>(null);
   const [models, setModels] = useState<M1Model[]>([]);
@@ -23,13 +32,13 @@ export default function ModelList() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   async function load() {
-    if (!pid || !mmid) return;
+    if (!projectId || !metamodelId) return;
     setLoading(true);
     setError('');
     try {
       const [mm, mList] = await Promise.all([
-        getMetamodel(pid, mmid),
-        getM1Models(pid, mmid),
+        getMetamodel(projectId, metamodelId),
+        getM1Models(projectId, metamodelId),
       ]);
       setMetamodel(mm);
       setModels(mList);
@@ -40,14 +49,14 @@ export default function ModelList() {
     }
   }
 
-  useEffect(() => { load(); }, [pid, mmid]);
+  useEffect(() => { load(); }, [projectId, metamodelId]);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
-    if (!pid || !mmid || !modelName.trim()) return;
+    if (!projectId || !metamodelId || !modelName.trim()) return;
     setSubmitting(true);
     try {
-      await createM1Model(pid, mmid, { name: modelName.trim() });
+      await createM1Model(projectId, metamodelId, { name: modelName.trim() });
       setShowCreate(false);
       setModelName('');
       await load();
@@ -59,11 +68,11 @@ export default function ModelList() {
   }
 
   async function handleDelete(modelId: string, name: string) {
-    if (!pid || !mmid) return;
+    if (!projectId || !metamodelId) return;
     if (!window.confirm(`Delete model "${name}"?`)) return;
     setDeletingId(modelId);
     try {
-      await deleteM1Model(pid, mmid, modelId);
+      await deleteM1Model(projectId, metamodelId, modelId);
       await load();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to delete model');
@@ -82,19 +91,21 @@ export default function ModelList() {
   }
 
   if (error && !metamodel) {
-    return <div className="msg msg-error">⚠️ {error}</div>;
+    return <ErrorPanel title="Error" message={error} compact />;
   }
 
   return (
     <div>
       <div className="detail-header">
         <div className="detail-header-left">
-          <Link to={`/projects/${pid}`} className="back-link">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
-            </svg>
-            Back to Metamodels
-          </Link>
+          {!props.projectId && (
+            <Link to={`/projects/${projectId}`} className="back-link">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
+              </svg>
+              Back to Metamodels
+            </Link>
+          )}
           {metamodel && (
             <div>
               <h1 className="page-title" style={{ margin: 0 }}>
@@ -108,7 +119,7 @@ export default function ModelList() {
         </div>
       </div>
 
-      {error && <div className="msg msg-error" style={{ marginBottom: 16 }}>⚠️ {error}</div>}
+      {error && <ErrorPanel title="Error" message={error} compact />}
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <h2 className="section-title" style={{ margin: 0 }}>
@@ -125,7 +136,7 @@ export default function ModelList() {
 
       {models.length === 0 && (
         <div className="card" style={{ textAlign: 'center', padding: '48px 24px' }}>
-          <div className="empty-state-icon">🗂️</div>
+          <div className="empty-state-icon"><Layers size={24} /></div>
           <div className="empty-state-title">No model instances yet</div>
           <div className="empty-state-desc">
             Create a model instance to populate and edit M1 objects based on the &quot;{metamodel?.name}&quot; metamodel.
@@ -146,18 +157,18 @@ export default function ModelList() {
 
               <div className="mm-card-details">
                 <div className="mm-card-detail">
-                  <span style={{ opacity: 0.5 }}>📦</span>
+                  <Box size={14} style={{opacity:0.5}} />
                   <span>ID: <code className="font-mono">{m.id.slice(0, 8)}…</code></span>
                 </div>
                 <div className="mm-card-detail">
-                  <span style={{ opacity: 0.5 }}>📅</span>
+                  <Calendar size={14} style={{opacity:0.5}} />
                   <span>{new Date(m.createdAt).toLocaleString()}</span>
                 </div>
               </div>
 
               <div className="mm-card-actions">
                 <Link
-                  to={`/projects/${pid}/metamodels/${mmid}/models/${m.id}/edit`}
+                  to={`/projects/${projectId}/metamodels/${metamodelId}/models/${m.id}/edit`}
                   className="btn btn-primary btn-sm"
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -171,7 +182,7 @@ export default function ModelList() {
                   onClick={() => handleDelete(m.id, m.name)}
                   disabled={deletingId === m.id}
                 >
-                  {deletingId === m.id ? '...' : '🗑️'}
+                  {deletingId === m.id ? '...' : <Trash2 size={14} />}
                 </button>
               </div>
             </div>

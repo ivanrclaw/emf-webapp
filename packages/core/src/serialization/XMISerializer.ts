@@ -28,6 +28,7 @@ import type {
   EParameter,
   PackageRegistry,
 } from '../ecore/interfaces.js';
+import { EListImpl } from '../util/EList.js';
 
 // ============================================================
 // Constantes
@@ -183,24 +184,26 @@ export function serializeToXMI(
   const bodyLines: string[] = [];
   serializeToXMILines(obj, nsPrefix, visited, bodyLines, 0);
 
-  // Armar documento XMI
+  // Inyectar xmlns en el elemento raíz
   const xmiHeader = `<?xml version="1.0" encoding="UTF-8"?>`;
-  const rootAttrs = [
-    `xmi:version="${XMI_VERSION}"`,
-    ...xmlnsDeclarations,
-  ];
 
-  // El elemento raíz usa el nombre de la EClass del objeto raíz
-  const rootElementName = getXMITagName(obj.eClass(), nsPrefix);
-  const rootAttrStr = rootAttrs.join(' ');
-  const indent = '  ';
+  if (bodyLines.length > 0) {
+    // bodyLines[0] es el opening del elemento raíz (e.g., <handletestmm:EPackage ...>)
+    // Inyectamos xmlns entre xmi:version y el resto de atributos
+    const firstLine = bodyLines[0];
+    // Buscar dónde insertar xmlns (después del nombre del tag y antes de >)
+    const tagEnd = firstLine.lastIndexOf('>');
+    if (tagEnd > 0 && firstLine.startsWith('<')) {
+      const tagNameEnd = firstLine.indexOf(' ');
+      if (tagNameEnd > 0) {
+        const before = firstLine.substring(0, tagNameEnd);
+        const after = firstLine.substring(tagNameEnd);
+        bodyLines[0] = `${before} xmi:version="${XMI_VERSION}" ${xmlnsDeclarations.join(' ')}${after}`;
+      }
+    }
+  }
 
-  // Insertar atributos XMI en el elemento raíz
-  // El opening tag del elemento raíz debe incluir los xmlns y xmi:version
-  const openingLine = `<${rootElementName} ${rootAttrStr}>`;
-  const closingLine = `</${rootElementName}>`;
-
-  const lines = [xmiHeader, openingLine, ...bodyLines, closingLine];
+  const lines = [xmiHeader, ...bodyLines];
   return lines.join('\n');
 }
 
@@ -276,13 +279,23 @@ function getXMITagName(eClass: EClass, defaultPrefix: string): string {
 
 /**
  * Serializa un EObject a líneas XMI recursivamente.
+ *
+ * @param obj - El EObject a serializar
+ * @param nsPrefix - Prefijo de namespace por defecto
+ * @param visited - Set de objetos ya serializados (para evitar ciclos)
+ * @param lines - Array de líneas de salida
+ * @param depth - Profundidad de indentación
+ * @param featureName - Nombre del feature contenedor (si es hijo); se usa como tag XML
+ * @param parentFeature - Feature de referencia del padre (para determinar xsi:type)
  */
 function serializeToXMILines(
   obj: EObject,
   nsPrefix: string,
   visited: Set<EObject>,
   lines: string[],
-  depth: number
+  depth: number,
+  featureName?: string,
+  parentFeature?: EReference
 ): void {
   if (visited.has(obj)) {
     // Ya serializado — emitiir referencia
@@ -294,7 +307,13 @@ function serializeToXMILines(
   visited.add(obj);
 
   const eClass = obj.eClass();
-  const tagName = getXMITagName(eClass, nsPrefix);
+  // Si hay featureName, usarlo como nombre del tag; si no, usar prefijo:EClassName
+  let tagName: string;
+  if (featureName) {
+    tagName = featureName;
+  } else {
+    tagName = getXMITagName(eClass, nsPrefix);
+  }
   const indent = '  '.repeat(depth);
 
   // Recopilar atributos
@@ -311,14 +330,39 @@ function serializeToXMILines(
     attrs.push(`xmi:id="${id}"`);
   }
 
+  // xsi:type para elementos hijo — siempre para eClassifiers (el parser lo necesita)
+  if (featureName && parentFeature) {
+    const declaredType = parentFeature.eReferenceType;
+    if (declaredType && (declaredType !== eClass || featureName === 'eClassifiers')) {
+      const pkg = eClass.ePackage;
+      const prefix = pkg?.nsPrefix ?? nsPrefix;
+      attrs.push(`xsi:type="${prefix}:${eClass.name}"`);
+    }
+  }
+
   // eSuperTypes como inline attribute (solo para EClass)
   if ('eSuperTypes' in obj) {
     const eClassObj = obj as EClass;
-    if (eClassObj.eSuperTypes.length > 0) {
+    const supTypes = eClassObj.eSuperTypes;
+    if (supTypes && supTypes.length > 0) {
       const supRefs = eClassObj.eSuperTypes
-        .map(sup => getXMIReference(sup, nsPrefix))
+        .map(sup => {
+          const name = (sup as any).name;
+          return name ? `#//${name}` : getXMIReference(sup, nsPrefix);
+        })
         .join(' ');
       attrs.push(`eSuperTypes="${escapeXml(supRefs)}"`);
+    }
+  }
+
+  // abstract/interface para EClass
+  if ('abstract' in obj) {
+    const eClassObj = obj as EClass;
+    if (eClassObj.abstract) {
+      attrs.push('abstract="true"');
+    }
+    if (eClassObj.interface) {
+      attrs.push('interface="true"');
     }
   }
 
@@ -348,17 +392,41 @@ function serializeToXMILines(
     }
   }
 
-  // xsi:type para features polimórficos
-  // (cuando el tipo concreto difiere del tipo declarado en la EClass)
-
   // Procesar features estructurales
   for (const feature of eClass.eAllStructuralFeatures) {
     if (feature.transient || feature.derived || feature.volatile) continue;
 
     const value = obj.eGet(feature);
 
-    if ('containment' in feature) {
+    if ((feature as any).eReferenceType != null) {
       const ref = feature as EReference;
+
+      if (feature.name === 'eType') {
+        // eType: formato especial según el tipo de elemento
+        if (value != null) {
+          const typedObj = value as any;
+          const typedName = typedObj.name || '';
+          if ('iD' in obj) {
+            // EAttribute: eType -> "ecore:EDataType href"
+            if (typedName in ECORE_DATA_TYPE_HREF) {
+              attrs.push(`eType="ecore:EDataType ${ECORE_DATA_TYPE_HREF[typedName]}"`);
+            } else {
+              const dtPkg = typedObj.eClass ? typedObj.eClass().ePackage : null;
+              if (dtPkg && dtPkg.nsURI) {
+                attrs.push(`eType="ecore:EDataType ${dtPkg.nsURI}#//${typedName}"`);
+              } else {
+                attrs.push(`eType="${escapeXml(getXMIReference(typedObj, nsPrefix))}"`);
+              }
+            }
+          } else if ('containment' in obj) {
+            // EReference: eType -> "#//ClassName"
+            attrs.push(`eType="#//${typedName}"`);
+          } else {
+            attrs.push(`eType="${escapeXml(getXMIReference(typedObj, nsPrefix))}"`);
+          }
+        }
+        continue;
+      }
 
       if (ref.containment) {
         // Containment: serializar como elementos hijo
@@ -374,6 +442,7 @@ function serializeToXMILines(
         }
       } else {
         // Non-containment: serializar como atributo (fragment path)
+        if (feature.name === 'eSuperTypes') continue; // manejado por el bloque especial
         if (ref.many) {
           const list = Array.from(value as EObject[]).filter(v => v != null);
           if (list.length > 0) {
@@ -384,7 +453,14 @@ function serializeToXMILines(
           }
         } else {
           if (value != null) {
-            attrs.push(`${feature.name}="${escapeXml(getXMIReference(value, nsPrefix))}"`);
+            // Para EAnnotation.eModelElement y references, emitir como fragment path
+            if (feature.name === 'eModelElement' || feature.name === 'references') {
+              // Estos son cross-references a otros objetos — se emiten como fragment path
+              const refPath = getXMIReference(value, nsPrefix);
+              attrs.push(`${feature.name}="${escapeXml(refPath)}"`);
+            } else {
+              attrs.push(`${feature.name}="${escapeXml(getXMIReference(value, nsPrefix))}"`);
+            }
           }
         }
       }
@@ -402,15 +478,25 @@ function serializeToXMILines(
       } else {
         if (value != null && value !== undefined) {
           const strValue = attributeValueToString(value, attr.eAttributeType);
-          // Para boolean false que es el default, aun así lo emitimos
           attrs.push(`${feature.name}="${escapeXml(strValue)}"`);
         }
       }
     }
   }
 
+  // EAnnotation details: serializar como hijos <details key="..." value="..."/>
+  const rawChildLines: string[] = [];
+  if ('details' in obj && obj.eClass().name === 'EAnnotation') {
+    const details = (obj as any).details as Record<string, string> | undefined;
+    if (details && typeof details === 'object' && !Array.isArray(details)) {
+      for (const [key, value] of Object.entries(details)) {
+        rawChildLines.push(`<details key="${escapeXml(key)}" value="${escapeXml(value)}"/>`);
+      }
+    }
+  }
+
   // Emitir el elemento
-  if (childElements.length === 0) {
+  if (childElements.length === 0 && rawChildLines.length === 0) {
     // Self-closing tag
     if (attrs.length > 0) {
       lines.push(`${indent}<${tagName} ${attrs.join(' ')}/>`);
@@ -425,15 +511,25 @@ function serializeToXMILines(
       lines.push(`${indent}<${tagName}>`);
     }
 
-    // Emitir hijos
+    // Emitir hijos EObject (containment)
     for (const child of childElements) {
+      // Buscar el feature EReference del padre para pasar parentFeature
+      const childFeatureRef = eClass.eAllStructuralFeatures.find(
+        f => f.name === child.name && 'containment' in f && (f as EReference).containment
+      ) as EReference | undefined;
+
       if (child.isMany) {
         for (const item of child.items) {
-          serializeToXMILines(item, nsPrefix, visited, lines, depth + 1);
+          serializeToXMILines(item, nsPrefix, visited, lines, depth + 1, child.name, childFeatureRef);
         }
       } else {
-        serializeToXMILines(child.items[0], nsPrefix, visited, lines, depth + 1);
+        serializeToXMILines(child.items[0], nsPrefix, visited, lines, depth + 1, child.name, childFeatureRef);
       }
+    }
+
+    // Emitir líneas XML raw (EAnnotation details)
+    for (const rawLine of rawChildLines) {
+      lines.push(`${indent}  ${rawLine}`);
     }
 
     lines.push(`${indent}</${tagName}>`);
@@ -499,6 +595,7 @@ class XMIParser {
   namespaces: Record<string, string> = {};
   allObjects: Map<string, EObject> = new Map();
   allObjectsByQName: Map<string, EObject> = new Map();
+  allObjectsByName: Map<string, EObject> = new Map();
 
   constructor(xml: string, registry?: PackageRegistry) {
     this.xml = xml;
@@ -539,14 +636,19 @@ class XMIParser {
   /**
    * Construye un EObject a partir de un elemento XMI parseado.
    */
-  buildEObject(el: XMIElement): EObject {
-    const eClass = resolveEClassFromXMITag(el.name, this, this.registry);
+  buildEObject(el: XMIElement, parentEClass?: EClass): EObject {
+    const eClass = resolveEClassFromXMITag(el.name, this, this.registry, el.attrs, parentEClass);
     if (!eClass) {
       throw new Error(`Cannot resolve EClass for XMI element: ${el.name}`);
     }
 
     const factory = eClass.ePackage?.eFactoryInstance;
     const obj = factory ? factory.create(eClass) : createMinimalEObject(eClass);
+
+    // Inicializar contenedor details para EAnnotation (no es una feature EMF, es un Record)
+    if (eClass.name === 'EAnnotation') {
+      (obj as any).details = {};
+    }
 
     // Registrar por xmi:id
     const xmiId = el.attrs['xmi:id'];
@@ -563,6 +665,10 @@ class XMIParser {
       const qname = `${tagPrefix}:${tagClassName} ${nameAttr}`;
       this.allObjectsByQName.set(qname, obj);
     }
+    // Registrar por nombre simple para referencias intra-documento (#//Name)
+    if (nameAttr) {
+      this.allObjectsByName.set(nameAttr, obj);
+    }
 
     // Procesar atributos del elemento
     setAttributesFromXMIAttrs(obj, eClass, el.attrs, this, this.registry);
@@ -577,9 +683,7 @@ class XMIParser {
           supTypes.push(sup);
         }
       }
-      if (supTypes.length > 0) {
-        (obj as any as EClass).eSuperTypes = supTypes;
-      }
+      (obj as any as EClass).eSuperTypes = supTypes;
     }
 
     // Procesar eOpposite como fragment path
@@ -608,10 +712,24 @@ class XMIParser {
 
     // Procesar hijos (containment)
     for (const childEl of el.children) {
-      const child = this.buildEObject(childEl);
+      // Si el hijo tiene tag 'details' y el padre es EAnnotation, manejarlo como entry detail
+      if (childEl.name === 'details') {
+        const parentEClass = obj.eClass();
+        if (parentEClass && parentEClass.name === 'EAnnotation') {
+          const key = childEl.attrs['key'] || '';
+          const value = childEl.attrs['value'] || '';
+          const details = (obj as any).details as Record<string, string>;
+          if (details && typeof details === 'object') {
+            details[key] = value;
+          }
+          continue;
+        }
+      }
+
+      const child = this.buildEObject(childEl, eClass);
       // Determinar qué feature contiene a este hijo
       const childEClass = child.eClass();
-      const feature = findContainmentFeature(eClass, childEClass);
+      const feature = findContainmentFeature(eClass, childEClass, childEl.name);
 
       if (feature) {
         const existing = obj.eGet(feature);
@@ -834,25 +952,39 @@ interface XMIElement {
 
 /**
  * Encuentra la referencia de containment que puede contener un objeto de childEClass.
+ * Primero empareja por compatibilidad de tipos; como fallback empareja por nombre del feature.
  */
 function findContainmentFeature(
   eClass: EClass,
-  childEClass: EClass
+  childEClass: EClass | null,
+  childTagName?: string
 ): EReference | null {
+  // Primero buscar por compatibilidad de tipos
   for (const feature of eClass.eAllStructuralFeatures) {
     if (!('containment' in feature)) continue;
     const ref = feature as EReference;
     if (!ref.containment) continue;
 
-    // Verificar compatibilidad de tipos
-    const refType = ref.eReferenceType;
-    if (refType === childEClass || childEClass.eAllSuperTypes.includes(refType) || refType.eAllSuperTypes.includes(childEClass)) {
-      return ref;
+    if (childEClass) {
+      const refType = ref.eReferenceType;
+      if (refType === childEClass || childEClass.eAllSuperTypes?.includes(refType) || refType?.eAllSuperTypes?.includes(childEClass)) {
+        return ref;
+      }
     }
   }
 
-  // Fallback: buscar por nombre de feature que coincida con el nombre del elemento
-  // para features que no tienen tipado disponible
+  // Fallback: buscar por nombre del tag del elemento hijo (feature name)
+  if (childTagName) {
+    for (const feature of eClass.eAllStructuralFeatures) {
+      if (!('containment' in feature)) continue;
+      const ref = feature as EReference;
+      if (!ref.containment) continue;
+      if (feature.name === childTagName) {
+        return ref;
+      }
+    }
+  }
+
   return null;
 }
 
@@ -876,11 +1008,70 @@ function setAttributesFromXMIAttrs(
     if (!feature) continue;
 
     // Saltar containment features (se manejan como hijos)
-    if ('containment' in feature && (feature as EReference).containment) continue;
+    if ((feature as any).containment) continue;
 
-    if ('containment' in feature) {
+    // EAttribute: tiene eAttributeType, NO eReferenceType
+    if ((feature as any).eReferenceType != null) {
       // Non-containment reference
       const ref = feature as EReference;
+
+      // eType: formato especial en XMI 2.0 compatible con EMF
+      if (attrName === 'eType') {
+        if ('iD' in obj) {
+          // EAttribute: eType="ecore:EDataType http://...#//ETypeName"
+          // Extraer el nombre del tipo desde el href
+          const hashIndex = attrValue.lastIndexOf('#//');
+          if (hashIndex >= 0) {
+            const typeName = attrValue.substring(hashIndex + 3);
+            // Buscar en objetos creados
+            let resolved: EObject | null = null;
+            const existingObjects = parser ? Array.from(parser.allObjects.values()) : [];
+            for (const existingObj of existingObjects) {
+              if ((existingObj as any).name === typeName && existingObj.eClass().name === 'EDataType') {
+                resolved = existingObj;
+                break;
+              }
+            }
+            if (!resolved && registry) {
+              // Buscar en el registry Ecore
+              const ecorePkg = registry.getEPackage(ECORE_NS);
+              if (ecorePkg) {
+                const classifier = ecorePkg.getEClassifier(typeName);
+                if (classifier) resolved = classifier;
+              }
+            }
+            if (resolved) obj.eSet(ref, resolved);
+          } else {
+            // Fallback: formato simple "ecore:EDataType name"
+            const resolved = resolveXMIReference(attrValue, parser, registry);
+            if (resolved) obj.eSet(ref, resolved);
+          }
+        } else if ('containment' in obj) {
+          // EReference: eType="#//ClassName"
+          const className = attrValue.replace('#//', '');
+          // Buscar la EClass en el paquete del objeto actual
+          const currentEClass = obj.eClass();
+          const pkg = currentEClass.ePackage;
+          let resolved: EObject | null = null;
+          if (pkg) {
+            const classifier = pkg.getEClassifier(className);
+            if (classifier) resolved = classifier;
+          }
+          if (!resolved && registry) {
+            // Fallback: buscar en todos los paquetes
+            for (const p of registry.values()) {
+              const classifier = p.getEClassifier(className);
+              if (classifier) { resolved = classifier; break; }
+            }
+          }
+          if (resolved) obj.eSet(ref, resolved);
+        } else {
+          const resolved = resolveXMIReference(attrValue, parser, registry);
+          if (resolved) obj.eSet(ref, resolved);
+        }
+        continue;
+      }
+
       if (ref.many) {
         const paths = attrValue.split(/\s+/).filter(p => p.length > 0);
         const resolvedObjects: EObject[] = [];
@@ -941,12 +1132,52 @@ function resolveXMIReference(
 
 /**
  * Resuelve una EClass desde un tag XMI (e.g. "ecore:EClass", "mypkg:MyClass").
+ * Primero verifica el atributo xsi:type (para elementos con tag basado en feature name).
+ * Luego intenta resolver el tag directamente como prefijo:ClassName.
  */
 function resolveEClassFromXMITag(
   tagName: string,
   parser?: XMIParser,
-  registry?: PackageRegistry
+  registry?: PackageRegistry,
+  attrs?: Record<string, string>,
+  parentEClass?: EClass,
 ): EClass | null {
+  // 1. Verificar xsi:type primero (p.ej. xsi:type="ecore:EAttribute")
+  if (attrs && attrs['xsi:type']) {
+    const xsiType = attrs['xsi:type'];
+    const parts = xsiType.split(':');
+    const prefix = parts.length > 1 ? parts[0] : '';
+    const className = parts.length > 1 ? parts[1] : parts[0];
+
+    let nsURI = '';
+    if (parser && parser.namespaces[prefix]) {
+      nsURI = parser.namespaces[prefix];
+    } else if (prefix === 'ecore') {
+      nsURI = ECORE_NS;
+    }
+
+    if (registry && nsURI) {
+      const pkg = registry.getEPackage(nsURI);
+      if (pkg) {
+        const classifier = pkg.getEClassifier(className);
+        if (classifier && 'eSuperTypes' in classifier) {
+          return classifier as EClass;
+        }
+      }
+    }
+
+    // Fallback: buscar en todos los paquetes
+    if (registry) {
+      for (const pkg of registry.values()) {
+        const classifier = pkg.getEClassifier(className);
+        if (classifier && 'eSuperTypes' in classifier) {
+          return classifier as EClass;
+        }
+      }
+    }
+  }
+
+  // 2. Intentar resolver el tag como prefijo:ClassName
   const parts = tagName.split(':');
   const prefix = parts.length > 1 ? parts[0] : '';
   const className = parts.length > 1 ? parts[1] : parts[0];
@@ -980,6 +1211,18 @@ function resolveEClassFromXMITag(
     }
   }
 
+  // Fallback: buscar en los containment features del padre
+  if (parentEClass) {
+    const parentFeatures = parentEClass.eAllStructuralFeatures as unknown as EStructuralFeature[];
+    if (parentFeatures) {
+      for (const f of parentFeatures) {
+        if (f.name === className && 'eReferenceType' in f && (f as any).eReferenceType) {
+          return (f as any).eReferenceType;
+        }
+      }
+    }
+  }
+
   return null;
 }
 
@@ -995,7 +1238,29 @@ function resolveEClassFromXMIReference(
   const parts = ref.split(/\s+/);
   if (parts.length < 1) return null;
 
-  const typePart = parts[0]; // e.g., "ecore:EClass"
+  const typePart = parts[0]; // e.g., "ecore:EClass" or "#//Base"
+
+  // Formato "#//ClassName": buscar por nombre en objetos ya creados
+  if (typePart.startsWith('#//')) {
+    const className = typePart.substring(3);
+    if (parser) {
+      // Buscar en allObjects por xmi:id
+      const allObjects = Array.from(parser.allObjects.values());
+      for (const obj of allObjects) {
+        if ((obj as any).name === className) return obj as EClass;
+      }
+      // Buscar en allObjectsByQName (formato "prefix:TypeName Name")
+      const qnameEntries = Array.from(parser.allObjectsByQName.entries());
+      for (const [qname, obj] of qnameEntries) {
+        if (qname.endsWith(' ' + className)) return obj as EClass;
+      }
+      // Buscar en allObjectsByName (registro por nombre simple)
+      if (parser.allObjectsByName.has(className)) {
+        return parser.allObjectsByName.get(className) as EClass;
+      }
+    }
+    return null;
+  }
 
   // Intentar resolver usando el mismo método que los tags
   return resolveEClassFromXMITag(typePart, parser, registry);
@@ -1023,7 +1288,6 @@ function createMinimalEObject(eClass: EClass): EObject {
     _eGetList: (feature: any, fid: number) => {
       let list = handler._lists.get(fid);
       if (!list) {
-        const { EListImpl } = require('../util/EList.js');
         list = new EListImpl({ unique: true });
         handler._lists.set(fid, list);
       }
@@ -1128,5 +1392,405 @@ function createMinimalEObject(eClass: EClass): EObject {
   };
 
   const obj = Object.create(proto);
-  return obj as EObject;
+
+  // Wrap in a Proxy that routes direct property access through eGet/eSet
+  // so pkg.name works like obj.eGet(nameFeature)
+  const proxied = new Proxy(obj, {
+    get(target, prop, receiver) {
+      // 1. Own properties defined by Object.defineProperty (eStructuralFeatures, etc.)
+      if ((target as any).hasOwnProperty(prop)) {
+        return Reflect.get(target, prop, receiver);
+      }
+      // 2. Prototype methods (eClass, eGet, eSet, etc.)
+      if (prop in proto) {
+        return Reflect.get(target, prop, receiver);
+      }
+      // 3. Route feature names through eGet so pkg.name works like eGet(name)
+      if (typeof prop === 'string' && !prop.startsWith('_') && prop !== 'then') {
+        const feature = eClass.getEStructuralFeature(prop);
+        if (feature) {
+          return target.eGet(feature);
+        }
+      }
+      return Reflect.get(target, prop, receiver);
+    },
+    set(target, prop, value, receiver) {
+      if ((target as any).hasOwnProperty(prop)) {
+        return Reflect.set(target, prop, value, receiver);
+      }
+      if (typeof prop === 'string' && !prop.startsWith('_')) {
+        const feature = eClass.getEStructuralFeature(prop);
+        if (feature) {
+          target.eSet(feature, value);
+          return true;
+        }
+      }
+      return Reflect.set(target, prop, value, receiver);
+    },
+    has(target, prop) {
+      if ((target as any).hasOwnProperty(prop)) return true;
+      if (prop in proto) return true;
+      if (typeof prop === 'string' && eClass.getEStructuralFeature(prop)) return true;
+      return Reflect.has(target, prop);
+    },
+  });
+  return proxied as EObject;
+}
+
+// ============================================================
+// Built-in Ecore Registry (self-bootstrapping)
+// ============================================================
+
+/**
+ * Creates a default PackageRegistry containing the Ecore metamodel types.
+ *
+ * This enables deserialization of .ecore files without an external registry.
+ * Each EClass is built using createMinimalEObject so no static class setup
+ * is needed — the registry is self-contained.
+ *
+ * @returns A PackageRegistry mapping ECORE_NS to an EPackage with
+ *          EPackage, EClass, EAttribute, EReference, EEnum, EOperation,
+ *          EParameter, and EAnnotation EClasses.
+ */
+export function getDefaultEcoreRegistry(): PackageRegistry {
+  // Registry store
+  const store = new Map<string, EPackage>();
+
+  // -- Helper: create a minimal EClass with structural features --
+  function makeEClass(name: string, features: EStructuralFeature[]): EClass {
+    const cls = createMinimalEObject(makeEClassEClass());
+    (cls as any).name = name;
+    // Use a writable property so it can be overridden (for circular refs)
+    let _features = features;
+    Object.defineProperty(cls, 'eStructuralFeatures', {
+      get: () => _features,
+      set: (val: EStructuralFeature[]) => { _features = val; },
+      enumerable: true,
+      configurable: true,
+    });
+    Object.defineProperty(cls, 'eAllStructuralFeatures', {
+      get: () => _features,
+      enumerable: true,
+      configurable: true,
+    });
+    Object.defineProperty(cls, 'getEStructuralFeature', {
+      value: (featName: string) => _features.find(f => f.name === featName) || null,
+    });
+    Object.defineProperty(cls, 'getFeatureID', {
+      value: (feature: EStructuralFeature) => _features.indexOf(feature),
+    });
+    Object.defineProperty(cls, 'getFeatureCount', {
+      value: () => _features.length,
+    });
+    Object.defineProperty(cls, 'eSuperTypes', {
+      get: () => [],
+      enumerable: true,
+    });
+    Object.defineProperty(cls, 'eAllSuperTypes', {
+      get: () => [],
+      enumerable: true,
+    });
+    return cls as EClass;
+  }
+
+  // Lazy singleton for the EClass EClass
+  let _eclassEClass: EClass | null = null;
+  function makeEClassEClass(): EClass {
+    if (!_eclassEClass) {
+      _eclassEClass = {
+        name: 'EClass',
+        ePackage: null as any,
+        eSuperTypes: [] as any,
+        eAllSuperTypes: [] as any,
+        eStructuralFeatures: [] as any,
+        eAllStructuralFeatures: [] as any,
+        eOperations: [] as any,
+        getEStructuralFeature: () => null,
+        getFeatureID: () => -1,
+        getFeatureCount: () => 0,
+        eAllAttributes: [] as any,
+        eAllReferences: [] as any,
+        eAllContainments: [] as any,
+        eAllOperations: [] as any,
+        eAttributes: [] as any,
+        eReferences: [] as any,
+        eIDAttribute: null,
+        eGenericSuperTypes: [] as any,
+        instanceClass: null,
+        instanceClassName: null,
+        instanceTypeName: null,
+        abstract: false,
+        interface: false,
+        default: false,
+        isSuperTypeOf: () => false,
+        getFeatureType: () => null as any,
+        getOverride: () => null,
+        getOperation: () => null as any,
+      } as unknown as EClass;
+    }
+    return _eclassEClass;
+  }
+
+  // -- Data types (must be before makeAttr) --
+  const stringDT: EDataType = { name: 'EString', serializable: true, instanceClassName: 'java.lang.String', instanceClass: null, instanceTypeName: null, defaultValue: null } as unknown as EDataType;
+  const booleanDT: EDataType = { name: 'EBoolean', serializable: true, instanceClassName: 'boolean', instanceClass: null, instanceTypeName: null, defaultValue: null } as unknown as EDataType;
+  const intDT: EDataType = { name: 'EInt', serializable: true, instanceClassName: 'int', instanceClass: null, instanceTypeName: null, defaultValue: null } as unknown as EDataType;
+
+  // -- Helper: create a minimal EStructuralFeature --
+  function makeAttr(name: string, defaultValue?: any): EStructuralFeature {
+    // Infer eAttributeType from default value type
+    let _eAttributeType: EDataType | null = null;
+    if (typeof defaultValue === 'string') _eAttributeType = stringDT;
+    else if (typeof defaultValue === 'boolean') _eAttributeType = booleanDT;
+    else if (typeof defaultValue === 'number') _eAttributeType = intDT;
+    return {
+      name,
+      changeable: true,
+      volatile: false,
+      transient: false,
+      defaultValueLiteral: defaultValue !== undefined ? String(defaultValue) : '',
+      defaultValue,
+      unsettable: false,
+      derived: false,
+      ordered: true,
+      unique: true,
+      lowerBound: 0,
+      upperBound: 1,
+      many: false,
+      required: false,
+      eType: null as any,
+      eContainingClass: null as any,
+      iD: false,
+      containment: false,
+      container: false,
+      resolveProxies: false,
+      eOpposite: null as any,
+      eReferenceType: null as any,
+      eKeys: [] as any,
+      eAttributeType: _eAttributeType,
+    } as unknown as EStructuralFeature;
+  }
+
+  function makeRef(name: string, eType: EClass, containment?: boolean): EStructuralFeature {
+    return {
+      name,
+      changeable: true,
+      volatile: false,
+      transient: false,
+      defaultValueLiteral: '',
+      defaultValue: null,
+      unsettable: false,
+      derived: false,
+      ordered: true,
+      unique: true,
+      lowerBound: 0,
+      upperBound: containment ? -1 : 1,
+      many: containment ? true : false,
+      required: false,
+      eType,
+      eContainingClass: null as any,
+      iD: false,
+      containment: !!containment,
+      container: false,
+      resolveProxies: true,
+      eOpposite: null as any,
+      eReferenceType: eType,
+      eKeys: [] as any,
+      eAttributeType: null as any,
+    } as unknown as EStructuralFeature;
+  }
+
+  // EAnnotation EClass
+  const eannotationCls = makeEClass('EAnnotation', [
+    makeAttr('source', ''),
+    makeRef('eAnnotations', makeEClass('EAnnotation', []) as EClass, true),
+  ]);
+
+  const epackageCls = makeEClass('EPackage', [
+    makeAttr('name', ''),
+    makeAttr('nsURI', ''),
+    makeAttr('nsPrefix', ''),
+    makeRef('eClassifiers', makeEClass('EClassifier', []) as EClass, true),
+    makeRef('eSubpackages', makeEClass('EPackage', []) as EClass, true),
+    makeRef('eAnnotations', eannotationCls, true),
+  ]);
+
+  const eobjectCls = makeEClass('EObject', []);
+
+  const eclassifierCls = makeEClass('EClassifier', [
+    makeAttr('name', ''),
+    makeAttr('instanceClassName', ''),
+    makeAttr('instanceClass', ''),
+    makeAttr('defaultValue', ''),
+    makeRef('eAnnotations', eannotationCls, true),
+  ]);
+
+  const edatatypeCls = makeEClass('EDataType', [
+    makeAttr('name', ''),
+    makeAttr('serializable', true),
+    makeRef('eAnnotations', eannotationCls, true),
+  ]);
+
+  const eenumCls = makeEClass('EEnum', [
+    makeAttr('name', ''),
+    makeAttr('serializable', true),
+    makeRef('eLiterals', makeEClass('EEnumLiteral', [
+      makeAttr('name', ''),
+      makeAttr('value', 0),
+      makeAttr('literal', ''),
+    ]) as EClass, true),
+    makeRef('eAnnotations', eannotationCls, true),
+  ]);
+
+  const eenumliteralCls = makeEClass('EEnumLiteral', [
+    makeAttr('name', ''),
+    makeAttr('value', 0),
+    makeAttr('literal', ''),
+  ]);
+
+  const estructuralfeatureCls = makeEClass('EStructuralFeature', [
+    makeAttr('name', ''),
+    makeAttr('ordered', true),
+    makeAttr('unique', true),
+    makeAttr('lowerBound', 0),
+    makeAttr('upperBound', 1),
+    makeAttr('changeable', true),
+    makeAttr('volatile', false),
+    makeAttr('transient', false),
+    makeAttr('defaultValueLiteral', ''),
+    makeAttr('unsettable', false),
+    makeAttr('derived', false),
+  ]);
+
+  const eattCls = makeEClass('EAttribute', [
+    makeAttr('name', ''),
+    makeAttr('ordered', true),
+    makeAttr('unique', true),
+    makeAttr('lowerBound', 0),
+    makeAttr('upperBound', 1),
+    makeAttr('changeable', true),
+    makeAttr('volatile', false),
+    makeAttr('transient', false),
+    makeAttr('defaultValueLiteral', ''),
+    makeAttr('unsettable', false),
+    makeAttr('derived', false),
+    makeAttr('iD', false),
+  ]);
+
+  const erefCls = makeEClass('EReference', [
+    makeAttr('name', ''),
+    makeAttr('ordered', true),
+    makeAttr('unique', true),
+    makeAttr('lowerBound', 0),
+    makeAttr('upperBound', 1),
+    makeAttr('changeable', true),
+    makeAttr('volatile', false),
+    makeAttr('transient', false),
+    makeAttr('defaultValueLiteral', ''),
+    makeAttr('unsettable', false),
+    makeAttr('derived', false),
+    makeAttr('containment', false),
+    makeAttr('resolveProxies', true),
+  ]);
+
+  const eclassCls = makeEClass('EClass', [
+    makeAttr('name', ''),
+    makeAttr('abstract', false),
+    makeAttr('interface', false),
+    makeRef('eSuperTypes', makeEClass('PlaceholderEClass', []) as EClass, false),
+    makeRef('eStructuralFeatures', estructuralfeatureCls, true),
+    makeRef('eOperations', makeEClass('EOperation', [
+      makeAttr('name', ''),
+      makeAttr('ordered', true),
+      makeAttr('unique', true),
+      makeAttr('lowerBound', 0),
+      makeAttr('upperBound', 1),
+      makeRef('eParameters', makeEClass('EParameter', [
+        makeAttr('name', ''),
+        makeAttr('ordered', true),
+        makeAttr('unique', true),
+        makeAttr('lowerBound', 0),
+        makeAttr('upperBound', 1),
+      ]) as EClass, true),
+    ]) as EClass, true),
+    makeRef('eAnnotations', eannotationCls, true),
+  ]);
+
+  const eopCls = makeEClass('EOperation', [
+    makeAttr('name', ''),
+    makeAttr('ordered', true),
+    makeAttr('unique', true),
+    makeAttr('lowerBound', 0),
+    makeAttr('upperBound', 1),
+    makeRef('eParameters', makeEClass('EParameter', [
+      makeAttr('name', ''),
+      makeAttr('ordered', true),
+      makeAttr('unique', true),
+      makeAttr('lowerBound', 0),
+      makeAttr('upperBound', 1),
+    ]) as EClass, true),
+    makeRef('eAnnotations', eannotationCls, true),
+  ]);
+
+  const eparamCls = makeEClass('EParameter', [
+    makeAttr('name', ''),
+    makeAttr('ordered', true),
+    makeAttr('unique', true),
+    makeAttr('lowerBound', 0),
+    makeAttr('upperBound', 1),
+    makeRef('eAnnotations', eannotationCls, true),
+  ]);
+
+  const allEClasses = [epackageCls, eobjectCls, eclassifierCls, edatatypeCls,
+    eenumCls, eenumliteralCls, eattCls, erefCls, eclassCls,
+    eopCls, eparamCls, eannotationCls];
+
+  // Set ePackage on all EClasses
+  const ecorePkg = createMinimalEObject(epackageCls);
+  (ecorePkg as any).name = 'ecore';
+  (ecorePkg as any).nsURI = ECORE_NS;
+  (ecorePkg as any).nsPrefix = 'ecore';
+  // Add getEClassifier that searches all classifiers in the ecore pkg
+  (ecorePkg as any).getEClassifier = (className: string) => {
+    return allEClasses.find((c: any) => c.name === className) || null;
+  };
+
+  // Fix self-references: EPackage.eSubpackages → EPackage, EClass.eSuperTypes → EClass
+  const epackageFeatures = epackageCls.eStructuralFeatures as unknown as EStructuralFeature[];
+  const esubpackagesFeature = epackageFeatures.find(f => f.name === 'eSubpackages');
+  if (esubpackagesFeature) (esubpackagesFeature as any).eReferenceType = epackageCls;
+
+  const eclassFeatures = eclassCls.eStructuralFeatures as unknown as EStructuralFeature[];
+  const esuperTypesFeature = eclassFeatures.find(f => f.name === 'eSuperTypes');
+  if (esuperTypesFeature) (esuperTypesFeature as any).eReferenceType = eclassCls;
+
+  for (const cls of allEClasses) {
+    (cls as any).ePackage = ecorePkg;
+  }
+
+  // EClass for ecore types (self-referential)
+  const ecoreEClassCls = makeEClass('EClass', []);
+  (ecoreEClassCls as any).ePackage = ecorePkg;
+
+  // Register
+  store.set(ECORE_NS, ecorePkg as EPackage);
+
+  return {
+    getEPackage: (nsURI: string) => store.get(nsURI) || null,
+    putEPackage: (nsURI: string, pkg: EPackage) => { store.set(nsURI, pkg); },
+    removeEPackage: (pkg: EPackage) => {
+      store.forEach((storedPkg, uri) => {
+        if (storedPkg === pkg) { store.delete(uri); }
+      });
+    },
+    values: () => Array.from(store.values()),
+    entries: () => Array.from(store.entries()),
+    has: (nsURI: string) => store.has(nsURI),
+    get: (nsURI: string) => store.get(nsURI),
+    forEach: (fn: (pkg: EPackage, nsURI: string) => void) => store.forEach(fn as any),
+    size: store.size,
+    [Symbol.iterator]: store[Symbol.iterator].bind(store),
+    clear: () => store.clear(),
+    delete: (nsURI: string) => store.delete(nsURI),
+  } as PackageRegistry;
 }

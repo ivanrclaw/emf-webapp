@@ -11,6 +11,8 @@ import {
   OCLConstraint,
   OCLValidationResult,
 } from '../api/client';
+import { Save, Plus, List, Trash2 } from '../components/icons';
+import ErrorPanel from '../components/feedback/ErrorPanel';
 
 /* ------------------------------------------------------------------ */
 /*  OCL Constraints Page                                               */
@@ -23,8 +25,15 @@ const SEVERITY_COLORS: Record<string, string> = {
   info: '#3b82f6',
 };
 
-export default function OCLConstraintPage() {
-  const { pid, mmid } = useParams<{ pid: string; mmid: string }>();
+interface OCLConstraintPageProps {
+  projectId?: string;
+  metamodelId?: string;
+}
+
+export default function OCLConstraintPage(props: OCLConstraintPageProps) {
+  const params = useParams<{ pid: string; mmid: string }>();
+  const projectId = props.projectId || params.pid || '';
+  const metamodelId = props.metamodelId || params.mmid || '';
 
   const [metamodel, setMetamodel] = useState<Metamodel | null>(null);
   const [constraints, setConstraints] = useState<OCLConstraint[]>([]);
@@ -45,12 +54,12 @@ export default function OCLConstraintPage() {
   // ── Load ──────────────────────────────────────────────────────────
 
   const load = useCallback(async () => {
-    if (!mmid) return;
+    if (!metamodelId) return;
     setLoading(true);
     try {
       const [mm, cList] = await Promise.all([
-        getMetamodel(pid!, mmid),
-        getOCLConstraints(mmid),
+        getMetamodel(projectId, metamodelId),
+        getOCLConstraints(metamodelId),
       ]);
       setMetamodel(mm);
       setConstraints(cList);
@@ -64,25 +73,25 @@ export default function OCLConstraintPage() {
     } finally {
       setLoading(false);
     }
-  }, [mmid, pid]);
+  }, [metamodelId, projectId]);
 
   useEffect(() => { load(); }, [load]);
 
   // ── Save ──────────────────────────────────────────────────────────
 
   const handleSave = useCallback(async () => {
-    if (!mmid || !formName || !formContext || !formExpression) return;
+    if (!metamodelId || !formName || !formContext || !formExpression) return;
     setSaving(true);
     try {
       if (editingId) {
-        await updateOCLConstraint(mmid, editingId, {
+        await updateOCLConstraint(metamodelId, editingId, {
           name: formName,
           context: formContext,
           expression: formExpression,
           severity: formSeverity,
         });
       } else {
-        await createOCLConstraint(mmid, {
+        await createOCLConstraint(metamodelId, {
           name: formName,
           context: formContext,
           expression: formExpression,
@@ -96,24 +105,24 @@ export default function OCLConstraintPage() {
     } finally {
       setSaving(false);
     }
-  }, [mmid, editingId, formName, formContext, formExpression, formSeverity, load]);
+  }, [metamodelId, editingId, formName, formContext, formExpression, formSeverity, load]);
 
   // ── Validate ──────────────────────────────────────────────────────
 
   const handleValidate = useCallback(async () => {
-    if (!mmid) return;
+    if (!metamodelId) return;
     setValidating(true);
     setResults(null);
     try {
       // Get the active model content (first model's content or empty)
-      const res = await validateOCLConstraints(mmid, '{}');
+      const res = await validateOCLConstraints(metamodelId, '{}');
       setResults(res);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Validation failed');
     } finally {
       setValidating(false);
     }
-  }, [mmid]);
+  }, [metamodelId]);
 
   // ── Edit / Delete ─────────────────────────────────────────────────
 
@@ -126,10 +135,10 @@ export default function OCLConstraintPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!mmid) return;
+    if (!metamodelId) return;
     if (!window.confirm('Delete this constraint?')) return;
     try {
-      await deleteOCLConstraint(mmid, id);
+      await deleteOCLConstraint(metamodelId, id);
       setConstraints((s) => s.filter((x) => x.id !== id));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to delete');
@@ -158,12 +167,14 @@ export default function OCLConstraintPage() {
       {/* Header */}
       <div className="detail-header" style={{ marginBottom: 24 }}>
         <div className="detail-header-left">
-          <Link to={`/projects/${pid}`} className="back-link">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
-            </svg>
-            Back
-          </Link>
+          {!props.projectId && (
+            <Link to={`/projects/${projectId}`} className="back-link">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
+              </svg>
+              Back
+            </Link>
+          )}
           <div>
             <h1 className="page-title" style={{ margin: 0 }}>
               OCL Constraints — {metamodel?.name}
@@ -175,12 +186,12 @@ export default function OCLConstraintPage() {
         </div>
       </div>
 
-      {error && <div className="msg msg-error" style={{ marginBottom: 16 }}>⚠️ {error}</div>}
+      {error && <ErrorPanel title="Error" message={error} compact />}
 
       {/* Form / Editor */}
       <div className="card" style={{ padding: 16, marginBottom: 20 }}>
         <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
-          {editingId ? '✏️ Edit Constraint' : '➕ New Constraint'}
+          {editingId ? 'Edit Constraint' : 'New Constraint'}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
           <div className="form-field">
@@ -247,7 +258,7 @@ export default function OCLConstraintPage() {
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving || !formName || !formContext || !formExpression}>
-            {saving ? 'Saving...' : editingId ? '💾 Update' : '➕ Create'}
+            {saving ? 'Saving...' : editingId ? <><Save size={14} /> Update</> : <><Plus size={14} /> Create</>}
           </button>
           {editingId && (
             <button className="btn btn-ghost btn-sm" onClick={resetForm}>
@@ -260,7 +271,7 @@ export default function OCLConstraintPage() {
       {/* Validate Button + Results */}
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 16 }}>
         <button className="btn btn-secondary btn-sm" onClick={handleValidate} disabled={validating || constraints.length === 0}>
-          {validating ? '⏳ Validating...' : '✅ Validate All'}
+          {validating ? 'Validating...' : 'Validate All'}
         </button>
         <span style={{ fontSize: 12, color: '#64748b' }}>
           {constraints.length} constraint{constraints.length !== 1 ? 's' : ''}
@@ -283,7 +294,7 @@ export default function OCLConstraintPage() {
               background: r.passed ? '#052e16' : '#450a0a',
               border: `1px solid ${r.passed ? '#166534' : '#7f1d1d'}`,
             }}>
-              <span style={{ fontSize: 14 }}>{r.passed ? '✅' : '❌'}</span>
+              <span style={{ fontSize: 14 }}>{r.passed ? '✓' : '✗'}</span>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 12, fontWeight: 600 }}>{r.name}</div>
                 <div style={{ fontSize: 11, color: '#94a3b8' }}>
@@ -291,7 +302,7 @@ export default function OCLConstraintPage() {
                 </div>
                 {r.error && (
                   <div style={{ fontSize: 11, color: '#fca5a5', marginTop: 4 }}>
-                    ⚠️ {r.error}
+                    {r.error}
                   </div>
                 )}
               </div>
@@ -306,7 +317,7 @@ export default function OCLConstraintPage() {
       </div>
       {constraints.length === 0 ? (
         <div className="empty-state" style={{ padding: '48px 24px' }}>
-          <span style={{ fontSize: 32 }}>📋</span>
+          <List size={32} />
           <p>No OCL constraints yet</p>
           <p style={{ color: '#64748b', marginTop: 4 }}>
             Define invariants to validate model instances
@@ -327,11 +338,9 @@ export default function OCLConstraintPage() {
               </div>
             </div>
             <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-              <button className="btn btn-ghost btn-sm" onClick={() => startEdit(c)}>
-                ✏️
-              </button>
+              <button className="btn btn-ghost btn-sm" onClick={() => startEdit(c)}>Edit\n              </button>
               <button className="btn btn-ghost btn-sm" onClick={() => handleDelete(c.id)} style={{ color: '#ef4444' }}>
-                🗑️
+                <Trash2 size={14} />
               </button>
             </div>
           </div>

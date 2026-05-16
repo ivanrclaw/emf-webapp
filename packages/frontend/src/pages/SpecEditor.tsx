@@ -38,6 +38,8 @@ import SpecNode, { type SpecNodeData } from '../components/spec-diagram/SpecNode
 import SpecEdge, { type SpecEdgeData } from '../components/spec-diagram/SpecEdge';
 import SpecStylePanel from '../components/spec-diagram/SpecStylePanel';
 import type { SpecData, Mapping, ShapeStyle, EdgeStyle } from '../components/spec-diagram/types';
+import { Save, Trash2, AlertTriangle } from '../components/icons';
+import ErrorPanel from '../components/feedback/ErrorPanel';
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                           */
@@ -165,8 +167,10 @@ function nextPosition(posMap: Map<string, { x: number; y: number }>, count: numb
 /*  SpecEditor (inner — inside ReactFlowProvider)                       */
 /* ------------------------------------------------------------------ */
 
-function SpecEditorInner() {
+function SpecEditorInner({ projectId: propProjectId, metamodelId: propMetamodelId }: { projectId?: string; metamodelId?: string }) {
   const { pid, mmid, specId } = useParams<{ pid: string; mmid: string; specId?: string }>();
+  const projectId = propProjectId || pid || '';
+  const metamodelId = propMetamodelId || mmid || '';
 
   // Data
   const [metamodel, setMetamodel] = useState<Metamodel | null>(null);
@@ -195,12 +199,12 @@ function SpecEditorInner() {
 
   useEffect(() => {
     async function load() {
-      if (!mmid) return;
+      if (!metamodelId) return;
       setLoading(true);
       try {
         const [mm, sList] = await Promise.all([
-          getMetamodel(pid!, mmid),
-          getGraphicalSpecs(mmid),
+          getMetamodel(projectId, metamodelId),
+          getGraphicalSpecs(metamodelId),
         ]);
         setMetamodel(mm);
         setSpecs(sList);
@@ -211,7 +215,7 @@ function SpecEditorInner() {
 
         if (specId) {
           const spec = sList.find((s) => s.id === specId) ||
-            await getGraphicalSpec(mmid, specId);
+            await getGraphicalSpec(metamodelId, specId);
           setActiveSpec(spec);
           const parsed = JSON.parse(spec.spec || '{}');
           const loadedData: SpecData = {
@@ -228,7 +232,7 @@ function SpecEditorInner() {
       }
     }
     load();
-  }, [mmid, specId, pid]);
+  }, [metamodelId, specId, projectId]);
 
   /* ── Sync nodes/edges when specData or selection changes ──────── */
 
@@ -243,14 +247,14 @@ function SpecEditorInner() {
   /* ── Save ─────────────────────────────────────────────────────── */
 
   const handleSave = useCallback(async () => {
-    if (!mmid) return;
+    if (!metamodelId) return;
     setSaving(true);
     try {
       const specPayload = JSON.stringify(specData);
       if (activeSpec) {
-        await updateGraphicalSpec(mmid, activeSpec.id, { spec: specPayload });
+        await updateGraphicalSpec(metamodelId, activeSpec.id, { spec: specPayload });
       } else {
-        const created = await createGraphicalSpec(mmid, {
+        const created = await createGraphicalSpec(metamodelId, {
           name: specData.name || 'New Spec',
           spec: specPayload,
         });
@@ -259,14 +263,14 @@ function SpecEditorInner() {
       lastSavedRef.current = specPayload;
       setSaveStatus('saved');
       setError('');
-      const sList = await getGraphicalSpecs(mmid);
+      const sList = await getGraphicalSpecs(metamodelId);
       setSpecs(sList);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to save');
     } finally {
       setSaving(false);
     }
-  }, [mmid, activeSpec, specData]);
+  }, [metamodelId, activeSpec, specData]);
 
   /* ── Auto-save ────────────────────────────────────────────────── */
 
@@ -492,9 +496,11 @@ function SpecEditorInner() {
         flexWrap: 'wrap',
         flexShrink: 0,
       }}>
-        <Link to={`/projects/${pid}`} className="back-link" style={{ fontSize: 13 }}>
-          ← Back
-        </Link>
+        {!propProjectId && (
+          <Link to={`/projects/${projectId}`} className="back-link" style={{ fontSize: 13 }}>
+            ← Back
+          </Link>
+        )}
         <h1 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>
           Graphical Syntax — {metamodel?.name}
         </h1>
@@ -548,7 +554,7 @@ function SpecEditorInner() {
         />
 
         <button className="btn btn-sm btn-primary" onClick={handleSave} disabled={saving}>
-          {saving ? 'Saving...' : '💾 Save'}
+          {saving ? 'Saving...' : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Save size={14} /> Save</span>}
         </button>
         {saveStatus === 'saved' && (
           <span style={{ color: '#22c55e', fontSize: 11 }}>Saved</span>
@@ -560,7 +566,7 @@ function SpecEditorInner() {
             style={{ color: 'var(--danger)', fontSize: 12 }}
             onClick={() => {
               if (!window.confirm('Delete this specification?')) return;
-              deleteGraphicalSpec(mmid!, activeSpec.id)
+              deleteGraphicalSpec(metamodelId, activeSpec.id)
                 .then(() => {
                   setSpecs((s) => s.filter((x) => x.id !== activeSpec.id));
                   setActiveSpec(null);
@@ -571,16 +577,12 @@ function SpecEditorInner() {
                 .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to delete'));
             }}
           >
-            🗑️ Delete
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Trash2 size={14} /> Delete</span>
           </button>
         )}
       </div>
 
-      {error && (
-        <div className="msg msg-error" style={{ margin: '8px 16px 0' }}>
-          ⚠️ {error}
-        </div>
-      )}
+      {error && <ErrorPanel title="Error" message={error} compact />}
 
       {/* ── 3-Panel Layout ────────────────────────────────────────── */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
@@ -826,7 +828,12 @@ function SpecEditorInner() {
 /*  SpecEditor (exported — wraps in ReactFlowProvider)                  */
 /* ------------------------------------------------------------------ */
 
-export default function SpecEditor() {
+interface SpecEditorProps {
+  projectId?: string;
+  metamodelId?: string;
+}
+
+export default function SpecEditor(props: SpecEditorProps) {
   // Override parent constraints (max-width and padding from .app-main)
   return (
     <div style={{
@@ -836,7 +843,7 @@ export default function SpecEditor() {
       zIndex: 10,
     }}>
       <ReactFlowProvider>
-        <SpecEditorInner />
+        <SpecEditorInner projectId={props.projectId} metamodelId={props.metamodelId} />
       </ReactFlowProvider>
     </div>
   );

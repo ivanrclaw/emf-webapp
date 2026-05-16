@@ -79,6 +79,14 @@ export interface UseEcoreModelOptions {
   projectId: string;
   metamodelId: string;
   initialPkg: SerializableEPackage | null;
+  violationsMap?: Map<string, Array<{
+    constraintId: string;
+    constraintName: string;
+    expression: string;
+    severity: 'error' | 'warning' | 'info';
+    passed: boolean;
+    error?: string;
+  }>>;
 }
 
 export interface UseEcoreModelReturn {
@@ -104,13 +112,28 @@ export interface UseEcoreModelReturn {
   isDirty: boolean;
   save: () => Promise<void>;
   loading: boolean;
+  undo: () => void;
+  redo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
 }
 
 // ═══════════════════════════════════════════════════════════════
 // Converters
 // ═══════════════════════════════════════════════════════════════
 
-function pkgToNodes(pkg: SerializableEPackage, posMap: Map<string, { x: number; y: number }>): AppNode[] {
+function pkgToNodes(
+  pkg: SerializableEPackage,
+  posMap: Map<string, { x: number; y: number }>,
+  violationsMap?: Map<string, Array<{
+    constraintId: string;
+    constraintName: string;
+    expression: string;
+    severity: 'error' | 'warning' | 'info';
+    passed: boolean;
+    error?: string;
+  }>>,
+): AppNode[] {
   const out: AppNode[] = [];
   const classifiers = pkg.eClassifiers ?? [];
 
@@ -124,6 +147,7 @@ function pkgToNodes(pkg: SerializableEPackage, posMap: Map<string, { x: number; 
       type: ecoreType,
       classifier: c,
       ePackage: pkg,
+      violations: violationsMap?.get(c.id)?.filter(v => !v.passed) || [],
       onClassifierChange: _callbacks.onClassifierChange,
       onAddAttribute: _callbacks.onAddAttribute,
       onAddReference: _callbacks.onAddReference,
@@ -227,7 +251,7 @@ function pkgToEdges(pkg: SerializableEPackage, _posMap?: Map<string, { x: number
 // Hook
 // ═══════════════════════════════════════════════════════════════
 
-export function useEcoreModel({ projectId, metamodelId, initialPkg }: UseEcoreModelOptions): UseEcoreModelReturn {
+export function useEcoreModel({ projectId, metamodelId, initialPkg, violationsMap }: UseEcoreModelOptions): UseEcoreModelReturn {
   // ── Core state ─────────────────────────────────────────────
   const [pkg, setPkg] = useState<SerializableEPackage>(() =>
     initialPkg ?? { name: 'model', nsURI: '', nsPrefix: '', eClassifiers: [] },
@@ -235,7 +259,7 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg }: UseEcoreMo
 
   // We need our OWN node/edge state, NOT useNodesState (to avoid hook-count issues)
   const [nodes, setNodes] = useState<AppNode[]>(() => {
-    if (initialPkg) return pkgToNodes(initialPkg, new Map());
+    if (initialPkg) return pkgToNodes(initialPkg, new Map(), violationsMap);
     return [];
   });
   const [edges, setEdges] = useState<AppEdge[]>(() => {
@@ -248,10 +272,64 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg }: UseEcoreMo
   const [isDirty, setIsDirty] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // ── Undo/Redo stacks ────────────────────────────────────────
+  const [undoStack, setUndoStack] = useState<SerializableEPackage[]>([]);
+  const [redoStack, setRedoStack] = useState<SerializableEPackage[]>([]);
+
+  // Wrapper around setPkg that pushes snapshots to undo stack
+  const setPkgWithUndo = useCallback(
+    (updater: SerializableEPackage | ((prev: SerializableEPackage) => SerializableEPackage)) => {
+      setPkg((prev) => {
+        const next = typeof updater === 'function' ? updater(prev) : updater;
+        if (next === prev) return prev;
+        setUndoStack((stack) => {
+          const nextStack = [...stack, JSON.parse(JSON.stringify(prev))];
+          return nextStack.length > 50 ? nextStack.slice(-50) : nextStack;
+        });
+        setRedoStack([]);
+        return next;
+      });
+    },
+    [],
+  );
+
+  const undo = useCallback(() => {
+    setUndoStack((stack) => {
+      if (stack.length === 0) return stack;
+      const prev = stack[stack.length - 1];
+      const rest = stack.slice(0, -1);
+      setPkg((current) => {
+        setRedoStack((rstack) => [...rstack, JSON.parse(JSON.stringify(current))]);
+        return prev;
+      });
+      setIsDirty(true);
+      return rest;
+    });
+  }, []);
+
+  const redoFn = useCallback(() => {
+    setRedoStack((stack) => {
+      if (stack.length === 0) return stack;
+      const next = stack[stack.length - 1];
+      const rest = stack.slice(0, -1);
+      setPkg((current) => {
+        setUndoStack((ustack) => [...ustack, JSON.parse(JSON.stringify(current))]);
+        return next;
+      });
+      setIsDirty(true);
+      return rest;
+    });
+  }, []);
+
+  const canUndo = undoStack.length > 0;
+  const canRedo = redoStack.length > 0;
+
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const posMap = useRef<Map<string, { x: number; y: number }>>(new Map());
   const pkgRef = useRef(pkg);
   pkgRef.current = pkg;
+  const violationsMapRef = useRef(violationsMap);
+  violationsMapRef.current = violationsMap;
   const nodesRef = useRef(nodes);
   nodesRef.current = nodes;
   const initialLoadDone = useRef(false);
@@ -261,7 +339,7 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg }: UseEcoreMo
     if (initialPkg && !initialLoadDone.current) {
       initialLoadDone.current = true;
       const pos = new Map<string, { x: number; y: number }>();
-      setNodes(pkgToNodes(initialPkg, pos));
+      setNodes(pkgToNodes(initialPkg, pos, violationsMap));
       setEdges(pkgToEdges(initialPkg, pos));
       posMap.current = pos;
       setPkg(initialPkg);
@@ -270,7 +348,7 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg }: UseEcoreMo
 
   // ── Re-sync from pkg (recompute nodes/edges preserving positions) ─
   const resync = useCallback(() => {
-    setNodes(pkgToNodes(pkgRef.current, posMap.current));
+    setNodes(pkgToNodes(pkgRef.current, posMap.current, violationsMapRef.current));
     setEdges(pkgToEdges(pkgRef.current, posMap.current));
   }, []);
 
@@ -325,7 +403,7 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg }: UseEcoreMo
   const onConnect: OnConnect = useCallback(
     (conn: Connection) => {
       if (!conn.source || !conn.target) return;
-      setPkg((prev) => {
+      setPkgWithUndo((prev) => {
         const src = prev.eClassifiers.find((c) => c.id === conn.source);
         if (!src || !isClass(src)) return prev;
         const tgt = prev.eClassifiers.find((c) => c.id === conn.target);
@@ -366,7 +444,7 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg }: UseEcoreMo
   // ── Semantic operations ────────────────────────────────────
   const addClassifier = useCallback(
     (type: 'class' | 'enum' | 'dataType') => {
-      setPkg((prev) => {
+      setPkgWithUndo((prev) => {
         const count = prev.eClassifiers.length;
         const pos = { x: 100 + (count % 4) * 240, y: 100 + Math.floor(count / 4) * 220 };
 
@@ -389,7 +467,7 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg }: UseEcoreMo
 
   const deleteSelected = useCallback(() => {
     if (!selectedId) return;
-    setPkg((prev) => {
+    setPkgWithUndo((prev) => {
       // Check if it's a classifier
       const hasClassifier = prev.eClassifiers.some((c) => c.id === selectedId);
       if (hasClassifier) {
@@ -417,7 +495,7 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg }: UseEcoreMo
   }, [selectedId]);
 
   const addAttribute = useCallback((classId: string) => {
-    setPkg((prev) => ({
+    setPkgWithUndo((prev) => ({
       ...prev,
       eClassifiers: prev.eClassifiers.map((c) => {
         if (c.id !== classId || !isClass(c)) return c;
@@ -431,7 +509,7 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg }: UseEcoreMo
   }, []);
 
   const addReference = useCallback((classId: string) => {
-    setPkg((prev) => ({
+    setPkgWithUndo((prev) => ({
       ...prev,
       eClassifiers: prev.eClassifiers.map((c) => {
         if (c.id !== classId || !isClass(c)) return c;
@@ -445,7 +523,7 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg }: UseEcoreMo
   }, []);
 
   const deleteFeature = useCallback((parentId: string, featureId: string) => {
-    setPkg((prev) => ({
+    setPkgWithUndo((prev) => ({
       ...prev,
       eClassifiers: prev.eClassifiers.map((c) => {
         if (c.id !== parentId || !isClass(c)) return c;
@@ -460,7 +538,7 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg }: UseEcoreMo
   }, []);
 
   const handleClassifierChange = useCallback((id: string, updates: any) => {
-    setPkg((prev) => ({
+    setPkgWithUndo((prev) => ({
       ...prev,
       eClassifiers: prev.eClassifiers.map((c) => (c.id === id ? { ...c, ...updates } : c)),
     }));
@@ -485,7 +563,7 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg }: UseEcoreMo
       } else {
         newClassifier = { id, name: `NewType`, instanceClassName: 'java.lang.String' };
       }
-      setPkg((prev) => ({ ...prev, eClassifiers: [...prev.eClassifiers, newClassifier] }));
+      setPkgWithUndo((prev) => ({ ...prev, eClassifiers: [...prev.eClassifiers, newClassifier] }));
       setIsDirty(true);
     },
     [],
@@ -528,6 +606,10 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg }: UseEcoreMo
     isDirty,
     save,
     loading,
+    undo: undo,
+    redo: redoFn,
+    canUndo,
+    canRedo,
   };
 }
 

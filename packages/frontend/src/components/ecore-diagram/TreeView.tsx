@@ -4,13 +4,14 @@
  * Panel lateral izquierdo (debajo del toolbox) que muestra la estructura
  * jerárquica del EPackage como un árbol expandible.
  */
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, type ReactNode } from 'react';
 import type {
   SerializableEPackage,
   SerializableEClass,
   SerializableEEnum,
   SerializableEDataType,
 } from './types';
+import { Box, List, Hash, Type, Link2, ArrowRight } from '../icons';
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -41,7 +42,7 @@ export interface TreeViewProps {
 
 interface TreeNodeProps {
   label: string;
-  icon: string;
+  icon: ReactNode;
   nodeId: string;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
@@ -89,8 +90,8 @@ const TreeNode: React.FC<TreeNodeProps> = ({
           borderRadius: 2,
           fontSize: 13,
           ...(isSelected
-            ? { background: '#dbeafe', color: '#1e40af' }
-            : { color: '#374151' }),
+            ? { background: 'var(--primary-bg)', color: 'var(--primary)' }
+            : { color: 'var(--text)' }),
         }}
         onClick={handleSelect}
         role="treeitem"
@@ -108,11 +109,12 @@ const TreeNode: React.FC<TreeNodeProps> = ({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#9ca3af',
+              color: 'var(--text-muted)',
               outline: 'none',
               border: 'none',
               background: 'transparent',
               padding: 0,
+              cursor: 'pointer',
             }}
             aria-label={expanded ? 'Collapse' : 'Expand'}
           >
@@ -134,7 +136,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
         )}
 
         {/* Icon */}
-        <span style={{ flexShrink: 0, fontSize: 13 }}>{icon}</span>
+        <span style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>{icon}</span>
 
         {/* Label */}
         <span
@@ -176,7 +178,7 @@ const AttributeNode: React.FC<{
 }> = ({ attrId, name, eType, selectedId, onSelect, depth }) => (
   <TreeNode
     label={`${name} : ${eType}`}
-    icon="🏷️"
+    icon={<Type size={14} style={{ color: '#6366f1' }} />}
     nodeId={attrId}
     selectedId={selectedId}
     onSelect={onSelect}
@@ -193,8 +195,8 @@ const ReferenceNode: React.FC<{
   depth: number;
 }> = ({ refId, name, containment, selectedId, onSelect, depth }) => (
   <TreeNode
-    label={`${name} ${containment ? '🔄' : '🔗'}`}
-    icon="🔗"
+    label={name}
+    icon={containment ? <ArrowRight size={14} style={{ color: '#10b981' }} /> : <Link2 size={14} style={{ color: '#8b5cf6' }} />}
     nodeId={refId}
     selectedId={selectedId}
     onSelect={onSelect}
@@ -212,7 +214,7 @@ const EnumLiteralNode: React.FC<{
 }> = ({ litId, name, value, selectedId, onSelect, depth }) => (
   <TreeNode
     label={`${name} = ${value}`}
-    icon="📌"
+    icon={<Hash size={14} style={{ color: '#f59e0b' }} />}
     nodeId={litId}
     selectedId={selectedId}
     onSelect={onSelect}
@@ -256,7 +258,7 @@ const EClassTreeNode: React.FC<{
   return (
     <TreeNode
       label={`${cls.name}${cls.abstract ? ' (abstract)' : ''}${cls.interface ? ' (interface)' : ''}`}
-      icon="📦"
+      icon={<Box size={14} style={{ color: '#6366f1' }} />}
       nodeId={cls.id}
       selectedId={selectedId}
       onSelect={onSelect}
@@ -269,7 +271,7 @@ const EClassTreeNode: React.FC<{
         <div
           style={{
             fontSize: 11,
-            color: '#9ca3af',
+            color: 'var(--text-muted)',
             fontStyle: 'italic',
             padding: '4px 0',
             paddingLeft: `${8 + (depth + 1) * 16}px`,
@@ -290,7 +292,7 @@ const EEnumTreeNode: React.FC<{
 }> = ({ enm, selectedId, onSelect, depth }) => (
   <TreeNode
     label={enm.name}
-    icon="📋"
+    icon={<List size={14} style={{ color: '#fb923c' }} />}
     nodeId={enm.id}
     selectedId={selectedId}
     onSelect={onSelect}
@@ -319,7 +321,7 @@ const EDataTypeTreeNode: React.FC<{
 }> = ({ dt, selectedId, onSelect, depth }) => (
   <TreeNode
     label={`${dt.name}${dt.instanceClassName ? ` : ${dt.instanceClassName}` : ''}`}
-    icon="🔤"
+    icon={<Hash size={14} style={{ color: '#9ca3af' }} />}
     nodeId={dt.id}
     selectedId={selectedId}
     onSelect={onSelect}
@@ -339,8 +341,8 @@ export const TreeView: React.FC<TreeViewProps> = ({ pkg, onSelect, selectedId })
     <div
       style={{
         flex: 1,
-        background: '#fff',
-        borderRight: '1px solid #e5e7eb',
+        background: 'var(--surface)',
+        borderRight: '1px solid var(--border)',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
@@ -350,8 +352,8 @@ export const TreeView: React.FC<TreeViewProps> = ({ pkg, onSelect, selectedId })
       <div
         style={{
           padding: '8px 16px',
-          borderBottom: '1px solid #e5e7eb',
-          background: 'linear-gradient(to right, #f9fafb, #fff)',
+          borderBottom: '1px solid var(--border)',
+          background: 'var(--surface)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -361,7 +363,7 @@ export const TreeView: React.FC<TreeViewProps> = ({ pkg, onSelect, selectedId })
           style={{
             fontSize: 13,
             fontWeight: 600,
-            color: '#374151',
+            color: 'var(--text)',
             textTransform: 'uppercase',
             letterSpacing: '0.025em',
             display: 'flex',
@@ -371,7 +373,7 @@ export const TreeView: React.FC<TreeViewProps> = ({ pkg, onSelect, selectedId })
           }}
         >
           <svg
-            style={{ width: 16, height: 16, color: '#6366f1' }}
+            style={{ width: 16, height: 16, color: 'var(--primary)' }}
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -380,7 +382,7 @@ export const TreeView: React.FC<TreeViewProps> = ({ pkg, onSelect, selectedId })
           </svg>
           Model
         </h2>
-        <span style={{ fontSize: 11, color: '#9ca3af' }}>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
           {pkg.eClassifiers.length} classifier{pkg.eClassifiers.length !== 1 ? 's' : ''}
         </span>
       </div>
@@ -394,7 +396,7 @@ export const TreeView: React.FC<TreeViewProps> = ({ pkg, onSelect, selectedId })
         {/* Root: EPackage */}
         <TreeNode
           label={`${pkg.name}${pkg.nsURI ? ` (${pkg.nsURI})` : ''}`}
-          icon="📦"
+          icon={<Box size={14} style={{ color: '#6366f1' }} />}
           nodeId="__package__"
           selectedId={selectedId}
           onSelect={onSelect}
@@ -405,7 +407,7 @@ export const TreeView: React.FC<TreeViewProps> = ({ pkg, onSelect, selectedId })
           <div
             style={{
               fontSize: 11,
-              color: '#9ca3af',
+              color: 'var(--text-muted)',
               fontStyle: 'italic',
               padding: '4px 8px',
               paddingLeft: `${8 + 1 * 16}px`,
@@ -455,7 +457,7 @@ export const TreeView: React.FC<TreeViewProps> = ({ pkg, onSelect, selectedId })
             <div
               style={{
                 fontSize: 11,
-                color: '#9ca3af',
+                color: 'var(--text-muted)',
                 fontStyle: 'italic',
                 padding: '8px 8px',
                 paddingLeft: `${8 + 1 * 16}px`,

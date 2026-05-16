@@ -8,6 +8,7 @@ import { useCallback, useState, type KeyboardEvent } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { EcoreNodeData, SerializableEDataType } from '../types';
 import styles from './EDataTypeNode.module.css';
+import { AlertTriangle } from '../../icons';
 
 // ── Type guard ─────────────────────────────────────────────────
 function isEDataType(c: unknown): c is SerializableEDataType {
@@ -26,7 +27,7 @@ export default function EDataTypeNode(props: NodeProps) {
   const classifier = data.classifier;
 
   if (!isEDataType(classifier)) {
-    return <div className={styles.node}>⚠️ Invalid EDataType data</div>;
+    return <div className={styles.node}><AlertTriangle size={14} /> Invalid EDataType data</div>;
   }
 
   const { onClassifierChange, onSelect } = data;

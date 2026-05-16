@@ -1,43 +1,145 @@
 const BASE_URL = '/api';
 
-export interface Project {
-  id: string;
-  name: string;
-  description?: string;
-  createdAt: string;
-  updatedAt: string;
+// ── Error types ────────────────────────────────────────────────────
+
+export interface ApiError {
+  status: number;
+  message: string;
+  details?: string;
+  code?: string;
 }
 
-export interface Metamodel {
-  id: string;
-  projectId: string;
-  name: string;
-  nsUri: string;
-  nsPrefix: string;
-  content?: Record<string, any>;
+function isApiError(err: unknown): err is ApiError {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    'status' in err &&
+    'message' in err
+  );
 }
 
-export interface PaginatedResponse<T> {
-  items: T[];
-  total: number;
-  page: number;
-  limit: number;
+/**
+ * Extract a human-readable message from any error type.
+ */
+export function getErrorMessage(error: unknown): string {
+  if (isApiError(error)) {
+    return error.message;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  return 'An unexpected error occurred';
 }
 
+/**
+ * Extract detail string from an error, if available.
+ */
+export function getErrorDetails(error: unknown): string | undefined {
+  if (isApiError(error)) {
+    return error.details;
+  }
+  return undefined;
+}
+
+// ── Internal request helpers ───────────────────────────────────────
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Core request function.
+ *
+ * - On HTTP errors (status >= 400), parses the response body as JSON to
+ *   extract a rich ApiError and throws it.
+ * - On network errors (TypeError), retries up to 3 times with exponential
+ *   backoff (1 s, 2 s, 4 s).
+ * - On success, converts snake_case keys to camelCase via snakeToCamel.
+ */
 async function request<T>(
   url: string,
   options?: RequestInit,
 ): Promise<T> {
-  const res = await fetch(`${BASE_URL}${url}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`API ${res.status}: ${body || res.statusText}`);
+  const maxRetries = 3;
+  const baseDelay = 1000; // 1 second
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(`${BASE_URL}${url}`, {
+        headers: { 'Content-Type': 'application/json' },
+        ...options,
+      });
+
+      if (!res.ok) {
+        let errorBody: Record<string, unknown> | null = null;
+        try {
+          errorBody = (await res.json()) as Record<string, unknown>;
+        } catch {
+          // Response body is not valid JSON — that's okay
+        }
+
+        const apiError: ApiError = {
+          status: res.status,
+          message:
+            (errorBody?.message as string) || res.statusText,
+          details:
+            (errorBody?.error as string) ||
+            (errorBody?.details as string) ||
+            (errorBody ? JSON.stringify(errorBody) : undefined),
+          code: errorBody?.code as string | undefined,
+        };
+
+        throw apiError;
+      }
+
+      const text = await res.text();
+      return text
+        ? (snakeToCamel(JSON.parse(text)) as T)
+        : (undefined as unknown as T);
+    } catch (err) {
+      // Network errors (TypeError) are retryable — apply exponential backoff
+      if (err instanceof TypeError && attempt < maxRetries) {
+        await sleep(baseDelay * Math.pow(2, attempt));
+        continue;
+      }
+      // Everything else (ApiError, SyntaxError, …) is re-thrown immediately
+      throw err;
+    }
   }
-  const text = await res.text();
-  return text ? (snakeToCamel(JSON.parse(text)) as T) : (undefined as unknown as T);
+
+  // TypeScript safety net — the loop always returns or throws before reaching here
+  throw new Error('Max retries exceeded');
+}
+
+/**
+ * Safe wrapper around request().
+ *
+ * Never throws — returns { success, data, error } so callers can handle
+ * errors without try / catch.
+ */
+export async function safeRequest<T>(
+  url: string,
+  options?: RequestInit,
+): Promise<{ success: boolean; data?: T; error?: ApiError }> {
+  try {
+    const data = await request<T>(url, options);
+    return { success: true, data };
+  } catch (err) {
+    if (isApiError(err)) {
+      return { success: false, error: err };
+    }
+    return {
+      success: false,
+      error: {
+        status: 0,
+        message:
+          err instanceof Error ? err.message : 'An unexpected error occurred',
+      },
+    };
+  }
 }
 
 function snakeToCamel(obj: unknown): unknown {
@@ -141,6 +243,29 @@ export function exportMetamodel(
     `/projects/${projectId}/metamodels/${mmid}/export?format=${encodeURIComponent(format)}`,
     { method: 'POST' },
   );
+}
+
+// ── XMI Export (Eclipse EMF interoperability) ────────────────────────
+
+/**
+ * Abre el archivo .ecore (XMI 2.0) exportado en nueva pestaña.
+ */
+export function exportEcore(projectId: string, metamodelId: string): void {
+  window.open(`${BASE_URL}/projects/${projectId}/xmi/${metamodelId}/ecore`, '_blank');
+}
+
+/**
+ * Abre el archivo .genmodel en nueva pestaña.
+ */
+export function exportGenmodel(projectId: string, metamodelId: string): void {
+  window.open(`${BASE_URL}/projects/${projectId}/xmi/${metamodelId}/genmodel`, '_blank');
+}
+
+/**
+ * Descarga el ZIP con .ecore + .genmodel.
+ */
+export function exportXmiZip(projectId: string, metamodelId: string): void {
+  window.open(`${BASE_URL}/projects/${projectId}/xmi/${metamodelId}/zip`, '_blank');
 }
 
 // ── M1 Models ──────────────────────────────────────────────────────

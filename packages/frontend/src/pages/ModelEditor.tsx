@@ -24,6 +24,8 @@ import {
   Metamodel,
   M1Model,
 } from '../api/client';
+import { Download, Save } from '../components/icons';
+import ErrorPanel from '../components/feedback/ErrorPanel';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -348,7 +350,7 @@ function ModelEditorInner() {
   }
 
   if (error && !metamodel) {
-    return <div className="msg msg-error">⚠️ {error}</div>;
+    return <ErrorPanel title="Error" message={error} compact />;
   }
 
   const paletteItems = epkg ? concreteEClasses(epkg) : [];
@@ -387,23 +389,23 @@ function ModelEditorInner() {
           <span style={{ color: '#f59e0b', fontSize: 12 }}>Unsaved changes</span>
         )}
         <button className="btn btn-secondary btn-sm" onClick={() => handleExport('json')}>
-          📥 JSON
+          <Download size={14} /> JSON
         </button>
         <button className="btn btn-secondary btn-sm" onClick={() => handleExport('xmi')}>
-          📥 XMI
+          <Download size={14} /> XMI
         </button>
         <button
           className="btn btn-primary btn-sm"
           onClick={handleSave}
           disabled={saving}
         >
-          {saving ? 'Saving...' : '💾 Save'}
+          {saving ? 'Saving...' : <><Save size={14} /> Save</>}
         </button>
       </div>
 
       {error && (
-        <div style={{ padding: '6px 20px', background: '#7f1d1d', color: '#fca5a5', fontSize: 13 }}>
-          ⚠️ {error}
+        <div style={{ padding: '6px 20px' }}>
+          <ErrorPanel title="Error" message={error} compact />
         </div>
       )}
 

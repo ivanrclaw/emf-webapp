@@ -1,7 +1,7 @@
 /* ── EEnumNode ────────────────────────────────────────────────── */
 .node {
-  background: #ffffff;
-  border: 2px solid #fb923c;
+  background: var(--node-bg);
+  border: 2px solid var(--eenum-border);
   border-radius: 12px;
   min-width: 190px;
   max-width: 290px;
@@ -20,11 +20,11 @@
   box-shadow:
     0 6px 20px rgba(249, 115, 22, 0.18),
     0 2px 6px rgba(0, 0, 0, 0.06);
-  border-color: #f97316;
+  border-color: var(--eenum-border-hover);
 }
 
 .node:global(.selected) {
-  border-color: #ea580c;
+  border-color: var(--eenum-border-selected);
   box-shadow:
     0 0 0 3px rgba(249, 115, 22, 0.2),
     0 6px 20px rgba(249, 115, 22, 0.15);
@@ -32,9 +32,9 @@
 
 /* ── Header ──────────────────────────────────────────────────── */
 .header {
-  background: linear-gradient(135deg, #fff7ed, #ffedd5);
+  background: var(--eenum-header-bg);
   padding: 10px 14px;
-  border-bottom: 1px solid #fed7aa;
+  border-bottom: 1px solid var(--eenum-header-border);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -44,7 +44,7 @@
 .name {
   font-weight: 700;
   font-size: 14px;
-  color: #9a3412;
+  color: var(--eenum-name-color);
   cursor: text;
   flex: 1;
   min-width: 0;
@@ -57,9 +57,9 @@
 .nameInput {
   font-weight: 700;
   font-size: 14px;
-  color: #9a3412;
-  background: #fff;
-  border: 1.5px solid #fb923c;
+  color: var(--eenum-name-color);
+  background: var(--eenum-name-input-bg);
+  border: 1.5px solid var(--eenum-border);
   border-radius: 6px;
   padding: 3px 8px;
   outline: none;
@@ -78,13 +78,13 @@
   gap: 4px;
   padding: 4px 14px;
   font-size: 12px;
-  color: #374151;
-  border-bottom: 1px solid #f3f4f6;
+  color: var(--node-text);
+  border-bottom: 1px solid var(--eenum-literal-border);
   transition: background 0.1s;
 }
 
 .literalItem:hover {
-  background: rgba(0, 0, 0, 0.02);
+  background: var(--node-item-hover);
 }
 
 .literalItem:last-child {
@@ -102,12 +102,12 @@
 }
 
 .literalValue {
-  color: #78716c;
+  color: var(--node-text-secondary);
   font-size: 11px;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
 }
 
 .equals {
-  color: #d6d3d1;
+  color: var(--node-text-muted);
   margin: 0 4px;
 }

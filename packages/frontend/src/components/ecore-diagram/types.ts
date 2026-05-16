@@ -98,6 +98,15 @@ export type EcoreNodeData = {
   type: EcoreNodeType;
   classifier: SerializableEClass | SerializableEEnum | SerializableEDataType;
   ePackage: SerializableEPackage;
+  // Violaciones OCL (opcional, para validación en vivo)
+  violations?: Array<{
+    constraintId: string;
+    constraintName: string;
+    expression: string;
+    severity: 'error' | 'warning' | 'info';
+    passed: boolean;
+    error?: string;
+  }>;
   // Callbacks
   onClassifierChange: (id: string, updates: Partial<SerializableEClass | SerializableEEnum | SerializableEDataType>) => void;
   onAddAttribute: (classId: string) => void;

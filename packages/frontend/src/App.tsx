@@ -1,99 +1,139 @@
-import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useParams, Navigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import ProjectList from './pages/ProjectList';
-import ProjectDetail from './pages/ProjectDetail';
-import EcoreEditor from './components/ecore-diagram/EcoreEditor';
-import ModelList from './pages/ModelList';
-import ModelEditor from './pages/ModelEditor';
-import SpecEditor from './pages/SpecEditor';
-import OCLConstraintPage from './pages/OCLConstraintPage';
-import CodeTemplatePage from './pages/CodeTemplatePage';
-import ToastProvider, { useToast } from './components/ToastProvider';
-import Breadcrumbs from './components/Breadcrumbs';
+import { WorkspaceProvider, useWorkspace } from './hooks/useWorkspace';
+import { WorkspaceLayout } from './layouts/WorkspaceLayout';
+import ToastProvider from './components/ToastProvider';
 import './App.css';
 
-function AppLayout() {
-  const location = useLocation();
-  const isEditor = location.pathname.includes('/edit');
-  const { addToast } = useToast();
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+/**
+ * Deep-link handler: when the user navigates to a specific URL
+ * (e.g., /projects/:pid/metamodels/:mmid/edit), we open the
+ * corresponding tab in the workspace.
+ */
+function DeepLinkRouter() {
+  const { pid, mmid } = useParams<{ pid: string; mmid: string }>();
+  const workspace = useWorkspace();
 
   useEffect(() => {
-    const saved = localStorage.getItem('theme');
-    if (saved === 'light' || saved === 'dark') {
-      setTheme(saved);
-      document.documentElement.setAttribute('data-theme', saved);
-    } else {
-      document.documentElement.setAttribute('data-theme', 'dark');
+    if (pid && mmid) {
+      workspace.setContext(pid, mmid);
+      workspace.openTab({
+        type: 'diagram',
+        title: 'Diagram',
+        projectId: pid,
+        metamodelId: mmid,
+        dirty: false,
+        closable: true,
+      });
     }
-  }, []);
+  }, [pid, mmid]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function toggleTheme() {
-    const next = theme === 'dark' ? 'light' : 'dark';
-    setTheme(next);
-    document.documentElement.setAttribute('data-theme', next);
-    localStorage.setItem('theme', next);
-    addToast(`Switched to ${next} mode`, 'info');
-  }
+  return <WorkspaceLayout />;
+}
 
-  // Editor renders fullscreen (no app chrome)
-  if (isEditor) {
-    return (
-      <Routes>
-        <Route path="/projects/:pid/metamodels/:mmid/edit" element={<EcoreEditor />} />
-        <Route path="/projects/:pid/metamodels/:mmid/models/:modelId/edit" element={<ModelEditor />} />
-      </Routes>
-    );
-  }
+function DeepLinkOCL() {
+  const { pid, mmid } = useParams<{ pid: string; mmid: string }>();
+  const workspace = useWorkspace();
 
-  return (
-    <div className="app-wrapper">
-      <header className="app-header">
-        <div className="header-inner">
-          <Link to="/" className="app-title">
-            <div className="app-logo">E</div>
-            EMF WebApp
-          </Link>
-          <Breadcrumbs />
-          <nav className="app-nav">
-            <Link to="/" className="nav-link active">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-                <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
-              </svg>
-              Projects
-            </Link>
-          </nav>
-          <button
-            onClick={toggleTheme}
-            className="btn btn-ghost btn-icon"
-            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-            style={{ fontSize: 18 }}
-          >
-            {theme === 'dark' ? '☀️' : '🌙'}
-          </button>
-        </div>
-      </header>
-      <main className="app-main">
-        <Routes>
-          <Route path="/" element={<ProjectList />} />
-          <Route path="/projects/:id" element={<ProjectDetail />} />
-          <Route path="/projects/:pid/metamodels/:mmid/models" element={<ModelList />} />
-          <Route path="/projects/:pid/metamodels/:mmid/specs" element={<SpecEditor />} />
-          <Route path="/projects/:pid/metamodels/:mmid/specs/:specId" element={<SpecEditor />} />
-          <Route path="/projects/:pid/metamodels/:mmid/constraints" element={<OCLConstraintPage />} />
-          <Route path="/projects/:pid/metamodels/:mmid/templates" element={<CodeTemplatePage />} />
-        </Routes>
-      </main>
-    </div>
-  );
+  useEffect(() => {
+    if (pid && mmid) {
+      workspace.setContext(pid, mmid);
+      workspace.openTab({
+        type: 'ocl',
+        title: 'OCL Constraints',
+        projectId: pid,
+        metamodelId: mmid,
+        dirty: false,
+        closable: true,
+      });
+    }
+  }, [pid, mmid]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return <WorkspaceLayout />;
+}
+
+function DeepLinkCode() {
+  const { pid, mmid } = useParams<{ pid: string; mmid: string }>();
+  const workspace = useWorkspace();
+
+  useEffect(() => {
+    if (pid && mmid) {
+      workspace.setContext(pid, mmid);
+      workspace.openTab({
+        type: 'codegen',
+        title: 'Code Generation',
+        projectId: pid,
+        metamodelId: mmid,
+        dirty: false,
+        closable: true,
+      });
+    }
+  }, [pid, mmid]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return <WorkspaceLayout />;
+}
+
+function DeepLinkModels() {
+  const { pid, mmid } = useParams<{ pid: string; mmid: string }>();
+  const workspace = useWorkspace();
+
+  useEffect(() => {
+    if (pid && mmid) {
+      workspace.setContext(pid, mmid);
+      workspace.openTab({
+        type: 'models',
+        title: 'Models',
+        projectId: pid,
+        metamodelId: mmid,
+        dirty: false,
+        closable: true,
+      });
+    }
+  }, [pid, mmid]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return <WorkspaceLayout />;
+}
+
+function DeepLinkSpec() {
+  const { pid, mmid } = useParams<{ pid: string; mmid: string }>();
+  const workspace = useWorkspace();
+
+  useEffect(() => {
+    if (pid && mmid) {
+      workspace.setContext(pid, mmid);
+      workspace.openTab({
+        type: 'spec',
+        title: 'Graphical Spec',
+        projectId: pid,
+        metamodelId: mmid,
+        dirty: false,
+        closable: true,
+      });
+    }
+  }, [pid, mmid]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return <WorkspaceLayout />;
 }
 
 export default function App() {
   return (
     <BrowserRouter>
       <ToastProvider>
-        <AppLayout />
+        <WorkspaceProvider>
+          <Routes>
+            {/* Deep links for backward compatibility */}
+            <Route path="/projects/:pid/metamodels/:mmid/edit" element={<DeepLinkRouter />} />
+            <Route path="/projects/:pid/metamodels/:mmid/models/:modelId/edit" element={<DeepLinkRouter />} />
+            <Route path="/projects/:pid/metamodels/:mmid/constraints" element={<DeepLinkOCL />} />
+            <Route path="/projects/:pid/metamodels/:mmid/templates" element={<DeepLinkCode />} />
+            <Route path="/projects/:pid/metamodels/:mmid/models" element={<DeepLinkModels />} />
+            <Route path="/projects/:pid/metamodels/:mmid/specs" element={<DeepLinkSpec />} />
+            <Route path="/projects/:pid/metamodels/:mmid/specs/:specId" element={<DeepLinkSpec />} />
+
+            {/* Default: workspace with welcome tab */}
+            <Route path="*" element={<WorkspaceLayout />} />
+          </Routes>
+        </WorkspaceProvider>
       </ToastProvider>
     </BrowserRouter>
   );
