@@ -12,6 +12,7 @@ export interface EditorActions {
   exportZip: () => void;
   exportGenmodel: () => void;
   importEcore: () => void;
+  importEclipseZip: () => void;
   undo: () => void;
   redo: () => void;
   validate: () => void;
@@ -52,6 +53,7 @@ const defaultActions: EditorActions = {
   exportZip: noop,
   exportGenmodel: noop,
   importEcore: noop,
+  importEclipseZip: noop,
   undo: noop,
   redo: noop,
   validate: noop,

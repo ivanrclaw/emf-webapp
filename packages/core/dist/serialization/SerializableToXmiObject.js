@@ -272,7 +272,7 @@ export function serializableToXmiCompatible(serializable) {
             cls.getFeatureID = () => -1;
             cls.getFeatureCount = () => cls.eStructuralFeatures.length;
             // Add features (attributes + references)
-            for (const attr of sc.eAttributes) {
+            for (const attr of sc.eAttributes || []) {
                 const eTypeName = attr.eType || 'EString';
                 const a = {
                     name: attr.name,
@@ -308,7 +308,7 @@ export function serializableToXmiCompatible(serializable) {
                 cls.eAttributes.push(a);
                 cls.eAllAttributes.push(a);
             }
-            for (const ref of sc.eReferences) {
+            for (const ref of sc.eReferences || []) {
                 const r = {
                     name: ref.name,
                     changeable: ref.changeable ?? true,

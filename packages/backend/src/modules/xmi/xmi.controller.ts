@@ -19,6 +19,8 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+import AdmZip = require('adm-zip');
 import { XmiService } from './xmi.service.js';
 import type { XmiInstanceDocument } from '@emf-webapp/core/serialization';
 
@@ -66,7 +68,16 @@ export class XmiController {
 
   /**
    * GET /projects/:projectId/xmi/:metamodelId/zip
-   * Exporta el ZIP completo (.ecore + .genmodel) para Eclipse.
+   * Exporta un proyecto Eclipse completo como ZIP importable.
+   * Estructura:
+   *   {pluginId}/
+   *   ├── .project
+   *   ├── .classpath
+   *   ├── META-INF/MANIFEST.MF
+   *   ├── build.properties
+   *   ├── plugin.xml
+   *   ├── model/{name}.ecore
+   *   └── model/{name}.genmodel
    */
   @Get(':metamodelId/zip')
   async exportZip(
@@ -74,23 +85,12 @@ export class XmiController {
     @Param('metamodelId') metamodelId: string,
     @Res() res: Response,
   ): Promise<void> {
-    const [xmi, genmodel] = await Promise.all([
-      this.xmiService.exportToXmi(projectId, metamodelId),
-      this.xmiService.exportGenmodel(projectId, metamodelId),
-    ]);
-
-    if (!xmi) throw new NotFoundException('Metamodel not found');
-
-    const AdmZip = (await import('adm-zip')).default;
-    const zip = new AdmZip();
-    zip.addFile('model.ecore', Buffer.from(xmi, 'utf-8'));
-    if (genmodel) {
-      zip.addFile('model.genmodel', Buffer.from(genmodel, 'utf-8'));
-    }
+    const eclipseZip = await this.xmiService.exportEclipseProject(projectId, metamodelId);
+    if (!eclipseZip) throw new NotFoundException('Metamodel not found');
 
     res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', `attachment; filename="${metamodelId}.zip"`);
-    res.send(zip.toBuffer());
+    res.setHeader('Content-Disposition', `attachment; filename="${metamodelId}-eclipse.zip"`);
+    res.send(eclipseZip);
   }
 
   /**
@@ -110,6 +110,47 @@ export class XmiController {
     }
     const result = await this.xmiService.importFromXmi(projectId, metamodelId, xml);
     return { success: result, message: result ? 'Metamodel imported successfully' : 'Import failed' };
+  }
+
+  /**
+   * POST /projects/:projectId/xmi/:metamodelId/import-eclipse-zip
+   * Importa un proyecto Eclipse completo (ZIP con .ecore dentro).
+   * Acepta multipart/form-data con campo 'file'.
+   */
+  @Post(':metamodelId/import-eclipse-zip')
+  @UseInterceptors(FileInterceptor('file'))
+  async importEclipseZip(
+    @Param('projectId') projectId: string,
+    @Param('metamodelId') metamodelId: string,
+    @UploadedFile() file: any,
+  ): Promise<{ success: boolean; message: string; ecoreFile?: string }> {
+    if (!file) {
+      throw new BadRequestException('ZIP file is required. Upload as multipart/form-data with field "file".');
+    }
+
+    try {
+      const zip = new AdmZip(file.buffer);
+      const entries = zip.getEntries();
+
+      // Find .ecore file in the ZIP
+      const ecoreEntry = entries.find((e: any) => e.entryName.endsWith('.ecore') && !e.isDirectory);
+      if (!ecoreEntry) {
+        throw new BadRequestException('No .ecore file found in the ZIP archive.');
+      }
+
+      const ecoreXml = ecoreEntry.getData().toString('utf-8');
+      const result = await this.xmiService.importFromXmi(projectId, metamodelId, ecoreXml);
+
+      return {
+        success: result,
+        message: result ? `Imported ${ecoreEntry.entryName} successfully` : 'Import failed',
+        ecoreFile: ecoreEntry.entryName,
+      };
+    } catch (err: any) {
+      if (err instanceof BadRequestException) throw err;
+      this.logger.error(`Eclipse ZIP import failed: ${err.message}`);
+      throw new BadRequestException(`Failed to process ZIP: ${err.message}`);
+    }
   }
 
   /**

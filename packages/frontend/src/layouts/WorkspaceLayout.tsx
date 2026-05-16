@@ -259,6 +259,9 @@ function WorkspaceInner() {
         case 'import-ecore':
           editor.actions.importEcore();
           break;
+        case 'import-eclipse-zip':
+          editor.actions.importEclipseZip();
+          break;
         case 'export-ecore':
           editor.actions.exportEcore();
           break;

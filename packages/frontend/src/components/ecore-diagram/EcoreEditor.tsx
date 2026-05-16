@@ -288,6 +288,32 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
           };
           input.click();
         },
+        importEclipseZip: () => {
+          const input = document.createElement('input');
+          input.type = 'file';
+          input.accept = '.zip';
+          input.onchange = async () => {
+            const file = input.files?.[0];
+            if (!file) return;
+            try {
+              const formData = new FormData();
+              formData.append('file', file);
+              const resp = await fetch(`/api/projects/${projectId}/xmi/${metamodelId}/import-eclipse-zip`, {
+                method: 'POST',
+                body: formData,
+              });
+              const data = await resp.json();
+              if (data.success) {
+                window.location.reload();
+              } else {
+                alert('Import failed: ' + (data.message || 'Unknown error'));
+              }
+            } catch (err: any) {
+              alert('Error importing Eclipse project: ' + err.message);
+            }
+          };
+          input.click();
+        },
         undo: () => model.undo(),
         redo: () => model.redo(),
         validate: () => ocl.refresh(),
