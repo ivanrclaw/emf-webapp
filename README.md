@@ -9,12 +9,14 @@ A modern, web-based alternative to the [Eclipse Modeling Framework (EMF)](https:
 ## Features
 
 - **Visual Metamodel Editor** — Drag-and-drop diagram editor (React Flow) for EClasses, EAttributes, EReferences, EEnums, and inheritance
-- **Eclipse Interoperability** — Import/export `.ecore` XMI files fully compatible with Eclipse EMF
+- **Eclipse Interoperability** — Import/export `.ecore` XMI files fully compatible with Eclipse EMF (v2.45.0)
 - **OCL Constraints** — Define and validate Object Constraint Language rules against model instances
 - **Code Generation** — Template-based code generation from metamodels (Java, TypeScript, etc.)
 - **M1 Model Instances** — Create and manage instances conforming to your metamodels
+- **DeepLink Navigation** — Click any EClass/M1 model node to jump directly to its property inspector
 - **Auto-Layout** — Dagre-based hierarchical layout (top-bottom / left-right) with fit-to-view
-- **Dark Mode** — Full dark/light theme support
+- **Onboarding Tour** — Guided first-use walkthrough with auto-dismiss on click-outside
+- **Toast Notifications** — Real-time success/error feedback for all CRUD operations
 - **GenModel Export** — Generate `.genmodel` files for Eclipse code generation workflows
 - **Project Management** — Organize metamodels, models, and constraints within projects
 
@@ -26,16 +28,19 @@ emf-webapp/
 │   ├── core/        # Ecore model, XMI serialization, OCL engine (shared)
 │   ├── backend/     # NestJS REST API + SQLite persistence
 │   └── frontend/    # React 19 + Vite + React Flow diagram editor
+├── .github/workflows/
+│   └── deploy.yml   # GitHub Actions → Fly.io (auto-deploy on push to main)
 ├── fly.toml         # Fly.io deployment config
 └── Dockerfile       # Production multi-stage build
 ```
 
 | Layer | Stack |
 |-------|-------|
-| Frontend | React 19, Vite, React Flow, Monaco Editor |
+| Frontend | React 19, Vite, React Flow, Monaco Editor, Tailwind CSS 4, shadcn/ui |
 | Backend | NestJS, TypeORM, SQLite |
 | Core | TypeScript (shared serialization + OCL) |
-| Deploy | Fly.io (auto-scale to zero, persistent volume) |
+| Deploy | Fly.io (auto-scale to zero, persistent volume `emfdata`) |
+| CI/CD | GitHub Actions (automated deploy on push to `main`) |
 
 ## Getting Started
 
@@ -81,6 +86,7 @@ EMF WebApp produces `.ecore` files that are **directly importable** into Eclipse
 - Default value omission (matches Eclipse behavior)
 - `xmi:id` only on classifiers (EClass, EEnum, EDataType)
 - GenModel generation with all genClasses and genEnums
+- **Error-safe export**: robust try/catch on all XMI serialization paths
 
 ### Import from Eclipse
 
@@ -118,7 +124,11 @@ Deployed on [Fly.io](https://fly.io) with auto-scaling:
 fly deploy
 ```
 
-Configuration in `fly.toml` — uses a persistent volume for SQLite data.
+Configuration in `fly.toml` — uses a persistent volume (`emfdata`) for SQLite data.
+
+### Automated deployment
+
+Push to `main` triggers an automatic deploy via GitHub Actions (requires `FLY_API_TOKEN` secret configured in repo settings).
 
 ## License
 
