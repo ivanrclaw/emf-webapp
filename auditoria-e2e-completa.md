@@ -113,6 +113,18 @@
 
 ---
 
+### Bug #7: El cambio de tema no persiste al hacer F5 🔴
+
+**Archivo:** `packages/frontend/index.html`
+
+**Causa:** El theme toggle guardaba en `localStorage.setItem('theme', ...)` pero al cargar la página no se leía ese valor. El `data-theme` nunca se inicializaba, por lo que tras F5 se perdía la preferencia.
+
+**Fix:** Añadir un script síncrono en `<head>` del `index.html` que ejecuta una IIFE leyendo `localStorage.getItem('theme')` y aplicando `document.documentElement.setAttribute('data-theme', theme)` antes de que React se monte. Si no hay tema guardado, por defecto es 'dark'.
+
+**Commit:** `8b59354`
+
+---
+
 ## Falsos Positivos (no son bugs)
 
 | Reportado como bug | Realidad |
@@ -197,6 +209,7 @@
 | 3 | `ba867f0` | Fix XMI/ZIP export content.name | ✅ Desplegado |
 | 4 | `3a33732` | Fix instance export/import content.name | ✅ Desplegado |
 | 5 | `0e17096` | Fix nsURI/nsPrefix en instance export/import | ✅ Desplegado |
+| 6 | `8b59354` | Fix theme persistence on F5 - script inline en index.html | ✅ Desplegado |
 
 ## Pendiente
 
