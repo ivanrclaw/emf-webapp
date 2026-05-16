@@ -10,6 +10,7 @@ import {
 } from '../api/client';
 import { AlertTriangle, Layers, Box, Calendar, Trash2 } from '../components/icons';
 import ErrorPanel from '../components/feedback/ErrorPanel';
+import { useWorkspace } from '../hooks/useWorkspace';
 
 interface ModelListProps {
   projectId?: string;
@@ -20,6 +21,7 @@ export default function ModelList(props: ModelListProps) {
   const params = useParams<{ pid: string; mmid: string }>();
   const projectId = props.projectId || params.pid || '';
   const metamodelId = props.metamodelId || params.mmid || '';
+  const workspace = useWorkspace();
 
   const [metamodel, setMetamodel] = useState<Metamodel | null>(null);
   const [models, setModels] = useState<M1Model[]>([]);
@@ -167,15 +169,23 @@ export default function ModelList(props: ModelListProps) {
               </div>
 
               <div className="mm-card-actions">
-                <Link
-                  to={`/projects/${projectId}/metamodels/${metamodelId}/models/${m.id}/edit`}
+                <button
+                  onClick={() => workspace.openTab({
+                    type: 'model-editor',
+                    title: `${m.name} Editor`,
+                    projectId,
+                    metamodelId,
+                    modelId: m.id,
+                    dirty: false,
+                    closable: true,
+                  })}
                   className="btn btn-primary btn-sm"
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
                   </svg>
                   Open Editor
-                </Link>
+                </button>
                 <button
                   className="btn btn-sm btn-ghost"
                   style={{ color: 'var(--danger)', marginLeft: 'auto' }}

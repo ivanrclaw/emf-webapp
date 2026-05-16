@@ -96,27 +96,27 @@ function DeepLinkModels() {
 }
 
 /**
- * Deep-link handler for model editing: opens a 'models' tab
- * (since there's no dedicated model editor yet, showing the models list
- * is better than redirecting to the diagram).
+ * Deep-link handler for model editing: opens a 'model-editor' tab
+ * with the specific model ID from the URL.
  */
 function DeepLinkModelEditor() {
-  const { pid, mmid } = useParams<{ pid: string; mmid: string }>();
+  const { pid, mmid, modelId } = useParams<{ pid: string; mmid: string; modelId: string }>();
   const workspace = useWorkspace();
 
   useEffect(() => {
-    if (pid && mmid) {
+    if (pid && mmid && modelId) {
       workspace.setContext(pid, mmid);
       workspace.openTab({
-        type: 'models',
-        title: 'Models',
+        type: 'model-editor',
+        title: 'Model Editor',
         projectId: pid,
         metamodelId: mmid,
+        modelId,
         dirty: false,
         closable: true,
       });
     }
-  }, [pid, mmid]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pid, mmid, modelId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return <WorkspaceLayout />;
 }

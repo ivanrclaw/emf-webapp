@@ -31,7 +31,7 @@ import { getProjects, createProject } from '../api/client';
 import type { Project } from '../api/client';
 
 // Tab content components
-import { DiagramTab, OCLTab, CodeGenTab, ModelsTab, SpecTab, ProjectInfoTab } from '../components/workspace/tabs';
+import { DiagramTab, OCLTab, CodeGenTab, ModelsTab, ModelEditorTab, SpecTab, ProjectInfoTab } from '../components/workspace/tabs';
 
 // ─── Styles ──────────────────────────────────────────────────────────────
 
@@ -125,6 +125,14 @@ function TabContent({ tab, onOpenTab, onShowCreateProject, onShowImportEcore }: 
         <ModelsTab
           projectId={tab.projectId || ''}
           metamodelId={tab.metamodelId || ''}
+        />
+      );
+    case 'model-editor':
+      return (
+        <ModelEditorTab
+          projectId={tab.projectId || ''}
+          metamodelId={tab.metamodelId || ''}
+          modelId={tab.modelId || ''}
         />
       );
     case 'spec':

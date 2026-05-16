@@ -97,7 +97,7 @@ export default function EEnumNode(props: NodeProps) {
       {/* ── Literals ─────────────────────────────────────── */}
       <div className={styles.literals}>
         {classifier.eLiterals.length === 0 && (
-          <div className={styles.literalItem} style={{ color: '#9ca3af', fontStyle: 'italic' }}>
+          <div className={styles.literalItem} style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>
             no literals
           </div>
         )}

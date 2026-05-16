@@ -274,6 +274,7 @@ export default function Sidebar({
       { type: 'ocl', icon: Pencil, title: `${mm.name} — OCL` },
       { type: 'codegen', icon: Code, title: `${mm.name} — Code Gen` },
       { type: 'models', icon: Play, title: `${mm.name} — Models` },
+      { type: 'spec', icon: Link2, title: `${mm.name} — Graphical Spec` },
     ];
 
     return (

@@ -21,7 +21,7 @@ import ErrorPanel from '../components/feedback/ErrorPanel';
 
 const SEVERITY_OPTIONS = ['error', 'warning', 'info'] as const;
 const SEVERITY_COLORS: Record<string, string> = {
-  error: '#ef4444',
+  error: 'var(--danger)',
   warning: '#f59e0b',
   info: '#3b82f6',
 };
@@ -204,26 +204,26 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
           <div className="form-field">
-            <label>Name {!formName && <span style={{ color: '#ef4444' }}>*</span>}</label>
+            <label>Name {!formName && <span style={{ color: 'var(--danger)' }}>*</span>}</label>
             <input
               value={formName}
               onChange={(e) => setFormName(e.target.value)}
               placeholder="e.g., UniqueName"
               style={{
                 width: '100%', padding: '8px 12px', borderRadius: 6,
-                border: `1px solid ${!formName ? '#ef4444' : 'var(--border)'}`, fontSize: '.8125rem',
+                border: `1px solid ${!formName ? 'var(--danger)' : 'var(--border)'}`, fontSize: '.8125rem',
                 fontFamily: 'inherit', background: 'var(--surface)',
               }}
             />
           </div>
           <div className="form-field">
-            <label>Context (EClass) {!formContext && <span style={{ color: '#ef4444' }}>*</span>}</label>
+            <label>Context (EClass) {!formContext && <span style={{ color: 'var(--danger)' }}>*</span>}</label>
             <select
               value={formContext}
               onChange={(e) => setFormContext(e.target.value)}
               style={{
                 width: '100%', padding: '8px 12px', borderRadius: 6,
-                border: `1px solid ${!formContext ? '#ef4444' : 'var(--border)'}`, fontSize: '.8125rem',
+                border: `1px solid ${!formContext ? 'var(--danger)' : 'var(--border)'}`, fontSize: '.8125rem',
                 fontFamily: 'inherit', background: 'var(--surface)',
               }}
             >
@@ -251,7 +251,7 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
           </div>
         </div>
         <div className="form-field" style={{ marginBottom: 12 }}>
-          <label>OCL Expression {!formExpression && <span style={{ color: '#ef4444' }}>*</span>}</label>
+          <label>OCL Expression {!formExpression && <span style={{ color: 'var(--danger)' }}>*</span>}</label>
           <textarea
             value={formExpression}
             onChange={(e) => setFormExpression(e.target.value)}
@@ -259,9 +259,9 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
             rows={4}
             style={{
               width: '100%', padding: '8px 12px', borderRadius: 6,
-              border: `1px solid ${!formExpression ? '#ef4444' : 'var(--border)'}`, fontSize: '.8125rem',
-              fontFamily: "'JetBrains Mono', monospace", background: '#0f172a',
-              color: '#e2e8f0', resize: 'vertical',
+              border: `1px solid ${!formExpression ? 'var(--danger)' : 'var(--border)'}`, fontSize: '.8125rem',
+              fontFamily: "'JetBrains Mono', monospace", background: 'var(--bg)',
+              color: 'var(--text)', resize: 'vertical',
             }}
           />
         </div>
@@ -274,8 +274,8 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
               Cancel
             </button>
           )}
-          {(!formName || !formContext || !formExpression) && (
-            <span style={{ fontSize: 11, color: '#ef4444' }}>All fields are required (name, context, expression)</span>
+          {(formName || formContext || formExpression) && (!formName || !formContext || !formExpression) && (
+            <span style={{ fontSize: 11, color: 'var(--danger)' }}>All fields are required (name, context, expression)</span>
           )}
         </div>
       </div>
@@ -301,7 +301,7 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
             ))}
           </select>
         )}
-        <span style={{ fontSize: 12, color: '#64748b' }}>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
           {constraints.length} constraint{constraints.length !== 1 ? 's' : ''}
         </span>
       </div>
@@ -311,7 +311,7 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
         <div className="card" style={{ padding: 16, marginBottom: 20 }}>
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
             Validation Results
-            <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 400, color: '#64748b' }}>
+            <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 400, color: 'var(--text-muted)' }}>
               ({results.filter((r) => r.passed).length}/{results.length} passed)
             </span>
           </div>
@@ -319,17 +319,17 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
             <div key={r.constraintId} style={{
               display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 12px',
               marginBottom: 4, borderRadius: 6,
-              background: r.passed ? '#052e16' : '#450a0a',
-              border: `1px solid ${r.passed ? '#166534' : '#7f1d1d'}`,
+              background: r.passed ? 'var(--success-bg)' : 'var(--danger-bg)',
+              border: `1px solid ${r.passed ? 'var(--success)' : 'var(--danger)'}`,
             }}>
               <span style={{ fontSize: 14 }}>{r.passed ? '✓' : '✗'}</span>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 12, fontWeight: 600 }}>{r.name}</div>
-                <div style={{ fontSize: 11, color: '#94a3b8' }}>
+                <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
                   {r.context}: {r.expression}
                 </div>
                 {r.error && (
-                  <div style={{ fontSize: 11, color: '#fca5a5', marginTop: 4 }}>
+                  <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 4 }}>
                     {r.error}
                   </div>
                 )}
@@ -347,7 +347,7 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
         <div className="empty-state" style={{ padding: '48px 24px' }}>
           <List size={32} />
           <p>No OCL constraints yet</p>
-          <p style={{ color: '#64748b', marginTop: 4 }}>
+          <p style={{ color: 'var(--text-muted)', marginTop: 4 }}>
             Define invariants to validate model instances
           </p>
         </div>
@@ -356,18 +356,18 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
           <div key={c.id} className="card" style={{ padding: 12, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{
               width: 8, height: 8, borderRadius: '50%',
-              background: SEVERITY_COLORS[c.severity] || '#64748b',
+              background: SEVERITY_COLORS[c.severity] || 'var(--text-muted)',
               flexShrink: 0,
             }} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13, fontWeight: 500 }}>{c.name}</div>
-              <div style={{ fontSize: 11, color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                <code style={{ fontFamily: "'JetBrains Mono', monospace", color: '#64748b' }}>context {c.context} inv:</code> {c.expression}
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <code style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--text-muted)' }}>context {c.context} inv:</code> {c.expression}
               </div>
             </div>
             <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-              <button className="btn btn-ghost btn-sm" onClick={() => startEdit(c)}>Edit\n              </button>
-              <button className="btn btn-ghost btn-sm" onClick={() => handleDelete(c.id)} style={{ color: '#ef4444' }}>
+              <button className="btn btn-ghost btn-sm" onClick={() => startEdit(c)}>Edit</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => handleDelete(c.id)} style={{ color: 'var(--danger)' }}>
                 <Trash2 size={14} />
               </button>
             </div>

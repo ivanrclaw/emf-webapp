@@ -246,8 +246,8 @@ export default function SpecNode(props: NodeProps) {
       }}
     >
       {/* Source handles — both sides for connection flexibility */}
-      <Handle type="source" position={Position.Left} id="left" style={{ background: '#94a3b8', width: 8, height: 8, border: '2px solid var(--surface)' }} />
-      <Handle type="source" position={Position.Right} id="right" style={{ background: '#94a3b8', width: 8, height: 8, border: '2px solid var(--surface)' }} />
+      <Handle type="source" position={Position.Left} id="left" style={{ background: 'var(--text-secondary)', width: 8, height: 8, border: '2px solid var(--surface)' }} />
+      <Handle type="source" position={Position.Right} id="right" style={{ background: 'var(--text-secondary)', width: 8, height: 8, border: '2px solid var(--surface)' }} />
 
       {shapeContent}
     </div>

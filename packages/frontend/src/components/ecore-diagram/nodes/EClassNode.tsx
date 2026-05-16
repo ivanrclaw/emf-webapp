@@ -155,7 +155,7 @@ export default function EClassNode(props: NodeProps) {
       <div className={`${styles.section} ${styles.sectionAttributes}`}>
         <div className={styles.sectionTitle}>Attributes</div>
         {classifier.eAttributes.length === 0 && (
-          <div className={styles.item} style={{ color: '#9ca3af', fontStyle: 'italic' }}>
+          <div className={styles.item} style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>
             no attributes
           </div>
         )}
@@ -176,7 +176,7 @@ export default function EClassNode(props: NodeProps) {
       <div className={`${styles.section} ${styles.sectionReferences}`}>
         <div className={styles.sectionTitle}>References</div>
         {classifier.eReferences.length === 0 && (
-          <div className={styles.item} style={{ color: '#9ca3af', fontStyle: 'italic' }}>
+          <div className={styles.item} style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>
             no references
           </div>
         )}

@@ -290,13 +290,13 @@ export default function CodeTemplatePage(props: CodeTemplatePageProps) {
             }}
           >
             <div style={{ fontSize: 13, fontWeight: 500 }}>{g.name}</div>
-            <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{g.description}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{g.description}</div>
           </button>
         ))}
       </div>
 
       {/* Generation Output */}
-      {generating && <div style={{ padding: 20, textAlign: 'center', color: '#64748b' }}>Generating...</div>}
+      {generating && <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)' }}>Generating...</div>}
 
       {output && output.length > 0 && (
         <div className="card" style={{ padding: 16, marginBottom: 20 }}>
@@ -316,10 +316,10 @@ export default function CodeTemplatePage(props: CodeTemplatePageProps) {
           </div>
           {/* File content */}
           <div style={{
-            background: '#0f172a', borderRadius: 6, padding: 12,
+            background: 'var(--bg)', borderRadius: 6, padding: 12,
             maxHeight: 400, overflow: 'auto',
           }}>
-            <pre style={{ margin: 0, fontSize: 12, fontFamily: "'JetBrains Mono', monospace", color: '#e2e8f0', whiteSpace: 'pre-wrap' }}>
+            <pre style={{ margin: 0, fontSize: 12, fontFamily: "'JetBrains Mono', monospace", color: 'var(--text)', whiteSpace: 'pre-wrap' }}>
               {output[selectedTab]?.content}
             </pre>
           </div>
@@ -334,7 +334,7 @@ export default function CodeTemplatePage(props: CodeTemplatePageProps) {
         <div className="empty-state" style={{ padding: '48px 24px' }}>
           <FileCode size={32} />
           <p>No custom templates yet</p>
-          <p style={{ color: '#64748b', marginTop: 4 }}>
+          <p style={{ color: 'var(--text-muted)', marginTop: 4 }}>
             Create MTL templates above to generate code
           </p>
         </div>
@@ -344,7 +344,7 @@ export default function CodeTemplatePage(props: CodeTemplatePageProps) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{
                 padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600,
-                background: '#1e293b', color: '#94a3b8', textTransform: 'uppercase',
+                background: 'var(--surface)', color: 'var(--text-secondary)', textTransform: 'uppercase',
                 flexShrink: 0,
               }}>
                 {t.language}
@@ -352,22 +352,22 @@ export default function CodeTemplatePage(props: CodeTemplatePageProps) {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 500 }}>{t.name}</div>
                 {t.description && (
-                  <div style={{ fontSize: 11, color: '#64748b' }}>{t.description}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t.description}</div>
                 )}
               </div>
               <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
                 <button className="btn btn-secondary btn-sm" onClick={() => handleGenerate(t.id)} disabled={generating}>
                   ▶ Generate
                 </button>
-                <button className="btn btn-ghost btn-sm" onClick={() => startEdit(t)}>Edit\n                </button>
-                <button className="btn btn-ghost btn-sm" onClick={() => handleDelete(t.id)} style={{ color: '#ef4444' }}>
+                <button className="btn btn-ghost btn-sm" onClick={() => startEdit(t)}>Edit</button>
+                <button className="btn btn-ghost btn-sm" onClick={() => handleDelete(t.id)} style={{ color: 'var(--danger)' }}>
                   <Trash2 size={14} />
                 </button>
               </div>
             </div>
             {/* Preview first 100 chars of template */}
             <div style={{
-              fontSize: 11, color: '#475569', marginTop: 6,
+              fontSize: 11, color: 'var(--text-muted)', marginTop: 6,
               fontFamily: "'JetBrains Mono', monospace",
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
             }}>

@@ -576,7 +576,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
         maxZoom={4}
         defaultEdgeOptions={{
           animated: false,
-          style: { stroke: '#94a3b8', strokeWidth: 2 },
+          style: { stroke: 'var(--text-secondary)', strokeWidth: 2 },
         }}
         style={{ background: 'var(--bg)' }}
       >

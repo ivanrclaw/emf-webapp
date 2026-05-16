@@ -127,12 +127,12 @@ export function CollaborationBadge({ connected, users, currentUserSocketId }: Co
           width: 8,
           height: 8,
           borderRadius: '50%',
-          background: connected ? '#10b981' : '#94a3b8',
+          background: connected ? '#10b981' : 'var(--text-secondary)',
           display: 'inline-block',
           flexShrink: 0,
         }}
       />
-      <span style={{ color: connected ? '#059669' : '#64748b' }}>
+      <span style={{ color: connected ? '#059669' : 'var(--text-muted)' }}>
         {connected ? `${others.length ? `${others.length} online` : 'Connected'}` : 'Offline'}
       </span>
 
@@ -163,7 +163,7 @@ export function CollaborationBadge({ connected, users, currentUserSocketId }: Co
             </div>
           ))}
           {others.length > 4 && (
-            <span style={{ color: '#64748b', fontSize: 11, marginLeft: 2 }}>
+            <span style={{ color: 'var(--text-muted)', fontSize: 11, marginLeft: 2 }}>
               +{others.length - 4}
             </span>
           )}

@@ -15,6 +15,7 @@ export type TabType =
   | 'ocl'
   | 'codegen'
   | 'models'
+  | 'model-editor'
   | 'spec'
   | 'project-info';
 
@@ -24,6 +25,7 @@ export interface WorkspaceTab {
   title: string;
   projectId: string | null;
   metamodelId: string | null;
+  modelId?: string | null;
   dirty: boolean;
   closable: boolean;
 }

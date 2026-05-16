@@ -169,8 +169,11 @@ function defaultAttributes(eClass: EClassData): Record<string, unknown> {
 /*  ModelEditorInner (wrapped in ReactFlowProvider)                    */
 /* ------------------------------------------------------------------ */
 
-function ModelEditorInner() {
-  const { pid, mmid, modelId } = useParams<{ pid: string; mmid: string; modelId: string }>();
+function ModelEditorInner(props: { projectId?: string; metamodelId?: string; modelId?: string }) {
+  const params = useParams<{ pid: string; mmid: string; modelId: string }>();
+  const pid = props.projectId || params.pid;
+  const mmid = props.metamodelId || params.mmid;
+  const modelId = props.modelId || params.modelId;
 
   const [metamodel, setMetamodel] = useState<Metamodel | null>(null);
   const [m1Model, setM1Model] = useState<M1Model | null>(null);
@@ -288,11 +291,11 @@ function ModelEditorInner() {
         eClass,
       },
       style: {
-        background: '#1e293b',
-        border: '1px solid #334155',
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
         borderRadius: 8,
         padding: '12px 16px',
-        color: '#e2e8f0',
+        color: 'var(--text)',
         fontSize: 13,
         minWidth: 160,
       },
@@ -305,8 +308,8 @@ function ModelEditorInner() {
     (connection: Connection) => {
       setEdges((eds) => addEdge({
         ...connection,
-        markerEnd: { type: MarkerType.ArrowClosed, color: '#6366f1' },
-        style: { stroke: '#6366f1', strokeWidth: 2 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: 'var(--primary)' },
+        style: { stroke: 'var(--primary)', strokeWidth: 2 },
       }, eds));
     },
     [setEdges],
@@ -368,25 +371,25 @@ function ModelEditorInner() {
     : [];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#0f172a' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--bg)' }}>
       {/* ── Toolbar ────────────────────────────────────────── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 12, padding: '8px 20px',
-        background: '#1e293b', borderBottom: '1px solid #334155', flexShrink: 0,
+        background: 'var(--surface)', borderBottom: '1px solid var(--border)', flexShrink: 0,
       }}>
-        <Link to={`/projects/${pid}/metamodels/${mmid}/models`} style={{ color: '#94a3b8', fontSize: 13, textDecoration: 'none' }}>
+        <Link to={`/projects/${pid}/metamodels/${mmid}/models`} style={{ color: 'var(--text-secondary)', fontSize: 13, textDecoration: 'none' }}>
           ← Models
         </Link>
         <div style={{ flex: 1 }} />
-        <span style={{ color: '#94a3b8', fontSize: 13 }}>
+        <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
           {m1Model?.name || 'Model Editor'}
         </span>
         <div style={{ flex: 1 }} />
         {saveStatus === 'saved' && (
-          <span style={{ color: '#22c55e', fontSize: 12 }}>Saved</span>
+          <span style={{ color: 'var(--success)', fontSize: 12 }}>Saved</span>
         )}
         {saveStatus === 'unsaved' && (
-          <span style={{ color: '#f59e0b', fontSize: 12 }}>Unsaved changes</span>
+          <span style={{ color: 'var(--warning)', fontSize: 12 }}>Unsaved changes</span>
         )}
         <button className="btn btn-secondary btn-sm" onClick={() => handleExport('json')}>
           <Download size={14} /> JSON
@@ -414,14 +417,14 @@ function ModelEditorInner() {
 
         {/* ── Palette ───────────────────────────────────────── */}
         <div style={{
-          width: 200, background: '#1e293b', borderRight: '1px solid #334155',
+          width: 200, background: 'var(--surface)', borderRight: '1px solid var(--border)',
           padding: 12, overflowY: 'auto', flexShrink: 0,
         }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
             Palette
           </div>
           {paletteItems.length === 0 && (
-            <div style={{ fontSize: 12, color: '#64748b' }}>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
               No concrete EClasses found in metamodel
             </div>
           )}
@@ -435,14 +438,14 @@ function ModelEditorInner() {
               }}
               style={{
                 padding: '8px 10px', marginBottom: 4, borderRadius: 6, cursor: 'grab',
-                background: '#334155', color: '#e2e8f0', fontSize: 13,
+                background: 'var(--border)', color: 'var(--text)', fontSize: 13,
                 transition: 'background 0.15s',
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = '#475569')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = '#334155')}
+              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface-hover)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--border)')}
             >
               <div style={{ fontWeight: 500 }}>{ec.name}</div>
-              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
                 {ec.eStructuralFeatures?.length || 0} features
               </div>
             </div>
@@ -464,15 +467,15 @@ function ModelEditorInner() {
             colorMode="dark"
             nodeDragThreshold={5}
             defaultEdgeOptions={{
-              markerEnd: { type: MarkerType.ArrowClosed, color: '#6366f1' },
-              style: { stroke: '#6366f1', strokeWidth: 2 },
+              markerEnd: { type: MarkerType.ArrowClosed, color: 'var(--primary)' },
+              style: { stroke: 'var(--primary)', strokeWidth: 2 },
             }}
           >
-            <Background color="#334155" gap={20} />
+            <Background color="var(--border)" gap={20} />
             <Controls />
             <MiniMap
-              style={{ background: '#1e293b', border: '1px solid #334155' }}
-              nodeColor="#6366f1"
+              style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+              nodeColor="var(--primary)"
               maskColor="rgba(15,23,42,0.7)"
             />
           </ReactFlow>
@@ -480,24 +483,24 @@ function ModelEditorInner() {
 
         {/* ── Property Inspector ────────────────────────────── */}
         <div style={{
-          width: 260, background: '#1e293b', borderLeft: '1px solid #334155',
+          width: 260, background: 'var(--surface)', borderLeft: '1px solid var(--border)',
           padding: 12, overflowY: 'auto', flexShrink: 0,
         }}>
           {!selectedNode && (
-            <div style={{ fontSize: 12, color: '#64748b', textAlign: 'center', marginTop: 40 }}>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', marginTop: 40 }}>
               Select a node to edit properties
             </div>
           )}
 
           {selectedNode && (
             <div>
-              <div style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
                 {selectedNode.data.eClassName}
               </div>
 
               {/* Name */}
               <div className="form-field" style={{ marginBottom: 12 }}>
-                <label style={{ fontSize: 12, color: '#94a3b8' }}>Name</label>
+                <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Name</label>
                 <input
                   value={selectedNode.data.label}
                   onChange={(e) => {
@@ -514,25 +517,25 @@ function ModelEditorInner() {
                     );
                   }}
                   style={{
-                    width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #334155',
-                    background: '#0f172a', color: '#e2e8f0', fontSize: 13, fontFamily: 'inherit',
+                    width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border)',
+                    background: 'var(--bg)', color: 'var(--text)', fontSize: 13, fontFamily: 'inherit',
                   }}
                 />
               </div>
 
               {/* Attributes */}
-              <div style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8, marginTop: 16 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8, marginTop: 16 }}>
                 Attributes
               </div>
               {Object.entries(selectedNode.data.attributes).map(([key, val]) => (
                 <div key={key} className="form-field" style={{ marginBottom: 10 }}>
-                  <label style={{ fontSize: 12, color: '#94a3b8' }}>{key}</label>
+                  <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{key}</label>
                   {typeof val === 'boolean' ? (
                     <input
                       type="checkbox"
                       checked={val as boolean}
                       onChange={(e) => updateAttribute(key, e.target.checked)}
-                      style={{ accentColor: '#6366f1' }}
+                      style={{ accentColor: 'var(--primary)' }}
                     />
                   ) : typeof val === 'number' ? (
                     <input
@@ -540,8 +543,8 @@ function ModelEditorInner() {
                       value={val}
                       onChange={(e) => updateAttribute(key, Number(e.target.value))}
                       style={{
-                        width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #334155',
-                        background: '#0f172a', color: '#e2e8f0', fontSize: 13, fontFamily: 'inherit',
+                        width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border)',
+                        background: 'var(--bg)', color: 'var(--text)', fontSize: 13, fontFamily: 'inherit',
                       }}
                     />
                   ) : (
@@ -550,8 +553,8 @@ function ModelEditorInner() {
                       value={String(val)}
                       onChange={(e) => updateAttribute(key, e.target.value)}
                       style={{
-                        width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #334155',
-                        background: '#0f172a', color: '#e2e8f0', fontSize: 13, fontFamily: 'inherit',
+                        width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border)',
+                        background: 'var(--bg)', color: 'var(--text)', fontSize: 13, fontFamily: 'inherit',
                       }}
                     />
                   )}
@@ -559,7 +562,7 @@ function ModelEditorInner() {
               ))}
 
               {Object.keys(selectedNode.data.attributes).length === 0 && (
-                <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
                   No attributes
                 </div>
               )}
@@ -572,18 +575,18 @@ function ModelEditorInner() {
       {exportOutput && (
         <div style={{
           position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100,
-          background: '#0f172a', borderTop: '1px solid #334155', maxHeight: '40vh', overflow: 'auto',
+          background: 'var(--bg)', borderTop: '1px solid var(--border)', maxHeight: '40vh', overflow: 'auto',
         }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 16px', borderBottom: '1px solid #334155' }}>
-            <span style={{ color: '#94a3b8', fontSize: 13, fontWeight: 600 }}>Export Output</span>
-            <button className="btn btn-ghost btn-sm" onClick={() => setExportOutput('')} style={{ color: '#94a3b8' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 16px', borderBottom: '1px solid var(--border)' }}>
+            <span style={{ color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600 }}>Export Output</span>
+            <button className="btn btn-ghost btn-sm" onClick={() => setExportOutput('')} style={{ color: 'var(--text-secondary)' }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                 <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
               </svg>
             </button>
           </div>
           <pre style={{
-            padding: 16, fontSize: 12, color: '#e2e8f0', fontFamily: "'JetBrains Mono', monospace",
+            padding: 16, fontSize: 12, color: 'var(--text)', fontFamily: "'JetBrains Mono', monospace",
             whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0,
           }}>
             {exportOutput}
@@ -598,10 +601,16 @@ function ModelEditorInner() {
 /*  ModelEditor wrapper                                                */
 /* ------------------------------------------------------------------ */
 
-export default function ModelEditor() {
+interface ModelEditorProps {
+  projectId?: string;
+  metamodelId?: string;
+  modelId?: string;
+}
+
+export default function ModelEditor(props: ModelEditorProps) {
   return (
     <ReactFlowProvider>
-      <ModelEditorInner />
+      <ModelEditorInner {...props} />
     </ReactFlowProvider>
   );
 }
