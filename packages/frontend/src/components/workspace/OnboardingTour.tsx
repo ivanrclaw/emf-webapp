@@ -77,6 +77,19 @@ export function OnboardingTour() {
     }
   }, []);
 
+  const finish = useCallback(() => {
+    localStorage.setItem(STORAGE_KEY, 'true');
+    setVisible(false);
+  }, []);
+
+  const next = useCallback(() => {
+    if (step < STEPS.length - 1) {
+      setStep((s) => s + 1);
+    } else {
+      finish();
+    }
+  }, [step, finish]);
+
   // Auto-dismiss if visible and card doesn't appear after 3 seconds
   useEffect(() => {
     if (!visible) return;
@@ -100,19 +113,6 @@ export function OnboardingTour() {
       setSpotlightRect(null);
     }
   }, [step, visible]);
-
-  const finish = useCallback(() => {
-    localStorage.setItem(STORAGE_KEY, 'true');
-    setVisible(false);
-  }, []);
-
-  const next = useCallback(() => {
-    if (step < STEPS.length - 1) {
-      setStep((s) => s + 1);
-    } else {
-      finish();
-    }
-  }, [step, finish]);
 
   if (!visible) return null;
 
