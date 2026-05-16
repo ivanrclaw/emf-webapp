@@ -18,6 +18,8 @@ import {
   Delete,
   Param,
   Body,
+  BadRequestException,
+  HttpException,
 } from '@nestjs/common';
 import { OCLConstraintService } from './oclconstraint.service.js';
 
@@ -70,10 +72,20 @@ export class OCLConstraintController {
   }
 
   @Post('validate')
-  validate(
+  async validate(
     @Param('mmid') mmid: string,
     @Body() body: { modelContent: string },
   ) {
-    return this.service.validate(mmid, body.modelContent);
+    if (!body || !body.modelContent) {
+      throw new BadRequestException(
+        'Request body must include "modelContent" as a JSON string',
+      );
+    }
+    try {
+      return await this.service.validate(mmid, body.modelContent);
+    } catch (err: any) {
+      if (err instanceof HttpException) throw err;
+      throw new BadRequestException(err.message || 'Validation failed');
+    }
   }
 }

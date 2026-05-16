@@ -30,8 +30,26 @@ export class M1Model {
   @Column({ length: 255 })
   name!: string;
 
-  @Column({ type: 'text', default: '[]' })
-  content!: string;
+  @Column({
+    type: 'text',
+    default: '[]',
+    transformer: {
+      to: (value: any): string => {
+        if (value === null || value === undefined) return '[]';
+        if (typeof value === 'string') return value;
+        return JSON.stringify(value);
+      },
+      from: (value: string): any => {
+        if (!value) return [];
+        try {
+          return JSON.parse(value);
+        } catch {
+          return [];
+        }
+      },
+    },
+  })
+  content!: any;
 
   @ManyToOne(() => Project, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'project_id' })
