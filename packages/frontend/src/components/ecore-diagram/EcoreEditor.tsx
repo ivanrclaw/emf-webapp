@@ -419,8 +419,8 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
   const onNodeClick: NodeMouseHandler = useCallback(
     (_: any, node: Node) => {
       const data = node.data as EcoreNodeData;
-      const typeMap: Record<string, string> = { ecoreClass: 'class', ecoreEnum: 'enum', ecoreDataType: 'dataType' };
-      model.setSelected(node.id, typeMap[data?.type] ?? 'class');
+      const typeMap: Record<string, string> = { eClassNode: 'class', eEnumNode: 'enum', eDataTypeNode: 'dataType' };
+      model.setSelected(node.id, typeMap[node.type] ?? 'class');
     },
     [model],
   );

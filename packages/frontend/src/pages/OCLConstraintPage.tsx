@@ -204,26 +204,26 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
           <div className="form-field">
-            <label>Name</label>
+            <label>Name {!formName && <span style={{ color: '#ef4444' }}>*</span>}</label>
             <input
               value={formName}
               onChange={(e) => setFormName(e.target.value)}
               placeholder="e.g., UniqueName"
               style={{
                 width: '100%', padding: '8px 12px', borderRadius: 6,
-                border: '1px solid var(--border)', fontSize: '.8125rem',
+                border: `1px solid ${!formName ? '#ef4444' : 'var(--border)'}`, fontSize: '.8125rem',
                 fontFamily: 'inherit', background: 'var(--surface)',
               }}
             />
           </div>
           <div className="form-field">
-            <label>Context (EClass)</label>
+            <label>Context (EClass) {!formContext && <span style={{ color: '#ef4444' }}>*</span>}</label>
             <select
               value={formContext}
               onChange={(e) => setFormContext(e.target.value)}
               style={{
                 width: '100%', padding: '8px 12px', borderRadius: 6,
-                border: '1px solid var(--border)', fontSize: '.8125rem',
+                border: `1px solid ${!formContext ? '#ef4444' : 'var(--border)'}`, fontSize: '.8125rem',
                 fontFamily: 'inherit', background: 'var(--surface)',
               }}
             >
@@ -251,7 +251,7 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
           </div>
         </div>
         <div className="form-field" style={{ marginBottom: 12 }}>
-          <label>OCL Expression</label>
+          <label>OCL Expression {!formExpression && <span style={{ color: '#ef4444' }}>*</span>}</label>
           <textarea
             value={formExpression}
             onChange={(e) => setFormExpression(e.target.value)}
@@ -259,13 +259,13 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
             rows={4}
             style={{
               width: '100%', padding: '8px 12px', borderRadius: 6,
-              border: '1px solid var(--border)', fontSize: '.8125rem',
+              border: `1px solid ${!formExpression ? '#ef4444' : 'var(--border)'}`, fontSize: '.8125rem',
               fontFamily: "'JetBrains Mono', monospace", background: '#0f172a',
               color: '#e2e8f0', resize: 'vertical',
             }}
           />
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving || !formName || !formContext || !formExpression}>
             {saving ? 'Saving...' : editingId ? <><Save size={14} /> Update</> : <><Plus size={14} /> Create</>}
           </button>
@@ -273,6 +273,9 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
             <button className="btn btn-ghost btn-sm" onClick={resetForm}>
               Cancel
             </button>
+          )}
+          {(!formName || !formContext || !formExpression) && (
+            <span style={{ fontSize: 11, color: '#ef4444' }}>All fields are required (name, context, expression)</span>
           )}
         </div>
       </div>

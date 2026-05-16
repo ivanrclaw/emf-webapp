@@ -84,9 +84,9 @@ function workspaceReducer(
     case 'OPEN_TAB': {
       const tabData = action.payload;
 
-      // Check if a tab with same type + metamodelId already exists
+      // Check if a tab with same type + projectId + metamodelId already exists
       const existing = state.tabs.find(
-        (t) => t.type === tabData.type && t.metamodelId === tabData.metamodelId
+        (t) => t.type === tabData.type && t.projectId === tabData.projectId && t.metamodelId === tabData.metamodelId
       );
 
       if (existing) {

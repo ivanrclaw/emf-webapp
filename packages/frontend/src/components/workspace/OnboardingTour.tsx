@@ -60,6 +60,7 @@ const spotlightStyle: React.CSSProperties = {
   borderRadius: 4,
   boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.6)',
   transition: 'all 0.3s ease',
+  pointerEvents: 'none',
 };
 
 export function OnboardingTour() {
@@ -75,6 +76,15 @@ export function OnboardingTour() {
       return () => clearTimeout(timer);
     }
   }, []);
+
+  // Auto-dismiss if visible and card doesn't appear after 3 seconds
+  useEffect(() => {
+    if (!visible) return;
+    const timer = setTimeout(() => {
+      finish();
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [visible, finish]);
 
   useEffect(() => {
     if (!visible) return;

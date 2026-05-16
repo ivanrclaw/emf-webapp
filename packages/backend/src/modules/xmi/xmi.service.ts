@@ -125,7 +125,13 @@ export class XmiService {
     }
 
     // Convert to XMI-compatible object tree
-    const ePackage = serializableToXmiCompatible(serializable);
+    let ePackage: any;
+    try {
+      ePackage = serializableToXmiCompatible(serializable);
+    } catch (err: any) {
+      this.logger.error(`Failed to convert serializable to XMI-compatible: ${err.message}`);
+      throw new Error(`Failed to convert serializable to XMI-compatible: ${err.message}`);
+    }
 
     // Serialize to XMI 2.0
     const xmi = serializeToXMI(ePackage, {

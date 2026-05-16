@@ -40,12 +40,18 @@ export class XmiController {
     @Param('metamodelId') metamodelId: string,
     @Res() res: Response,
   ): Promise<void> {
-    const xmi = await this.xmiService.exportToXmi(projectId, metamodelId);
-    if (!xmi) throw new NotFoundException('Metamodel not found');
+    try {
+      const xmi = await this.xmiService.exportToXmi(projectId, metamodelId);
+      if (!xmi) throw new NotFoundException('Metamodel not found');
 
-    res.setHeader('Content-Type', 'application/xml');
-    res.setHeader('Content-Disposition', `attachment; filename="${metamodelId}.ecore"`);
-    res.send(xmi);
+      res.setHeader('Content-Type', 'application/xml');
+      res.setHeader('Content-Disposition', `attachment; filename="${metamodelId}.ecore"`);
+      res.send(xmi);
+    } catch (err: any) {
+      if (err instanceof NotFoundException) throw err;
+      this.logger.error(`XMI export failed for ${metamodelId}: ${err.message}`);
+      throw new BadRequestException(`XMI export failed: ${err.message}`);
+    }
   }
 
   /**

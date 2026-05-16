@@ -16,6 +16,7 @@ import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } fr
 import { useWorkspace, type TabType, type WorkspaceTab } from '../hooks/useWorkspace';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
+import { useToast } from '../components/ToastProvider';
 import Sidebar from '../components/workspace/Sidebar';
 import { TabBar } from '../components/workspace/TabBar';
 import { StatusBar } from '../components/workspace/StatusBar';
@@ -26,7 +27,7 @@ import ResizablePanel from '../components/workspace/ResizablePanel';
 import { OnboardingTour } from '../components/workspace/OnboardingTour';
 import { EditorProvider, useEditorContext } from '../contexts/EditorContext';
 import { PanelPortalProvider, usePanelPortals } from '../contexts/PanelPortalContext';
-import { getProjects } from '../api/client';
+import { getProjects, createProject } from '../api/client';
 import type { Project } from '../api/client';
 
 // Tab content components
@@ -90,12 +91,14 @@ const styles = {
 interface TabContentProps {
   tab: WorkspaceTab;
   onOpenTab: (tab: { type: string; title: string; projectId: string; metamodelId?: string }) => void;
+  onShowCreateProject: () => void;
+  onShowImportEcore: () => void;
 }
 
-function TabContent({ tab, onOpenTab }: TabContentProps) {
+function TabContent({ tab, onOpenTab, onShowCreateProject, onShowImportEcore }: TabContentProps) {
   switch (tab.type) {
     case 'welcome':
-      return <WelcomeTabWrapper />;
+      return <WelcomeTabWrapper onShowCreateProject={onShowCreateProject} onShowImportEcore={onShowImportEcore} />;
     case 'diagram':
       return (
         <DiagramTab
@@ -150,7 +153,12 @@ function TabContent({ tab, onOpenTab }: TabContentProps) {
 /**
  * WelcomeTab wrapper that fetches projects and wires actions.
  */
-function WelcomeTabWrapper() {
+interface WelcomeTabWrapperProps {
+  onShowCreateProject: () => void;
+  onShowImportEcore: () => void;
+}
+
+function WelcomeTabWrapper({ onShowCreateProject, onShowImportEcore }: WelcomeTabWrapperProps) {
   const { openTab, setContext } = useWorkspace();
   const [projects, setProjects] = useState<Project[]>([]);
 
@@ -176,12 +184,12 @@ function WelcomeTabWrapper() {
   );
 
   const handleCreateProject = useCallback(() => {
-    // TODO: Open create project modal
-  }, []);
+    onShowCreateProject();
+  }, [onShowCreateProject]);
 
   const handleImportEcore = useCallback(() => {
-    // TODO: Open import dialog
-  }, []);
+    onShowImportEcore();
+  }, [onShowImportEcore]);
 
   return (
     <WelcomeTab
@@ -193,13 +201,290 @@ function WelcomeTabWrapper() {
   );
 }
 
+// ─── Create Project Modal ──────────────────────────────────────────────
+
+const modalOverlayStyle: React.CSSProperties = {
+  position: 'fixed',
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  zIndex: 1000,
+};
+
+const modalCardStyle: React.CSSProperties = {
+  backgroundColor: 'var(--surface)',
+  border: '1px solid var(--border)',
+  borderRadius: 8,
+  padding: 24,
+  minWidth: 360,
+  maxWidth: 480,
+  width: '100%',
+  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+};
+
+const modalTitleStyle: React.CSSProperties = {
+  fontSize: 18,
+  fontWeight: 600,
+  margin: '0 0 16px',
+  color: 'var(--text)',
+};
+
+const fieldLabelStyle: React.CSSProperties = {
+  display: 'block',
+  fontSize: 13,
+  fontWeight: 500,
+  marginBottom: 6,
+  color: 'var(--text-secondary)',
+};
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '8px 12px',
+  border: '1px solid var(--border)',
+  borderRadius: 4,
+  fontSize: 14,
+  backgroundColor: 'var(--bg)',
+  color: 'var(--text)',
+  outline: 'none',
+  boxSizing: 'border-box',
+};
+
+const modalActionsStyle: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'flex-end',
+  gap: 8,
+  marginTop: 20,
+};
+
+const buttonBaseStyle: React.CSSProperties = {
+  padding: '8px 16px',
+  fontSize: 14,
+  fontWeight: 500,
+  borderRadius: 4,
+  cursor: 'pointer',
+  border: '1px solid var(--border)',
+  transition: 'opacity 0.15s',
+};
+
+interface CreateProjectModalProps {
+  onClose: () => void;
+  onCreated: (projectId: string, projectName: string) => void;
+}
+
+function CreateProjectModal({ onClose, onCreated }: CreateProjectModalProps) {
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = useCallback(async () => {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setError('Project name is required');
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const project = await createProject({ name: trimmed, description: description.trim() || undefined });
+      onCreated(project.id, project.name);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to create project');
+    } finally {
+      setLoading(false);
+    }
+  }, [name, description, onCreated]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' && !loading) {
+        handleSubmit();
+      }
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    },
+    [handleSubmit, loading, onClose],
+  );
+
+  return (
+    <div style={modalOverlayStyle} onClick={onClose} onKeyDown={handleKeyDown} tabIndex={-1}>
+      <div style={modalCardStyle} onClick={(e) => e.stopPropagation()}>
+        <h2 style={modalTitleStyle}>New Project</h2>
+        <div>
+          <label style={fieldLabelStyle}>Name *</label>
+          <input
+            style={inputStyle}
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="My Project"
+            autoFocus
+            disabled={loading}
+          />
+        </div>
+        <div style={{ marginTop: 12 }}>
+          <label style={fieldLabelStyle}>Description (optional)</label>
+          <textarea
+            style={{ ...inputStyle, resize: 'vertical', minHeight: 60 }}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Project description"
+            disabled={loading}
+          />
+        </div>
+        {error && (
+          <div style={{ color: 'var(--error)', fontSize: 13, marginTop: 8 }}>
+            {error}
+          </div>
+        )}
+        <div style={modalActionsStyle}>
+          <button
+            style={buttonBaseStyle}
+            onClick={onClose}
+            disabled={loading}
+          >
+            Cancel
+          </button>
+          <button
+            style={{
+              ...buttonBaseStyle,
+              backgroundColor: 'var(--primary)',
+              color: '#fff',
+              border: '1px solid var(--primary)',
+              opacity: loading ? 0.6 : 1,
+            }}
+            onClick={handleSubmit}
+            disabled={loading}
+          >
+            {loading ? 'Creating...' : 'Create'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Import Ecore Modal ─────────────────────────────────────────────────
+
+interface ImportEcoreModalProps {
+  onClose: () => void;
+  addToast: (message: string, type: 'success' | 'error' | 'info' | 'warning') => string;
+  onCreated: (projectId: string, projectName: string) => void;
+}
+
+function ImportEcoreModal({ onClose, addToast, onCreated }: ImportEcoreModalProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    // Auto-open file picker on mount
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleFileSelected = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setLoading(true);
+    try {
+      const xml = await file.text();
+
+      // Step 1: Create a new project
+      const projectName = file.name.replace(/\.(ecore|xml)$/i, '');
+      const project = await createProject({ name: projectName });
+
+      // Step 2: Create a metamodel within the project
+      const res = await fetch(`/api/projects/${project.id}/metamodels`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: projectName }),
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.message || 'Failed to create metamodel');
+      }
+      const metamodel = await res.json();
+
+      // Step 3: Import the .ecore XML into the metamodel
+      const importRes = await fetch(`/api/projects/${project.id}/xmi/${metamodel.id}/import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ xml }),
+      });
+      if (!importRes.ok) {
+        const errBody = await importRes.json().catch(() => ({}));
+        throw new Error(errBody.message || 'Failed to import .ecore');
+      }
+
+      addToast(`Imported ${file.name} successfully`, 'success');
+
+      // Step 4: Navigate to project via callback
+      onCreated(project.id, projectName);
+      onClose();
+    } catch (err: any) {
+      addToast(err?.message || 'Failed to import .ecore file', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [addToast, onCreated, onClose]);
+
+  return (
+    <div style={modalOverlayStyle} onClick={loading ? undefined : onClose}>
+      <div style={modalCardStyle} onClick={(e) => e.stopPropagation()}>
+        <h2 style={modalTitleStyle}>Import .ecore</h2>
+        {loading ? (
+          <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>Importing and creating project...</p>
+        ) : (
+          <>
+            <p style={{ color: 'var(--text-secondary)', fontSize: 14, margin: '0 0 16px' }}>
+              Select an .ecore or .xml file to import.
+            </p>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".ecore,.xml"
+              style={{ display: 'none' }}
+              onChange={handleFileSelected}
+            />
+            <div style={modalActionsStyle}>
+              <button style={buttonBaseStyle} onClick={onClose}>
+                Cancel
+              </button>
+              <button
+                style={{
+                  ...buttonBaseStyle,
+                  backgroundColor: 'var(--primary)',
+                  color: '#fff',
+                  border: '1px solid var(--primary)',
+                }}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                Browse Files
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Inner Layout (needs context access) ─────────────────────────────────
 
 function WorkspaceInner() {
   const workspace = useWorkspace();
   const editor = useEditorContext();
   const panels = usePanelPortals();
+  const { addToast } = useToast();
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [showCreateProject, setShowCreateProject] = useState(false);
+  const [showImportEcore, setShowImportEcore] = useState(false);
 
   // Responsive sidebar: auto-collapse < 1024px, restore >= 1024px
   const isDesktop = useMediaQuery('(min-width: 1024px)');
@@ -227,6 +512,15 @@ function WorkspaceInner() {
   // Handle sidebar tab opening
   const handleOpenTab = useCallback(
     (tabInfo: { type: string; title: string; projectId: string; metamodelId?: string }) => {
+      // Intercept special tab types that open modals
+      if (tabInfo.type === 'new-project') {
+        setShowCreateProject(true);
+        return;
+      }
+      if (tabInfo.type === 'import-ecore') {
+        setShowImportEcore(true);
+        return;
+      }
       workspace.setContext(tabInfo.projectId, tabInfo.metamodelId);
       workspace.openTab({
         type: tabInfo.type as TabType,
@@ -252,6 +546,7 @@ function WorkspaceInner() {
           break;
         }
         case 'settings':
+          addToast('Settings panel coming soon', 'info');
           break;
         case 'save':
           editor.actions.save();
@@ -263,13 +558,16 @@ function WorkspaceInner() {
           editor.actions.importEclipseZip();
           break;
         case 'export-ecore':
+          addToast('Exporting .ecore file...', 'info');
           editor.actions.exportEcore();
           break;
         case 'export-zip':
+          addToast('Exporting .zip file...', 'info');
           editor.actions.exportZip();
           break;
         case 'validate':
           editor.actions.validate();
+          addToast('Validation complete', 'success');
           break;
         case 'undo':
           editor.actions.undo();
@@ -281,7 +579,7 @@ function WorkspaceInner() {
           break;
       }
     },
-    [editor.actions],
+    [editor.actions, addToast],
   );
 
   // Command palette action handler
@@ -408,7 +706,7 @@ function WorkspaceInner() {
           {activeTab ? (
             <div style={styles.tabContent} role="tabpanel" aria-label={activeTab.title}>
               <Suspense fallback={<div style={styles.emptyContent}><span>Loading...</span></div>}>
-                <TabContent tab={activeTab} onOpenTab={handleOpenTab} />
+                <TabContent tab={activeTab} onOpenTab={handleOpenTab} onShowCreateProject={() => setShowCreateProject(true)} onShowImportEcore={() => setShowImportEcore(true)} />
               </Suspense>
             </div>
           ) : (
@@ -444,6 +742,41 @@ function WorkspaceInner() {
 
       {/* Onboarding Tour */}
       <OnboardingTour />
+
+      {/* Create Project Modal */}
+      {showCreateProject && <CreateProjectModal
+        onClose={() => setShowCreateProject(false)}
+        onCreated={(projectId, projectName) => {
+          setShowCreateProject(false);
+          workspace.setContext(projectId);
+          workspace.openTab({
+            type: 'project-info',
+            title: projectName || 'Project',
+            projectId,
+            metamodelId: null,
+            dirty: false,
+            closable: true,
+          });
+        }}
+      />}
+
+      {/* Import Ecore File Picker */}
+      {showImportEcore && <ImportEcoreModal
+        onClose={() => setShowImportEcore(false)}
+        addToast={addToast}
+        onCreated={(projectId, projectName) => {
+          setShowImportEcore(false);
+          workspace.setContext(projectId);
+          workspace.openTab({
+            type: 'project-info',
+            title: projectName || 'Project',
+            projectId,
+            metamodelId: null,
+            dirty: false,
+            closable: true,
+          });
+        }}
+      />}
     </div>
   );
 }

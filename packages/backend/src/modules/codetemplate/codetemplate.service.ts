@@ -582,13 +582,20 @@ export class CodeTemplateService {
 
     // Normalize: merge eAttributes/eReferences into eStructuralFeatures if missing
     return raw.map((cls) => {
-      if (cls.eStructuralFeatures) return cls;
+      if (cls.eStructuralFeatures) {
+        // Resolve eSuperTypes IDs to names even when eStructuralFeatures exist
+        return {
+          ...cls,
+          eSuperTypes: (cls.eSuperTypes || [])
+            .map((s: string) => idToName.get(s) || s),
+        };
+      }
       const features: any[] = [];
       if (cls.eAttributes && Array.isArray(cls.eAttributes)) {
         for (const attr of cls.eAttributes) {
           features.push({
             name: attr.name,
-            type: attr.type || 'EString',
+            type: attr.eType || attr.type || 'EString',
             kind: 'attribute',
             many: attr.many ?? false,
             required: attr.required ?? false,
@@ -615,7 +622,12 @@ export class CodeTemplateService {
           });
         }
       }
-      return { ...cls, eStructuralFeatures: features };
+      return {
+        ...cls,
+        eStructuralFeatures: features,
+        eSuperTypes: (cls.eSuperTypes || [])
+          .map((s: string) => idToName.get(s) || s),
+      };
     });
   }
 

@@ -95,6 +95,32 @@ function DeepLinkModels() {
   return <WorkspaceLayout />;
 }
 
+/**
+ * Deep-link handler for model editing: opens a 'models' tab
+ * (since there's no dedicated model editor yet, showing the models list
+ * is better than redirecting to the diagram).
+ */
+function DeepLinkModelEditor() {
+  const { pid, mmid } = useParams<{ pid: string; mmid: string }>();
+  const workspace = useWorkspace();
+
+  useEffect(() => {
+    if (pid && mmid) {
+      workspace.setContext(pid, mmid);
+      workspace.openTab({
+        type: 'models',
+        title: 'Models',
+        projectId: pid,
+        metamodelId: mmid,
+        dirty: false,
+        closable: true,
+      });
+    }
+  }, [pid, mmid]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return <WorkspaceLayout />;
+}
+
 function DeepLinkSpec() {
   const { pid, mmid } = useParams<{ pid: string; mmid: string }>();
   const workspace = useWorkspace();
@@ -125,7 +151,7 @@ export default function App() {
             <Routes>
               {/* Deep links for backward compatibility */}
               <Route path="/projects/:pid/metamodels/:mmid/edit" element={<DeepLinkRouter />} />
-              <Route path="/projects/:pid/metamodels/:mmid/models/:modelId/edit" element={<DeepLinkRouter />} />
+              <Route path="/projects/:pid/metamodels/:mmid/models/:modelId/edit" element={<DeepLinkModelEditor />} />
               <Route path="/projects/:pid/metamodels/:mmid/constraints" element={<DeepLinkOCL />} />
               <Route path="/projects/:pid/metamodels/:mmid/templates" element={<DeepLinkCode />} />
               <Route path="/projects/:pid/metamodels/:mmid/models" element={<DeepLinkModels />} />

@@ -1,5 +1,6 @@
 /* ── EClassNode ────────────────────────────────────────────────── */
 .node {
+  position: relative;
   background: var(--node-bg);
   border: 2px solid var(--eclass-border);
   border-radius: 12px;
