@@ -307,7 +307,7 @@ export function updateM1Model(
   projectId: string,
   mmid: string,
   modelId: string,
-  data: { name?: string; content?: string },
+  data: { name?: string; content?: any },
 ): Promise<M1Model> {
   return request<M1Model>(`/projects/${projectId}/metamodels/${mmid}/models/${modelId}`, {
     method: 'PUT',

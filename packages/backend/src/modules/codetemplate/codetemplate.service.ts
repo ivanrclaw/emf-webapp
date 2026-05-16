@@ -556,16 +556,67 @@ export class CodeTemplateService {
    * raw array formats.
    */
   private extractClasses(content: Record<string, any>): any[] {
-    if (Array.isArray(content)) return content;
-    if (content.eClassifiers && Array.isArray(content.eClassifiers)) {
-      return content.eClassifiers.filter(
-        (c: any) => c._type === 'EClass' || c._type === 'ecore.EClass' || !c._type,
+    let raw: any[] = [];
+    if (Array.isArray(content)) {
+      raw = content;
+    } else if (content.eClassifiers && Array.isArray(content.eClassifiers)) {
+      raw = content.eClassifiers.filter(
+        (c: any) =>
+          c.type === 'EClass' ||
+          c._type === 'EClass' ||
+          c._type === 'ecore.EClass' ||
+          (!c.type && !c._type),
       );
+    } else if (content.classes && Array.isArray(content.classes)) {
+      raw = content.classes;
     }
-    if (content.classes && Array.isArray(content.classes)) {
-      return content.classes;
+
+    // Build id→name map for resolving targetId references
+    const allClassifiers = Array.isArray(content)
+      ? content
+      : content.eClassifiers || content.classes || [];
+    const idToName = new Map<string, string>();
+    for (const c of allClassifiers) {
+      if (c.id && c.name) idToName.set(c.id, c.name);
     }
-    return [];
+
+    // Normalize: merge eAttributes/eReferences into eStructuralFeatures if missing
+    return raw.map((cls) => {
+      if (cls.eStructuralFeatures) return cls;
+      const features: any[] = [];
+      if (cls.eAttributes && Array.isArray(cls.eAttributes)) {
+        for (const attr of cls.eAttributes) {
+          features.push({
+            name: attr.name,
+            type: attr.type || 'EString',
+            kind: 'attribute',
+            many: attr.many ?? false,
+            required: attr.required ?? false,
+            lowerBound: attr.lowerBound ?? 0,
+            upperBound: attr.upperBound ?? 1,
+          });
+        }
+      }
+      if (cls.eReferences && Array.isArray(cls.eReferences)) {
+        for (const ref of cls.eReferences) {
+          // Resolve targetId to class name
+          const targetType = ref.targetId
+            ? (idToName.get(ref.targetId) || ref.targetId)
+            : (ref.type || 'EObject');
+          features.push({
+            name: ref.name,
+            type: targetType,
+            kind: 'reference',
+            many: ref.upperBound === -1 || ref.many || false,
+            containment: ref.containment ?? false,
+            required: ref.required ?? false,
+            lowerBound: ref.lowerBound ?? 0,
+            upperBound: ref.upperBound ?? 1,
+          });
+        }
+      }
+      return { ...cls, eStructuralFeatures: features };
+    });
   }
 
   /**

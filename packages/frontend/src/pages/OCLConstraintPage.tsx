@@ -7,6 +7,7 @@ import {
   updateOCLConstraint,
   deleteOCLConstraint,
   validateOCLConstraints,
+  getM1Models,
   Metamodel,
   OCLConstraint,
   OCLValidationResult,
@@ -42,6 +43,8 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
   const [error, setError] = useState('');
   const [results, setResults] = useState<OCLValidationResult[] | null>(null);
   const [validating, setValidating] = useState(false);
+  const [models, setModels] = useState<Array<{ id: string; name: string; content: any }>>([]);
+  const [selectedModelId, setSelectedModelId] = useState<string>('');
 
   // Form state
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -57,12 +60,14 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
     if (!metamodelId) return;
     setLoading(true);
     try {
-      const [mm, cList] = await Promise.all([
+      const [mm, cList, mList] = await Promise.all([
         getMetamodel(projectId, metamodelId),
         getOCLConstraints(metamodelId),
+        projectId ? getM1Models(projectId, metamodelId) : Promise.resolve([]),
       ]);
       setMetamodel(mm);
       setConstraints(cList);
+      setModels(mList as any);
 
       // Extract EClass names
       const content = mm.content || {};
@@ -114,15 +119,19 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
     setValidating(true);
     setResults(null);
     try {
-      // Get the active model content (first model's content or empty)
-      const res = await validateOCLConstraints(metamodelId, '{}');
+      // Use selected model content or metamodel structure as fallback
+      const selectedModel = models.find((m) => m.id === selectedModelId);
+      const modelContent = selectedModel?.content
+        ? JSON.stringify(selectedModel.content)
+        : JSON.stringify(metamodel?.content || {});
+      const res = await validateOCLConstraints(metamodelId, modelContent);
       setResults(res);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Validation failed');
     } finally {
       setValidating(false);
     }
-  }, [metamodelId]);
+  }, [metamodelId, models, selectedModelId, metamodel]);
 
   // ── Edit / Delete ─────────────────────────────────────────────────
 
@@ -268,11 +277,27 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
         </div>
       </div>
 
-      {/* Validate Button + Results */}
+      {/* Validate Button + Model Selector + Results */}
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 16 }}>
         <button className="btn btn-secondary btn-sm" onClick={handleValidate} disabled={validating || constraints.length === 0}>
           {validating ? 'Validating...' : 'Validate All'}
         </button>
+        {models.length > 0 && (
+          <select
+            value={selectedModelId}
+            onChange={(e) => setSelectedModelId(e.target.value)}
+            style={{
+              padding: '6px 10px', borderRadius: 6,
+              border: '1px solid var(--border)', fontSize: '.8125rem',
+              fontFamily: 'inherit', background: 'var(--surface)',
+            }}
+          >
+            <option value="">Metamodel structure</option>
+            {models.map((m) => (
+              <option key={m.id} value={m.id}>{m.name} (M1)</option>
+            ))}
+          </select>
+        )}
         <span style={{ fontSize: 12, color: '#64748b' }}>
           {constraints.length} constraint{constraints.length !== 1 ? 's' : ''}
         </span>

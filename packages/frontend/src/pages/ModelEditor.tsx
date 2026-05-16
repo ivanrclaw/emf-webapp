@@ -105,7 +105,7 @@ function parseMetamodel(content: Record<string, any>): EPackage | null {
           features.push({
             eClass: 'ecore:EAttribute',
             name: attr.name,
-            eType: { eClass: 'ecore:EDataType', name: attr.eType || 'EString' },
+            eType: { eClass: 'ecore:EDataType', name: attr.eType || attr.type || 'EString' },
             lowerBound: attr.lowerBound ?? 0,
             upperBound: attr.upperBound ?? 1,
             defaultValueLiteral: attr.defaultValueLiteral,
@@ -205,9 +205,9 @@ function ModelEditorInner() {
         setEpkg(pkg);
 
         /* Deserialize saved content */
-        if (m.content && m.content !== '[]') {
+        if (m.content) {
           try {
-            const saved = JSON.parse(m.content);
+            const saved = typeof m.content === 'string' ? JSON.parse(m.content) : m.content;
             if (saved.nodes) setNodes(saved.nodes);
             if (saved.edges) setEdges(saved.edges);
           } catch {
