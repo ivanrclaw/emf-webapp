@@ -353,11 +353,11 @@ bin.includes = META-INF/,\\
       if (!mm) return { document: null, error: 'Metamodel not found' };
 
       const content = mm.content as any;
-      if (!content || !content.name) {
+      if (!content) {
         return { document: null, error: 'Metamodel has no valid content' };
       }
 
-      const document = importXmiInstance(xml, content);
+      const document = importXmiInstance(xml, { ...content, name: content.name || mm.name });
       return { document };
     } catch (err: any) {
       this.logger.error(`Instance import failed: ${err.message}`);
@@ -380,9 +380,9 @@ bin.includes = META-INF/,\\
       if (!mm) return null;
 
       const content = mm.content as any;
-      if (!content || !content.name) return null;
+      if (!content) return null;
 
-      return exportXmiInstance(document as any, content);
+      return exportXmiInstance(document as any, { ...content, name: content.name || mm.name });
     } catch (err: any) {
       this.logger.error(`Instance export failed: ${err.message}`);
       return null;
