@@ -2,7 +2,7 @@
 
 **Fecha:** 2026-05-16  
 **App:** https://emf-webapp.fly.dev/  
-**Commits auditados:** 6150c42 → 3a33732
+**Commits auditados:** 6150c42 → 0e17096 (4 deploys)
 
 ---
 
@@ -79,7 +79,23 @@
 
 ---
 
-### Bug #5: Settings button no muestra feedback visual ⚠️
+### Bug #5: XMI Instance Export/Import requiere formato de documento específico ⚠️
+
+**No es un bug.** El documento de instancia debe incluir `root`, `nsURI` y `nsPrefix`:
+
+```json
+{
+  "document": {
+    "root": {"eClass":"Person","attributes":{...},"references":{},"children":{}},
+    "nsURI": "http://...",
+    "nsPrefix": "testmm"
+  }
+}
+```
+
+---
+
+### Bug #6: Settings button no muestra feedback visual ⚠️
 
 **Archivo:** `packages/frontend/src/layouts/WorkspaceLayout.tsx`
 
@@ -179,7 +195,8 @@
 | 1 | `6150c42` | Auditoría anterior + 17 fixes | ✅ Desplegado |
 | 2 | `bb5daf1` | Fix TDZ OnboardingTour | ✅ Desplegado |
 | 3 | `ba867f0` | Fix XMI/ZIP export content.name | ✅ Desplegado |
-| 4 | `3a33732` | Fix instance export/import | ✅ Desplegado |
+| 4 | `3a33732` | Fix instance export/import content.name | ✅ Desplegado |
+| 5 | `0e17096` | Fix nsURI/nsPrefix en instance export/import | ✅ Desplegado |
 
 ## Pendiente
 
