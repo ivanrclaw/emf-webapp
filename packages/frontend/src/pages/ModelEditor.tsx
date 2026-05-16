@@ -21,11 +21,14 @@ import {
   getMetamodel,
   getM1Model,
   updateM1Model,
+  getGraphicalSpecs,
   Metamodel,
   M1Model,
+  GraphicalSpec,
 } from '../api/client';
 import { Download, Save } from '../components/icons';
 import ErrorPanel from '../components/feedback/ErrorPanel';
+import type { ShapeStyle, EdgeStyle, Mapping, SpecData } from '../components/spec-diagram/types';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -178,6 +181,7 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
   const [metamodel, setMetamodel] = useState<Metamodel | null>(null);
   const [m1Model, setM1Model] = useState<M1Model | null>(null);
   const [epkg, setEpkg] = useState<EPackage | null>(null);
+  const [specMappings, setSpecMappings] = useState<Map<string, ShapeStyle>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -206,6 +210,23 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
 
         const pkg = parseMetamodel(mm.content || {});
         setEpkg(pkg);
+
+        /* Load graphical spec (Sirius-like) for visual rendering */
+        try {
+          const specs = await getGraphicalSpecs(mmid);
+          if (specs.length > 0) {
+            const specJson = JSON.parse(specs[0].spec || '{}') as SpecData;
+            const mappingMap = new Map<string, ShapeStyle>();
+            for (const layer of specJson.layers || []) {
+              for (const mapping of layer.mappings || []) {
+                mappingMap.set(mapping.domainClass, mapping.style);
+              }
+            }
+            setSpecMappings(mappingMap);
+          }
+        } catch {
+          // No spec available — use default styling
+        }
 
         /* Deserialize saved content */
         if (m.content) {
@@ -279,6 +300,30 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
   const addObjectNode = useCallback((eClass: EClassData) => {
     const id = generateId();
     const label = `${eClass.name}_${nodes.filter(n => n.data?.eClassName === eClass.name).length + 1}`;
+
+    /* Apply Sirius graphical spec style if available */
+    const specStyle = specMappings.get(eClass.name);
+    const nodeStyle = specStyle
+      ? {
+          background: specStyle.color,
+          border: `${specStyle.borderSize}px solid ${specStyle.borderColor}`,
+          borderRadius: specStyle.shape === 'ellipse' ? '50%' : specStyle.shape === 'diamond' ? 4 : 8,
+          padding: '12px 16px',
+          color: '#fff',
+          textShadow: '0 1px 3px rgba(0,0,0,0.3)',
+          fontSize: 13,
+          minWidth: 160,
+        }
+      : {
+          background: 'var(--surface)',
+          border: '1px solid var(--border)',
+          borderRadius: 8,
+          padding: '12px 16px',
+          color: 'var(--text)',
+          fontSize: 13,
+          minWidth: 160,
+        };
+
     const newNode: Node<M1ObjectNodeData> = {
       id,
       type: 'default',
@@ -290,18 +335,10 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
         label,
         eClass,
       },
-      style: {
-        background: 'var(--surface)',
-        border: '1px solid var(--border)',
-        borderRadius: 8,
-        padding: '12px 16px',
-        color: 'var(--text)',
-        fontSize: 13,
-        minWidth: 160,
-      },
+      style: nodeStyle,
     };
     setNodes((nds) => [...nds, newNode]);
-  }, [nodes, setNodes]);
+  }, [nodes, setNodes, specMappings]);
 
   /* Connect edges */
   const onConnect = useCallback(
@@ -371,7 +408,7 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
     : [];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--bg)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg)' }}>
       {/* ── Toolbar ────────────────────────────────────────── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 12, padding: '8px 20px',
@@ -422,6 +459,11 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
         }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
             Palette
+            {specMappings.size > 0 && (
+              <span style={{ fontSize: 9, fontWeight: 400, marginLeft: 6, color: 'var(--primary)', textTransform: 'none' }}>
+                ● Sirius
+              </span>
+            )}
           </div>
           {paletteItems.length === 0 && (
             <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
@@ -444,7 +486,16 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
               onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface-hover)')}
               onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--border)')}
             >
-              <div style={{ fontWeight: 500 }}>{ec.name}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {specMappings.has(ec.name) && (
+                  <span style={{
+                    width: 10, height: 10, borderRadius: 2, flexShrink: 0,
+                    background: specMappings.get(ec.name)!.color,
+                    border: `1px solid ${specMappings.get(ec.name)!.borderColor}`,
+                  }} />
+                )}
+                <span style={{ fontWeight: 500 }}>{ec.name}</span>
+              </div>
               <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
                 {ec.eStructuralFeatures?.length || 0} features
               </div>

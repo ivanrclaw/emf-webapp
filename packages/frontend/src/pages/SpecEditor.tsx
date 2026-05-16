@@ -834,13 +834,12 @@ interface SpecEditorProps {
 }
 
 export default function SpecEditor(props: SpecEditorProps) {
-  // Override parent constraints (max-width and padding from .app-main)
+  // Fill the parent tab container instead of using fixed positioning
   return (
     <div style={{
-      position: 'fixed',
-      inset: 0,
-      top: 60, // app-header height
-      zIndex: 10,
+      width: '100%',
+      height: '100%',
+      overflow: 'hidden',
     }}>
       <ReactFlowProvider>
         <SpecEditorInner projectId={props.projectId} metamodelId={props.metamodelId} />
