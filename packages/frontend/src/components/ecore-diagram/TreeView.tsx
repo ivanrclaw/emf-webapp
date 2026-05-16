@@ -342,7 +342,6 @@ export const TreeView: React.FC<TreeViewProps> = ({ pkg, onSelect, selectedId })
       style={{
         flex: 1,
         background: 'var(--surface)',
-        borderRight: '1px solid var(--border)',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',

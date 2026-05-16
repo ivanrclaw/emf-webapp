@@ -50,12 +50,11 @@ export const Toolbox: React.FC<ToolboxProps> = ({ onAdd }) => {
   return (
     <div
       style={{
-        width: 256,
         background: 'var(--surface)',
-        borderRight: '1px solid var(--border)',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
+        flexShrink: 0,
       }}
     >
       {/* Header */}
