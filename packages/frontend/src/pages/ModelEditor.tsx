@@ -625,8 +625,8 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
       {/* ── Export Output ──────────────────────────────────── */}
       {exportOutput && (
         <div style={{
-          position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100,
-          background: 'var(--bg)', borderTop: '1px solid var(--border)', maxHeight: '40vh', overflow: 'auto',
+          position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 100,
+          background: 'var(--bg)', borderTop: '1px solid var(--border)', maxHeight: '40%', overflow: 'auto',
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 16px', borderBottom: '1px solid var(--border)' }}>
             <span style={{ color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600 }}>Export Output</span>
