@@ -149,6 +149,21 @@ export class XmiService {
     const nsURI = content?.nsURI || (mm as any).nsUri || '';
     const nsPrefix = content?.nsPrefix || (mm as any).nsPrefix || 'model';
 
+    // Generate genClasses for ALL EClasses in the metamodel
+    const classifiers = content?.eClassifiers || [];
+    const genClassLines = classifiers
+      .filter((c: any) => c.eAttributes || c.eReferences) // EClass (not EEnum/EDataType)
+      .map((c: any) => `    <genClasses ecoreClass="${nsURI}#//${c.name}"/>`)
+      .join('\n');
+
+    // Generate genEnums for all EEnums
+    const genEnumLines = classifiers
+      .filter((c: any) => c.eLiterals)
+      .map((c: any) => `    <genEnums ecoreEnum="${nsURI}#//${c.name}"/>`)
+      .join('\n');
+
+    const nestedContent = [genClassLines, genEnumLines].filter(l => l).join('\n');
+
     return `<?xml version="1.0" encoding="UTF-8"?>
 <genmodel:GenModel xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
@@ -162,8 +177,8 @@ export class XmiService {
     modelPluginID="${pkgName}"
     forceOverwrite="false"
     updateClasspath="false">
-  <genPackages ecorePackage="${nsURI}#/">
-    <genClasses ecoreClass="${nsURI}#//${pkgName}"/>
+  <genPackages prefix="${nsPrefix.charAt(0).toUpperCase() + nsPrefix.slice(1)}" disposableProviderFactory="true" ecorePackage="${pkgName}.ecore#/">
+${nestedContent}
   </genPackages>
 </genmodel:GenModel>`;
   }

@@ -95,9 +95,9 @@ const EPACKAGE_FEATURES = [
 const EPACKAGE_ECLASS = makeMinimalEClass('EPackage', EPACKAGE_FEATURES);
 const ECLASS_FEATURES = [
     makeEcoreFeature('name'),
-    makeEcoreFeature('abstract'),
-    makeEcoreFeature('interface'),
-    makeEcoreFeature('eSuperTypes', false),
+    { ...makeEcoreFeature('abstract'), derived: true }, // handled by special block
+    { ...makeEcoreFeature('interface'), derived: true }, // handled by special block
+    { ...makeEcoreFeature('eSuperTypes', false), derived: true }, // handled by special block
     makeEcoreFeature('eStructuralFeatures', true),
     makeEcoreFeature('eOperations', true),
     makeEcoreFeature('eAnnotations', true),
@@ -125,7 +125,7 @@ const EATTRIBUTE_FEATURES = [
     makeEcoreFeature('transient'),
     makeEcoreFeature('defaultValueLiteral'),
     makeEcoreFeature('eType'),
-    makeEcoreFeature('eAttributeType'),
+    { ...makeEcoreFeature('eAttributeType'), derived: true }, // same as eType, don't serialize
 ];
 const EATTRIBUTE_ECLASS = makeMinimalEClass('EAttribute', EATTRIBUTE_FEATURES);
 const EREFERENCE_FEATURES = [
@@ -137,7 +137,7 @@ const EREFERENCE_FEATURES = [
     makeEcoreFeature('derived'),
     makeEcoreFeature('eType'),
     makeEcoreFeature('eOpposite'),
-    makeEcoreFeature('eReferenceType'),
+    { ...makeEcoreFeature('eReferenceType'), derived: true }, // same as eType, don't serialize
 ];
 const EREFERENCE_ECLASS = makeMinimalEClass('EReference', EREFERENCE_FEATURES);
 const EENUMLITERAL_FEATURES = [

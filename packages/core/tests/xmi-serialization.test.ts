@@ -223,8 +223,9 @@ describe('XMI Roundtrip', () => {
     expect(xmi).toContain('xsi:type="ecore:EAttribute"');
     expect(xmi).toContain('name="name"');
     expect(xmi).toContain('iD="true"');
-    expect(xmi).toContain('lowerBound="0"');
-    expect(xmi).toContain('upperBound="1"');
+    // lowerBound=0 and upperBound=1 are defaults — Eclipse omits them
+    expect(xmi).not.toContain('lowerBound="0"');
+    expect(xmi).not.toContain('upperBound="1"');
   });
 
   it('10. roundtrip EReference: containment y eType preservados', () => {
@@ -242,7 +243,8 @@ describe('XMI Roundtrip', () => {
 
     expect(xmi).toContain('xsi:type="ecore:EEnum"');
     expect(xmi).toContain('name="ACTIVE"');
-    expect(xmi).toContain('value="0"');
+    // value=0 is the default — Eclipse omits it
+    expect(xmi).not.toContain('value="0"');
     expect(xmi).toContain('literal="Active"');
     expect(xmi).toContain('name="INACTIVE"');
     expect(xmi).toContain('value="1"');

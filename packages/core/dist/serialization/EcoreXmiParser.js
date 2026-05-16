@@ -289,14 +289,32 @@ function parseEAnnotations(xml) {
 // XML Helpers (lightweight, no external deps)
 // ═══════════════════════════════════════════════════════════════
 /**
+ * Desescapa entidades XML en un string.
+ */
+function unescapeXml(str) {
+    return str
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&apos;/g, "'");
+}
+/**
  * Extrae el valor de un atributo XML.
- * Maneja comillas simples y dobles.
+ * Maneja comillas simples y dobles. Desescapa entidades XML.
  */
 function extractAttr(xml, attrName) {
     const regex = new RegExp(`${attrName}\\s*=\\s*"([^"]*?)"`, 'i');
     const singleRegex = new RegExp(`${attrName}\\s*=\\s*'([^']*?)'`, 'i');
     const m = regex.exec(xml) || singleRegex.exec(xml);
-    return m ? m[1].trim() : '';
+    if (!m)
+        return '';
+    // Only unescape for detail values (OCL expressions, etc. may contain XML entities)
+    const raw = m[1].trim();
+    if (attrName === 'value') {
+        return unescapeXml(raw);
+    }
+    return raw;
 }
 /**
  * Extrae múltiples valores de un atributo XML (separados por espacio).

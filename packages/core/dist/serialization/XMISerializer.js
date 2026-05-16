@@ -265,15 +265,15 @@ function serializeToXMILines(obj, nsPrefix, visited, lines, depth, featureName, 
     // Recopilar atributos
     const attrs = [];
     const childElements = [];
-    // Atributo xmi:id (si hay name, usarlo como id, sino generar uno)
-    const objName = obj.name;
-    if (objName && typeof objName === 'string') {
-        attrs.push(`xmi:id="${escapeXml(objName)}"`);
-    }
-    else {
-        // Generar un ID basado en el tipo y profundidad
-        const id = `_${eClass.name}_${depth}_${lines.length}`;
-        attrs.push(`xmi:id="${id}"`);
+    // Atributo xmi:id — solo para EClassifiers (EClass, EEnum, EDataType) y EPackage
+    // Features (EAttribute, EReference) NO llevan xmi:id en Eclipse
+    const eClassName = eClass.name;
+    const isClassifier = eClassName === 'EClass' || eClassName === 'EEnum' || eClassName === 'EDataType' || eClassName === 'EPackage';
+    if (isClassifier) {
+        const objName = obj.name;
+        if (objName && typeof objName === 'string') {
+            attrs.push(`xmi:id="${escapeXml(objName)}"`);
+        }
     }
     // xsi:type para elementos hijo — siempre para eClassifiers (el parser lo necesita)
     if (featureName && parentFeature) {
@@ -319,8 +319,8 @@ function serializeToXMILines(obj, nsPrefix, visited, lines, depth, featureName, 
             }
         }
     }
-    // EDataType href (para EDataType primitivos)
-    if ('serializable' in obj) {
+    // EDataType href (para EDataType primitivos — NOT EEnum which also has 'serializable')
+    if ('serializable' in obj && !('eLiterals' in obj)) {
         const dt = obj;
         if (dt.name in ECORE_DATA_TYPE_HREF) {
             attrs.push(`href="${ECORE_DATA_TYPE_HREF[dt.name]}"`);
@@ -345,24 +345,31 @@ function serializeToXMILines(obj, nsPrefix, visited, lines, depth, featureName, 
                 if (value != null) {
                     const typedObj = value;
                     const typedName = typedObj.name || '';
-                    if ('iD' in obj) {
+                    if ('containment' in obj) {
+                        // EReference: eType -> "#//ClassName"
+                        attrs.push(`eType="#//${typedName}"`);
+                    }
+                    else if ('iD' in obj) {
                         // EAttribute: eType -> "ecore:EDataType href"
                         if (typedName in ECORE_DATA_TYPE_HREF) {
                             attrs.push(`eType="ecore:EDataType ${ECORE_DATA_TYPE_HREF[typedName]}"`);
                         }
+                        else if ('eLiterals' in typedObj) {
+                            // Local EEnum — use fragment path
+                            attrs.push(`eType="#//${typedName}"`);
+                        }
                         else {
-                            const dtPkg = typedObj.eClass ? typedObj.eClass().ePackage : null;
-                            if (dtPkg && dtPkg.nsURI) {
-                                attrs.push(`eType="ecore:EDataType ${dtPkg.nsURI}#//${typedName}"`);
+                            // Custom EDataType — check if it's in the same package (local) or external
+                            const typePkg = typedObj.ePackage;
+                            if (typePkg && typePkg.nsURI && typePkg.nsURI !== ECORE_NS) {
+                                // External custom datatype
+                                attrs.push(`eType="ecore:EDataType ${typePkg.nsURI}#//${typedName}"`);
                             }
                             else {
-                                attrs.push(`eType="${escapeXml(getXMIReference(typedObj, nsPrefix))}"`);
+                                // Local custom type — use fragment path
+                                attrs.push(`eType="#//${typedName}"`);
                             }
                         }
-                    }
-                    else if ('containment' in obj) {
-                        // EReference: eType -> "#//ClassName"
-                        attrs.push(`eType="#//${typedName}"`);
                     }
                     else {
                         attrs.push(`eType="${escapeXml(getXMIReference(typedObj, nsPrefix))}"`);
@@ -427,6 +434,27 @@ function serializeToXMILines(obj, nsPrefix, visited, lines, depth, featureName, 
             else {
                 if (value != null && value !== undefined) {
                     const strValue = attributeValueToString(value, attr.eAttributeType);
+                    // Skip default values that Eclipse omits
+                    if (feature.name === 'lowerBound' && strValue === '0')
+                        continue;
+                    if (feature.name === 'upperBound' && strValue === '1')
+                        continue;
+                    if (feature.name === 'iD' && strValue === 'false')
+                        continue;
+                    if (feature.name === 'changeable' && strValue === 'true')
+                        continue;
+                    if (feature.name === 'derived' && strValue === 'false')
+                        continue;
+                    if (feature.name === 'transient' && strValue === 'false')
+                        continue;
+                    if (feature.name === 'defaultValueLiteral' && strValue === '')
+                        continue;
+                    if (feature.name === 'serializable' && strValue === 'true')
+                        continue;
+                    if (feature.name === 'containment' && strValue === 'false')
+                        continue;
+                    if (feature.name === 'value' && strValue === '0')
+                        continue;
                     attrs.push(`${feature.name}="${escapeXml(strValue)}"`);
                 }
             }

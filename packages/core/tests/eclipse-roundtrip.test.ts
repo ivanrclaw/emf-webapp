@@ -7,7 +7,7 @@
  * These tests verify that models created in the web editor survive
  * conversion to Eclipse-compatible XMI and back.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { serializeToXMI } from '../src/serialization/XMISerializer.js';
 import { serializableToXmiCompatible } from '../src/serialization/SerializableToXmiObject.js';
 import { parseEcoreXmi } from '../src/serialization/EcoreXmiParser.js';
@@ -734,5 +734,137 @@ describe('Eclipse Round-trip: Complex package', () => {
     expect(xmi).toContain('name="ComplexModel"');
     expect(xmi).toContain('nsURI="http://complex/1.0"');
     expect(xmi).toContain('nsPrefix="complex"');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// Test: Sprint 9 — Eclipse interoperability regression tests
+// ═══════════════════════════════════════════════════════════════
+
+describe('Eclipse Interoperability: Sprint 9 fixes', () => {
+  const libraryModel: any = {
+    name: 'library',
+    nsURI: 'http://www.example.org/library',
+    nsPrefix: 'library',
+    eClassifiers: [
+      {
+        id: 'c1', name: 'Library',
+        eAttributes: [{ name: 'name', eType: 'EString' }],
+        eReferences: [{ name: 'books', targetId: 'c2', containment: true, upperBound: -1 }],
+        eSuperTypes: [], abstract: false, interface: false
+      },
+      {
+        id: 'c2', name: 'Book',
+        eAttributes: [
+          { name: 'title', eType: 'EString' },
+          { name: 'pages', eType: 'EInt' },
+          { name: 'category', eType: 'BookCategory' }
+        ],
+        eReferences: [{ name: 'author', targetId: 'c3', containment: false }],
+        eSuperTypes: ['NamedElement'], abstract: false, interface: false
+      },
+      {
+        id: 'c3', name: 'Writer',
+        eAttributes: [{ name: 'name', eType: 'EString' }],
+        eReferences: [{ name: 'books', targetId: 'c2', containment: false, upperBound: -1 }],
+        eSuperTypes: ['NamedElement'], abstract: false, interface: false
+      },
+      {
+        id: 'c4', name: 'NamedElement',
+        eAttributes: [{ name: 'name', eType: 'EString' }],
+        eReferences: [], eSuperTypes: [], abstract: true, interface: false
+      },
+      {
+        id: 'c5', name: 'BookCategory',
+        eLiterals: [
+          { name: 'Mystery', value: 0, literal: 'Mystery' },
+          { name: 'ScienceFiction', value: 1, literal: 'ScienceFiction' },
+          { name: 'Biography', value: 2, literal: 'Biography' }
+        ]
+      }
+    ]
+  };
+
+  let xmi: string;
+
+  beforeAll(() => {
+    const pkg = serializableToXmiCompatible(libraryModel);
+    xmi = serializeToXMI(pkg);
+  });
+
+  it('should NOT emit eReferenceType as attribute (was [object Object])', () => {
+    expect(xmi).not.toContain('eReferenceType');
+  });
+
+  it('should emit eType="#//ClassName" for EReferences (local fragment path)', () => {
+    expect(xmi).toContain('eType="#//Book"');
+    expect(xmi).toContain('eType="#//Writer"');
+  });
+
+  it('should emit eSuperTypes for classes with inheritance', () => {
+    expect(xmi).toContain('eSuperTypes="#//NamedElement"');
+  });
+
+  it('should NOT emit abstract="false" (only emit when true)', () => {
+    expect(xmi).not.toContain('abstract="false"');
+    expect(xmi).toContain('abstract="true"');
+  });
+
+  it('should NOT have duplicate xmi:id values', () => {
+    const ids: string[] = [];
+    const re = /xmi:id="([^"]+)"/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(xmi)) !== null) ids.push(m[1]);
+    const uniqueIds = new Set(ids);
+    expect(ids.length).toBe(uniqueIds.size);
+  });
+
+  it('should NOT emit href on EEnum', () => {
+    // Find the BookCategory section and verify no href
+    const enumSection = xmi.split('BookCategory')[1]?.split('</eClassifiers>')[0] || '';
+    expect(enumSection).not.toContain('href=');
+  });
+
+  it('should emit eType="#//EnumName" for EEnum-typed attributes', () => {
+    expect(xmi).toContain('eType="#//BookCategory"');
+  });
+
+  it('should NOT emit eAttributeType (derived, not serialized)', () => {
+    expect(xmi).not.toContain('eAttributeType');
+  });
+
+  it('should omit default values (lowerBound=0, upperBound=1, iD=false, etc.)', () => {
+    expect(xmi).not.toContain('lowerBound="0"');
+    expect(xmi).not.toContain('upperBound="1"');
+    expect(xmi).not.toContain('iD="false"');
+    expect(xmi).not.toContain('changeable="true"');
+    expect(xmi).not.toContain('derived="false"');
+    expect(xmi).not.toContain('transient="false"');
+  });
+
+  it('should emit non-default values (upperBound=-1, containment=true)', () => {
+    expect(xmi).toContain('upperBound="-1"');
+    expect(xmi).toContain('containment="true"');
+  });
+
+  it('should round-trip back to SerializableEPackage preserving all data', () => {
+    const parsed = parseEcoreXmi(xmi) as any;
+    expect(parsed.name).toBe('library');
+    expect(parsed.nsURI).toBe('http://www.example.org/library');
+    expect(parsed.eClassifiers).toHaveLength(5);
+
+    const book = parsed.eClassifiers.find((c: any) => c.name === 'Book');
+    // eSuperTypes are resolved to IDs by the parser
+    const namedEl = parsed.eClassifiers.find((c: any) => c.name === 'NamedElement');
+    expect(book.eSuperTypes).toContain(namedEl.id);
+    expect(book.eAttributes).toHaveLength(3);
+    expect(book.eReferences).toHaveLength(1);
+    expect(book.eReferences[0].name).toBe('author');
+
+    expect(namedEl.abstract).toBe(true);
+
+    const bookCat = parsed.eClassifiers.find((c: any) => c.name === 'BookCategory');
+    expect(bookCat.eLiterals).toHaveLength(3);
+    expect(bookCat.eLiterals[1].value).toBe(1);
   });
 });
