@@ -23,6 +23,7 @@ import {
   type Project,
   type Metamodel,
 } from '../../api/client';
+import { useToast } from '../ToastProvider';
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -61,6 +62,7 @@ export default function Sidebar({
   const [projects, setProjects] = useState<ProjectNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { addToast } = useToast();
 
   const fetchProjects = useCallback(async () => {
     setLoading(true);
@@ -77,7 +79,9 @@ export default function Sidebar({
         })),
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load projects');
+      const msg = err instanceof Error ? err.message : 'Failed to load projects';
+      setError(msg);
+      addToast(msg, 'error', { retryable: true, onRetry: fetchProjects });
     } finally {
       setLoading(false);
     }
@@ -351,6 +355,13 @@ export default function Sidebar({
           {/* Project row */}
           <div
             onClick={() => toggleProject(idx)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                toggleProject(idx);
+              }
+            }}
+            tabIndex={0}
             style={{
               display: 'flex',
               alignItems: 'center',

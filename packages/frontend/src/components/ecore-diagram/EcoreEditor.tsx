@@ -37,6 +37,7 @@ import { edgeTypes } from './edges/CustomEdges';
 import { getMetamodel, getProject, exportEcore, exportGenmodel, exportXmiZip } from '../../api/client';
 import { useCollaboration } from '../../hooks/useCollaboration';
 import { useOCLValidation } from '../../hooks/useOCLValidation';
+import { useToast } from '../ToastProvider';
 import { RemoteCursors } from '../collaboration/RemoteCursors';
 import type { RoomUser } from '../../hooks/useCollaboration';
 import { ErrorBoundary } from '../ErrorBoundary';
@@ -102,6 +103,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [projectName, setProjectName] = useState('');
   const initialLoad = useRef(true);
+  const { addToast } = useToast();
 
   // ── Context hooks ──────────────────────────────────────────────
   const { register, updateState, unregister } = useEditorContext();
@@ -280,10 +282,10 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
               if (data.success) {
                 window.location.reload();
               } else {
-                alert('Import failed: ' + (data.message || 'Unknown error'));
+                addToast('Import failed: ' + (data.message || 'Unknown error'), 'error');
               }
             } catch (err: any) {
-              alert('Error importing file: ' + err.message);
+              addToast('Error importing file: ' + err.message, 'error');
             }
           };
           input.click();
@@ -306,10 +308,10 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
               if (data.success) {
                 window.location.reload();
               } else {
-                alert('Import failed: ' + (data.message || 'Unknown error'));
+                addToast('Import failed: ' + (data.message || 'Unknown error'), 'error');
               }
             } catch (err: any) {
-              alert('Error importing Eclipse project: ' + err.message);
+              addToast('Error importing Eclipse project: ' + err.message, 'error');
             }
           };
           input.click();

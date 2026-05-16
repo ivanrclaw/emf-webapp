@@ -366,7 +366,7 @@ function WorkspaceInner() {
       {/* Body: Sidebar + Content + Right Panel */}
       <div style={styles.body}>
         {/* Left Sidebar */}
-        <div data-tour="sidebar" style={{ display: workspace.sidebarOpen ? undefined : 'none' }}>
+        <div data-tour="sidebar" role="navigation" aria-label="Project explorer" style={{ display: workspace.sidebarOpen ? undefined : 'none' }}>
           <ResizablePanel
             direction="right"
             defaultWidth={260}
@@ -391,7 +391,7 @@ function WorkspaceInner() {
         </div>
 
         {/* Main Content Area */}
-        <div style={styles.content}>
+        <main style={styles.content} aria-label="Editor">
           {/* Contextual Toolbar */}
           <Toolbar
             activeTabType={activeTab?.type || null}
@@ -416,10 +416,10 @@ function WorkspaceInner() {
               No tabs open. Use the sidebar to open a metamodel.
             </div>
           )}
-        </div>
-
+        </main>
         {/* Right Panel (Inspector/Properties — filled via portal by active editor) */}
-        <div
+        <aside
+          aria-label="Properties inspector"
           style={{
             ...styles.rightPanel,
             ...(panels.rightPanelVisible ? {} : styles.rightPanelHidden),
@@ -429,7 +429,7 @@ function WorkspaceInner() {
             ref={panels.rightPanelRef}
             style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', background: 'var(--surface)' }}
           />
-        </div>
+        </aside>
       </div>
 
       {/* Status Bar */}

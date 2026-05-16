@@ -17,7 +17,13 @@ import { ProjectModule } from '../src/modules/project/project.module.js';
 import { MetamodelModule } from '../src/modules/metamodel/metamodel.module.js';
 import { Project } from '../src/modules/project/project.entity.js';
 import { Metamodel } from '../src/modules/metamodel/metamodel.entity.js';
+import { M1Model } from '../src/modules/m1model/m1model.entity.js';
+import { GraphicalSpec } from '../src/modules/graphicalspec/graphicalspec.entity.js';
+import { OCLConstraint } from '../src/modules/oclconstraint/oclconstraint.entity.js';
+import { CodeTemplate } from '../src/modules/codetemplate/codetemplate.entity.js';
+import { ModelVersion } from '../src/modules/modelversion/modelversion.entity.js';
 import { ProjectService } from '../src/modules/project/project.service.js';
+import { ProjectExportService } from '../src/modules/project/project-export.service.js';
 import { MetamodelService } from '../src/modules/metamodel/metamodel.service.js';
 import request from 'supertest';
 import { DataSource } from 'typeorm';
@@ -30,7 +36,7 @@ beforeAll(async () => {
       TypeOrmModule.forRoot({
         type: 'sqlite',
         database: ':memory:',
-        entities: [Project, Metamodel],
+        entities: [Project, Metamodel, M1Model, GraphicalSpec, OCLConstraint, CodeTemplate, ModelVersion],
         synchronize: true,
       }),
       ProjectModule,

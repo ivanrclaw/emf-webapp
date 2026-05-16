@@ -4,6 +4,7 @@ import {
   useState,
   useCallback,
   useRef,
+  useEffect,
   type ReactNode,
 } from 'react';
 import Toast, { type ToastItem, type ToastType } from './Toast';
@@ -93,6 +94,31 @@ export default function ToastProvider({ children }: { children: ReactNode }) {
   const clearToasts = useCallback(() => {
     setToasts([]);
   }, []);
+
+  // ── Global unhandled error/rejection → toast ──
+  useEffect(() => {
+    const handleError = (event: ErrorEvent) => {
+      addToast(
+        event.message || 'Error inesperado',
+        'error',
+        { details: event.filename ? `${event.filename}:${event.lineno}` : undefined },
+      );
+    };
+
+    const handleRejection = (event: PromiseRejectionEvent) => {
+      const msg =
+        event.reason?.message ||
+        (typeof event.reason === 'string' ? event.reason : 'Error de red');
+      addToast(msg, 'error');
+    };
+
+    window.addEventListener('error', handleError);
+    window.addEventListener('unhandledrejection', handleRejection);
+    return () => {
+      window.removeEventListener('error', handleError);
+      window.removeEventListener('unhandledrejection', handleRejection);
+    };
+  }, [addToast]);
 
   return (
     <ToastContext.Provider value={{ addToast, removeToast, clearToasts }}>

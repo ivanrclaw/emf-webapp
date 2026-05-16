@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { WorkspaceProvider, useWorkspace } from './hooks/useWorkspace';
 import { WorkspaceLayout } from './layouts/WorkspaceLayout';
 import ToastProvider from './components/ToastProvider';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import './App.css';
 
 /**
@@ -118,23 +119,25 @@ function DeepLinkSpec() {
 export default function App() {
   return (
     <BrowserRouter>
-      <ToastProvider>
-        <WorkspaceProvider>
-          <Routes>
-            {/* Deep links for backward compatibility */}
-            <Route path="/projects/:pid/metamodels/:mmid/edit" element={<DeepLinkRouter />} />
-            <Route path="/projects/:pid/metamodels/:mmid/models/:modelId/edit" element={<DeepLinkRouter />} />
-            <Route path="/projects/:pid/metamodels/:mmid/constraints" element={<DeepLinkOCL />} />
-            <Route path="/projects/:pid/metamodels/:mmid/templates" element={<DeepLinkCode />} />
-            <Route path="/projects/:pid/metamodels/:mmid/models" element={<DeepLinkModels />} />
-            <Route path="/projects/:pid/metamodels/:mmid/specs" element={<DeepLinkSpec />} />
-            <Route path="/projects/:pid/metamodels/:mmid/specs/:specId" element={<DeepLinkSpec />} />
+      <ErrorBoundary>
+        <ToastProvider>
+          <WorkspaceProvider>
+            <Routes>
+              {/* Deep links for backward compatibility */}
+              <Route path="/projects/:pid/metamodels/:mmid/edit" element={<DeepLinkRouter />} />
+              <Route path="/projects/:pid/metamodels/:mmid/models/:modelId/edit" element={<DeepLinkRouter />} />
+              <Route path="/projects/:pid/metamodels/:mmid/constraints" element={<DeepLinkOCL />} />
+              <Route path="/projects/:pid/metamodels/:mmid/templates" element={<DeepLinkCode />} />
+              <Route path="/projects/:pid/metamodels/:mmid/models" element={<DeepLinkModels />} />
+              <Route path="/projects/:pid/metamodels/:mmid/specs" element={<DeepLinkSpec />} />
+              <Route path="/projects/:pid/metamodels/:mmid/specs/:specId" element={<DeepLinkSpec />} />
 
-            {/* Default: workspace with welcome tab */}
-            <Route path="*" element={<WorkspaceLayout />} />
-          </Routes>
-        </WorkspaceProvider>
-      </ToastProvider>
+              {/* Default: workspace with welcome tab */}
+              <Route path="*" element={<WorkspaceLayout />} />
+            </Routes>
+          </WorkspaceProvider>
+        </ToastProvider>
+      </ErrorBoundary>
     </BrowserRouter>
   );
 }

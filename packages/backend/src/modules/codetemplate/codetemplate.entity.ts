@@ -28,7 +28,7 @@ export class CodeTemplate {
   @Column({ name: 'metamodel_id', type: 'uuid' })
   metamodel_id!: string;
 
-  @Column({ length: 255 })
+  @Column({ type: 'varchar', length: 255 })
   name!: string;
 
   @Column({ type: 'text', nullable: true })

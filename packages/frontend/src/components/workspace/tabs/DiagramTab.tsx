@@ -1,5 +1,6 @@
 import React, { useCallback, useState, type DragEvent } from 'react';
 import EcoreEditor from '../../ecore-diagram/EcoreEditor';
+import { useToast } from '../../ToastProvider';
 
 interface DiagramTabProps {
   projectId: string;
@@ -8,6 +9,7 @@ interface DiagramTabProps {
 
 export function DiagramTab({ projectId, metamodelId }: DiagramTabProps) {
   const [isDragOver, setIsDragOver] = useState(false);
+  const { addToast } = useToast();
 
   const handleDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -32,7 +34,7 @@ export function DiagramTab({ projectId, metamodelId }: DiagramTabProps) {
         (f) => f.name.endsWith('.ecore') || f.name.endsWith('.xml'),
       );
       if (!ecoreFile) {
-        alert('Please drop a .ecore file');
+        addToast('Please drop a .ecore file', 'warning');
         return;
       }
 
@@ -45,12 +47,12 @@ export function DiagramTab({ projectId, metamodelId }: DiagramTabProps) {
         });
         const data = await resp.json();
         if (data.success) {
-          alert('Metamodel imported successfully. Reload the diagram to see changes.');
+          addToast('Metamodel imported successfully', 'success');
         } else {
-          alert('Import failed: ' + (data.message || 'Unknown error'));
+          addToast('Import failed: ' + (data.message || 'Unknown error'), 'error');
         }
       } catch (err: any) {
-        alert('Error importing file: ' + err.message);
+        addToast('Error importing file: ' + err.message, 'error');
       }
     },
     [projectId, metamodelId],

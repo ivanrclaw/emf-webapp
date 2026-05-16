@@ -9,7 +9,7 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          'react-vendor': ['react', 'react-dom', 'react-router'],
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
           'flow': ['@xyflow/react'],
           'monaco': ['@monaco-editor/react'],
         },
