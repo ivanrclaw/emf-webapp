@@ -24,12 +24,14 @@ jobs:
         run: npm ci
 
       - name: Build frontend
-        run: npx --prefix packages/frontend vite build
+        run: npx vite build
+        working-directory: packages/frontend
         env:
           NODE_ENV: production
 
       - name: Build backend
-        run: npx --prefix packages/backend tsc
+        run: npx tsc
+        working-directory: packages/backend
         env:
           NODE_ENV: production
 
