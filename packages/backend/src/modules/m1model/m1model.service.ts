@@ -41,27 +41,31 @@ export class M1ModelService {
   async create(
     projectId: string,
     metamodelId: string,
-    data: { name: string; content?: string },
+    data: { name: string; content?: any },
   ): Promise<M1Model> {
     const model = this.repo.create({
       project_id: projectId,
       metamodel_id: metamodelId,
       name: data.name,
-      content: data.content || '[]',
+      content: data.content ?? '[]',
     });
-    return this.repo.save(model);
+    const saved = await this.repo.save(model);
+    // Re-fetch to ensure transformer 'from' is applied on the response
+    return this.findOne(projectId, metamodelId, saved.id);
   }
 
   async update(
     projectId: string,
     metamodelId: string,
     id: string,
-    data: { name?: string; content?: string },
+    data: { name?: string; content?: any },
   ): Promise<M1Model> {
     const model = await this.findOne(projectId, metamodelId, id);
     if (data.name !== undefined) model.name = data.name;
     if (data.content !== undefined) model.content = data.content;
-    return this.repo.save(model);
+    await this.repo.save(model);
+    // Re-fetch to ensure transformer 'from' is applied on the response
+    return this.findOne(projectId, metamodelId, id);
   }
 
   async remove(

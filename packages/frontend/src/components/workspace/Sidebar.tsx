@@ -132,7 +132,6 @@ export default function Sidebar({
     minWidth: 0,
     flex: '0 1 auto',
     maxHeight: '50%',
-    overflow: 'hidden',
     background: 'var(--surface)',
     borderRight: '1px solid var(--border)',
     display: 'flex',
