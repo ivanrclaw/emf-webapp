@@ -20,6 +20,8 @@ export interface ToolbarProps {
   onAction: (action: string) => void;
   dirty?: boolean;
   validationStatus?: 'valid' | 'invalid' | 'unknown';
+  sidebarOpen?: boolean;
+  onToggleSidebar?: () => void;
 }
 
 interface ToolbarButton {
@@ -112,7 +114,7 @@ function getValidationColor(status?: 'valid' | 'invalid' | 'unknown'): string {
   }
 }
 
-export function Toolbar({ activeTabType, onAction, dirty, validationStatus }: ToolbarProps) {
+export function Toolbar({ activeTabType, onAction, dirty, validationStatus, sidebarOpen, onToggleSidebar }: ToolbarProps) {
   const [hoveredAction, setHoveredAction] = useState<string | null>(null);
   const [darkMode, setDarkMode] = useState(false);
 
@@ -204,7 +206,7 @@ export function Toolbar({ activeTabType, onAction, dirty, validationStatus }: To
         flexShrink: 0,
       }}
     >
-      {/* Left side: action buttons */}
+      {/* Left side: sidebar toggle + action buttons */}
       <div
         style={{
           display: 'flex',
@@ -214,6 +216,30 @@ export function Toolbar({ activeTabType, onAction, dirty, validationStatus }: To
           minWidth: 0,
         }}
       >
+        {/* Sidebar toggle — always visible */}
+        {onToggleSidebar && (
+          <Tooltip label={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}>
+            <button
+              type="button"
+              onClick={onToggleSidebar}
+              onMouseEnter={() => setHoveredAction('sidebar')}
+              onMouseLeave={() => setHoveredAction(null)}
+              style={{
+                ...buttonStyle,
+                background: hoveredAction === 'sidebar' ? buttonHoverBg : 'transparent',
+              }}
+              aria-label={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <line x1="9" y1="3" x2="9" y2="21" />
+              </svg>
+            </button>
+          </Tooltip>
+        )}
+        {onToggleSidebar && hasActions && (
+          <div style={separatorStyle} aria-hidden="true" />
+        )}
         {hasActions ? (
           renderButtons()
         ) : (

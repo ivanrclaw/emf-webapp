@@ -78,6 +78,7 @@ const styles = {
     background: 'var(--surface)',
     overflow: 'hidden',
     width: 300,
+    minHeight: 0,
   },
   rightPanelHidden: {
     display: 'none' as const,
@@ -394,6 +395,11 @@ function WorkspaceInner() {
             onAction={handleToolbarAction}
             dirty={editor.state.dirty}
             validationStatus={editor.state.validationStatus}
+            sidebarOpen={workspace.sidebarOpen}
+            onToggleSidebar={() => {
+              manuallyToggled.current = workspace.sidebarOpen;
+              workspace.toggleSidebar();
+            }}
           />
 
           {activeTab ? (
@@ -418,7 +424,7 @@ function WorkspaceInner() {
         >
           <div
             ref={panels.rightPanelRef}
-            style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}
+            style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', background: 'var(--surface)' }}
           />
         </div>
       </div>

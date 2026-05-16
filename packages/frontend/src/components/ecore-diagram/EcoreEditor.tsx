@@ -107,6 +107,18 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
   const { register, updateState, unregister } = useEditorContext();
   const { leftPanelRef, rightPanelRef, setRightPanelVisible } = usePanelPortals();
 
+  // Force re-render once portal refs are available (refs don't trigger renders)
+  const [portalsReady, setPortalsReady] = useState(false);
+  useEffect(() => {
+    // Check on next frame after mount when refs are assigned
+    const raf = requestAnimationFrame(() => {
+      if (leftPanelRef.current || rightPanelRef.current) {
+        setPortalsReady(true);
+      }
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [leftPanelRef, rightPanelRef]);
+
   // ── Fetch metamodel + project name on mount ─────────────────
   useEffect(() => {
     let cancelled = false;
@@ -471,7 +483,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
   return (
     <div style={styles.canvas}>
       {/* ── Left Panel Portal (Toolbox + TreeView) ──────────── */}
-      {leftPanelRef.current && createPortal(
+      {portalsReady && leftPanelRef.current && createPortal(
         <>
           <Toolbox onAdd={model.addClassifier} />
           <div style={{ flex: 1, overflow: 'hidden', borderTop: '1px solid var(--border)' }}>
@@ -486,7 +498,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
       )}
 
       {/* ── Right Panel Portal (PropertyInspector + OCL) ────── */}
-      {rightPanelRef.current && createPortal(
+      {portalsReady && rightPanelRef.current && createPortal(
         <>
           <PropertyInspector
             selectedId={model.selectedId}
