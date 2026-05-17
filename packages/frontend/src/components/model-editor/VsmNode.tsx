@@ -1,20 +1,22 @@
 /**
- * @emf-webapp/frontend — SpecNode
+ * @emf-webapp/frontend — VsmNode
  *
- * ReactFlow custom node that renders a PREVIEW of how a NodeMapping
- * will look in the runtime editor. Supports all 6 shape types with
- * full style application from the mapping's defaultStyle.
+ * ReactFlow custom node for the runtime model editor. Renders M1 objects
+ * according to their VSM NodeMapping style, evaluating conditional styles
+ * against the semantic data of the instance.
  */
 import { memo, useMemo } from 'react';
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
-import type { NodeMapping, LineStyleType, LabelPosition } from './types';
+import type { NodeMapping, NodeStyle, LineStyleType, LabelPosition } from '../spec-diagram/types';
+import { evaluateLabel, evaluatePredicate } from '../../lib/expression-engine';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-export interface SpecNodeData extends Record<string, unknown> {
+export interface VsmNodeData extends Record<string, unknown> {
   mapping: NodeMapping;
+  semanticData: Record<string, unknown>;
   selected: boolean;
 }
 
@@ -36,6 +38,23 @@ function borderDashStyle(lineStyle: LineStyleType): string | undefined {
     case 'dash-dot': return '6 3 2 3';
     default: return undefined;
   }
+}
+
+/**
+ * Resolve the effective style by evaluating conditional styles against
+ * the semantic data. The first matching conditional style's properties
+ * override the defaultStyle.
+ */
+function resolveStyle(mapping: NodeMapping, semanticData: Record<string, unknown>): NodeStyle {
+  const { defaultStyle, conditionalStyles } = mapping;
+
+  for (const conditional of conditionalStyles) {
+    if (evaluatePredicate(conditional.predicateExpression, { self: semanticData })) {
+      return { ...defaultStyle, ...conditional.style };
+    }
+  }
+
+  return defaultStyle;
 }
 
 /* ------------------------------------------------------------------ */
@@ -281,88 +300,58 @@ function NoteShape(props: ShapeProps) {
   );
 }
 
-function ImageShape(props: ShapeProps) {
-  const { color, borderColor, borderSize, borderLineStyle, label, labelColor, labelSize, labelPosition, labelBold, labelItalic, width, height } = props;
-  const dash = borderDashStyle(borderLineStyle);
-
-  return (
-    <div style={{ position: 'relative', width, height }}>
-      {labelPosition !== 'inside' && (
-        <ExternalLabel label={label} labelColor={labelColor} labelSize={labelSize} labelBold={labelBold} labelItalic={labelItalic} position={labelPosition} />
-      )}
-      <div style={{
-        width: '100%',
-        height: '100%',
-        borderRadius: 4,
-        background: color,
-        border: `${borderSize}px solid ${borderColor}`,
-        borderStyle: dash ? 'dashed' : 'solid',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 4,
-        overflow: 'hidden',
-      }}>
-        {/* Image placeholder icon */}
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={labelColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-          <circle cx="8.5" cy="8.5" r="1.5" />
-          <polyline points="21,15 16,10 5,21" />
-        </svg>
-        {labelPosition === 'inside' && (
-          <LabelElement label={label} labelColor={labelColor} labelSize={Math.min(labelSize, 11)} labelBold={labelBold} labelItalic={labelItalic} />
-        )}
-      </div>
-    </div>
-  );
-}
-
 /* ------------------------------------------------------------------ */
-/*  SpecNode Component                                                 */
+/*  VsmNode Component                                                   */
 /* ------------------------------------------------------------------ */
 
-function SpecNode(props: NodeProps<Node<SpecNodeData>>) {
+function VsmNode(props: NodeProps<Node<VsmNodeData>>) {
   const { data } = props;
-  const { mapping, selected } = data;
-  const style = mapping.defaultStyle;
+  const { mapping, semanticData, selected } = data;
 
-  const label = mapping.domainClass || 'Unnamed';
-  const width = style.width ?? 160;
-  const height = style.height ?? 64;
+  const resolvedStyle = useMemo(
+    () => resolveStyle(mapping, semanticData),
+    [mapping, semanticData],
+  );
+
+  const label = useMemo(
+    () => evaluateLabel(resolvedStyle.labelExpression, { self: semanticData }),
+    [resolvedStyle.labelExpression, semanticData],
+  );
+
+  const width = resolvedStyle.width ?? 160;
+  const height = resolvedStyle.height ?? 64;
 
   const shapeProps: ShapeProps = useMemo(() => ({
-    color: style.color,
-    borderColor: style.borderColor,
-    borderSize: Math.max(style.borderSize, 1),
-    borderLineStyle: style.borderLineStyle,
+    color: resolvedStyle.color,
+    borderColor: resolvedStyle.borderColor,
+    borderSize: Math.max(resolvedStyle.borderSize, 1),
+    borderLineStyle: resolvedStyle.borderLineStyle,
     label,
-    labelColor: style.labelColor,
-    labelSize: style.labelSize,
-    labelPosition: style.labelPosition,
-    labelBold: style.labelBold,
-    labelItalic: style.labelItalic,
+    labelColor: resolvedStyle.labelColor,
+    labelSize: resolvedStyle.labelSize,
+    labelPosition: resolvedStyle.labelPosition,
+    labelBold: resolvedStyle.labelBold,
+    labelItalic: resolvedStyle.labelItalic,
     width,
     height,
-  }), [style, label, width, height]);
+  }), [resolvedStyle, label, width, height]);
 
   const shapeContent = useMemo(() => {
-    switch (style.shape) {
+    switch (resolvedStyle.shape) {
       case 'rounded-rectangle': return <RoundedRectangleShape {...shapeProps} />;
       case 'ellipse': return <EllipseShape {...shapeProps} />;
       case 'diamond': return <DiamondShape {...shapeProps} />;
       case 'note': return <NoteShape {...shapeProps} />;
-      case 'image': return <ImageShape {...shapeProps} />;
       case 'rectangle':
       default: return <RectangleShape {...shapeProps} />;
     }
-  }, [style.shape, shapeProps]);
+  }, [resolvedStyle.shape, shapeProps]);
 
   return (
     <div
       style={{
         cursor: 'pointer',
-        borderRadius: style.shape === 'ellipse' ? '50%' : 8,
+        borderRadius: resolvedStyle.shape === 'ellipse' ? '50%' : 8,
         boxShadow: selected
           ? '0 0 0 3px var(--primary, #6366f1), 0 0 16px rgba(99,102,241,0.4)'
           : '0 2px 8px rgba(0,0,0,0.15)',
@@ -379,4 +368,4 @@ function SpecNode(props: NodeProps<Node<SpecNodeData>>) {
   );
 }
 
-export default memo(SpecNode);
+export default memo(VsmNode);

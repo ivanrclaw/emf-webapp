@@ -1,4 +1,13 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+/**
+ * @emf-webapp/frontend — ModelEditor (Rewritten for Sirius VSM)
+ *
+ * Runtime model editor strictly constrained by the ViewpointSpec.
+ * - Palette generated ONLY from VSM ToolSections
+ * - Nodes rendered according to NodeMapping styles
+ * - Edges rendered according to EdgeMapping styles
+ * - Layers toggleable, constraints enforced
+ */
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   ReactFlow,
@@ -8,13 +17,12 @@ import {
   Node,
   Edge,
   Connection,
-  addEdge,
   useNodesState,
   useEdgesState,
   ReactFlowProvider,
   Panel,
-  SelectionMode,
   MarkerType,
+  ConnectionMode,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import {
@@ -28,150 +36,58 @@ import {
 } from '../api/client';
 import { Download, Save } from '../components/icons';
 import ErrorPanel from '../components/feedback/ErrorPanel';
-import type { ShapeStyle, EdgeStyle, Mapping, SpecData } from '../components/spec-diagram/types';
+import type { ViewpointSpec, NodeCreationTool, ContainerCreationTool, EdgeCreationTool, NodeMapping, Tool } from '../components/spec-diagram/types';
+import VsmNode, { type VsmNodeData } from '../components/model-editor/VsmNode';
+import VsmContainerNode, { type VsmContainerNodeData } from '../components/model-editor/VsmContainerNode';
+import VsmEdge, { type VsmEdgeData } from '../components/model-editor/VsmEdge';
+import { VsmPalette } from '../components/model-editor/VsmPalette';
+import { LayerToggle } from '../components/model-editor/LayerToggle';
+import { VsmPropertyInspector } from '../components/model-editor/VsmPropertyInspector';
+import {
+  collectActiveToolSections,
+  collectActiveMappings,
+  collectActiveTools,
+  canCreateEdge,
+  canDelete,
+} from '../lib/vsm-runtime';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-interface EClassifier {
+interface SemanticObject {
+  id: string;
   eClass: string;
-  name: string;
-  $ref?: string;
-}
-
-interface EAttribute {
-  eClass: string;
-  name: string;
-  eType: EClassifier;
-  lowerBound?: number;
-  upperBound?: number;
-  defaultValueLiteral?: string;
-}
-
-interface EReference {
-  eClass: string;
-  name: string;
-  eType: EClassifier;
-  lowerBound?: number;
-  upperBound?: number;
-  containment?: boolean;
-  eOpposite?: EClassifier;
-}
-
-interface EClassData {
-  eClass: string;
-  name: string;
-  eStructuralFeatures: (EAttribute | EReference)[];
-  abstract?: boolean;
-  interface?: boolean;
-}
-
-interface EPackage {
-  eClass: string;
-  name: string;
-  nsURI: string;
-  nsPrefix: string;
-  eClassifiers: EClassData[];
-}
-
-/* React Flow node data */
-interface M1ObjectNodeData extends Record<string, unknown> {
-  eClassName: string;
   attributes: Record<string, unknown>;
   references: Record<string, string[]>;
-  label: string;
-  eClass: EClassData;
 }
 
-type M1ObjectNode = Node<M1ObjectNodeData>;
+interface ModelContent {
+  objects: SemanticObject[];
+  positions: Record<string, { x: number; y: number }>;
+  activeLayers: string[];
+}
+
+/* ------------------------------------------------------------------ */
+/*  Node/Edge type registries                                          */
+/* ------------------------------------------------------------------ */
+
+const nodeTypes = {
+  vsmNode: VsmNode,
+  vsmContainerNode: VsmContainerNode,
+} as any;
+const edgeTypes = { vsmEdge: VsmEdge } as any;
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
-function parseMetamodel(content: Record<string, any>): EPackage | null {
-  if (!content || !content.eClassifiers) return null;
-
-  // Format A: ya tiene eClass (EPackage nativo)
-  if (content.eClass) return content as unknown as EPackage;
-
-  // Format B: SerializableEPackage del editor Ecore (sin eClass, usa eAttributes/eReferences)
-  return {
-    eClass: 'ecore:EPackage',
-    name: content.name || '',
-    nsURI: content.nsURI || '',
-    nsPrefix: content.nsPrefix || '',
-    eClassifiers: (content.eClassifiers || [])
-      .filter((c: any) => 'abstract' in c || 'interface' in c) // solo EClass (no EEnum/EDataType)
-      .map((c: any) => {
-        const features: (EAttribute | EReference)[] = [];
-        for (const attr of c.eAttributes || []) {
-          features.push({
-            eClass: 'ecore:EAttribute',
-            name: attr.name,
-            eType: { eClass: 'ecore:EDataType', name: attr.eType || attr.type || 'EString' },
-            lowerBound: attr.lowerBound ?? 0,
-            upperBound: attr.upperBound ?? 1,
-            defaultValueLiteral: attr.defaultValueLiteral,
-          });
-        }
-        for (const ref of c.eReferences || []) {
-          features.push({
-            eClass: 'ecore:EReference',
-            name: ref.name,
-            eType: { eClass: 'ecore:EClass', name: ref.targetId, $ref: ref.targetId },
-            lowerBound: ref.lowerBound ?? 0,
-            upperBound: ref.upperBound ?? 1,
-            containment: ref.containment,
-            eOpposite: ref.eOpposite ? { eClass: 'ecore:EReference', name: ref.eOpposite } : undefined,
-          });
-        }
-        return {
-          eClass: 'ecore:EClass',
-          name: c.name,
-          eStructuralFeatures: features,
-          abstract: c.abstract ?? false,
-          interface: c.interface ?? false,
-        } as EClassData;
-      }),
-  } as EPackage;
-}
-
-function concreteEClasses(epkg: EPackage): EClassData[] {
-  return (epkg.eClassifiers || []).filter(
-    (c) => !c.abstract && !c.interface,
-  );
-}
-
-function generateId(): string {
+function uid(): string {
   return `obj_${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function defaultAttributes(eClass: EClassData): Record<string, unknown> {
-  const attrs: Record<string, unknown> = {};
-  for (const feat of eClass.eStructuralFeatures || []) {
-    if ('eType' in feat && 'lowerBound' in feat) {
-      // It's an EAttribute based on having those fields
-      const attr = feat as EAttribute;
-      if (attr.defaultValueLiteral !== undefined) {
-        attrs[attr.name] = attr.defaultValueLiteral;
-      } else if (attr.eType?.name === 'EInt' || attr.eType?.name === 'EBigDecimal') {
-        attrs[attr.name] = 0;
-      } else if (attr.eType?.name === 'EBoolean') {
-        attrs[attr.name] = false;
-      } else if (attr.eType?.name === 'EEnum') {
-        attrs[attr.name] = '';
-      } else {
-        attrs[attr.name] = '';
-      }
-    }
-  }
-  return attrs;
-}
-
 /* ------------------------------------------------------------------ */
-/*  ModelEditorInner (wrapped in ReactFlowProvider)                    */
+/*  ModelEditorInner                                                    */
 /* ------------------------------------------------------------------ */
 
 function ModelEditorInner(props: { projectId?: string; metamodelId?: string; modelId?: string }) {
@@ -180,24 +96,61 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
   const mmid = props.metamodelId || params.mmid;
   const modelId = props.modelId || params.modelId;
 
+  // ─── State ───────────────────────────────────────────────────────
   const [metamodel, setMetamodel] = useState<Metamodel | null>(null);
   const [m1Model, setM1Model] = useState<M1Model | null>(null);
-  const [epkg, setEpkg] = useState<EPackage | null>(null);
-  const [specMappings, setSpecMappings] = useState<Map<string, ShapeStyle>>(new Map());
+  const [spec, setSpec] = useState<ViewpointSpec | null>(null);
+  const [objects, setObjects] = useState<SemanticObject[]>([]);
+  const [activeLayers, setActiveLayers] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'unsaved' | ''>('');
-  const [selectedNode, setSelectedNode] = useState<M1ObjectNode | null>(null);
-  const [exportOutput, setExportOutput] = useState('');
 
-  const reactFlowWrapper = useRef<HTMLDivElement>(null);
+  // Selection & tools
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [activeTool, setActiveTool] = useState<string | null>(null);
+  const [connectMode, setConnectMode] = useState(false);
+
   const lastSavedRef = useRef('');
-
-  const [nodes, setNodes, onNodesChange] = useNodesState<M1ObjectNode>([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
-  /* Load data */
+  // ─── Derived from spec + active layers ───────────────────────────
+  const toolSections = useMemo(() => {
+    if (!spec) return [];
+    return collectActiveToolSections(spec, activeLayers);
+  }, [spec, activeLayers]);
+
+  const allTools = useMemo(() => {
+    if (!spec) return [];
+    return collectActiveTools(spec, activeLayers);
+  }, [spec, activeLayers]);
+
+  const mappings = useMemo(() => {
+    if (!spec) return { nodeMappings: [], containerMappings: [], edgeMappings: [] };
+    return collectActiveMappings(spec, activeLayers);
+  }, [spec, activeLayers]);
+
+  const allLayers = useMemo(() => {
+    if (!spec) return [];
+    return [spec.defaultLayer, ...spec.additionalLayers];
+  }, [spec]);
+
+  // Selected object
+  const selectedObject = useMemo(() => {
+    if (!selectedNodeId) return null;
+    return objects.find((o) => o.id === selectedNodeId) || null;
+  }, [selectedNodeId, objects]);
+
+  const selectedMapping = useMemo(() => {
+    if (!selectedObject) return null;
+    return mappings.nodeMappings.find((m) => m.domainClass === selectedObject.eClass)
+      || mappings.containerMappings.find((m) => m.domainClass === selectedObject.eClass)
+      || null;
+  }, [selectedObject, mappings]);
+
+  // ─── Load ────────────────────────────────────────────────────────
   useEffect(() => {
     async function load() {
       if (!pid || !mmid || !modelId) return;
@@ -210,34 +163,36 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
         setMetamodel(mm);
         setM1Model(m);
 
-        const pkg = parseMetamodel(mm.content || {});
-        setEpkg(pkg);
-
-        /* Load graphical spec (Sirius-like) for visual rendering */
+        // Load ViewpointSpec
         try {
           const specs = await getGraphicalSpecs(mmid);
           if (specs.length > 0) {
-            const specJson = JSON.parse(specs[0].spec || '{}') as SpecData;
-            const mappingMap = new Map<string, ShapeStyle>();
-            for (const layer of specJson.layers || []) {
-              for (const mapping of layer.mappings || []) {
-                mappingMap.set(mapping.domainClass, mapping.style);
-              }
+            const parsed = JSON.parse(specs[0].spec || '{}') as ViewpointSpec;
+            setSpec(parsed);
+            // Initialize active layers
+            const active = new Set<string>();
+            active.add(parsed.defaultLayer.id);
+            for (const layer of parsed.additionalLayers) {
+              if (layer.activeByDefault) active.add(layer.id);
             }
-            setSpecMappings(mappingMap);
+            setActiveLayers(active);
           }
         } catch {
-          // No spec available — use default styling
+          // No spec — editor will show empty palette
         }
 
-        /* Deserialize saved content */
+        // Load model content
         if (m.content) {
           try {
-            const saved = typeof m.content === 'string' ? JSON.parse(m.content) : m.content;
-            if (saved.nodes) setNodes(saved.nodes);
-            if (saved.edges) setEdges(saved.edges);
+            const saved: ModelContent = typeof m.content === 'string'
+              ? JSON.parse(m.content)
+              : m.content;
+            if (saved.objects) setObjects(saved.objects);
+            if (saved.activeLayers) {
+              setActiveLayers(new Set(saved.activeLayers));
+            }
           } catch {
-            // start fresh
+            // Start fresh
           }
         }
       } catch (e: unknown) {
@@ -249,14 +204,96 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
     load();
   }, [pid, mmid, modelId]);
 
-  /* Save */
+  // ─── Build ReactFlow nodes/edges from objects + mappings ─────────
+  useEffect(() => {
+    if (!spec) return;
+
+    const newNodes: Node[] = objects.map((obj) => {
+      const mapping = mappings.nodeMappings.find((m) => m.domainClass === obj.eClass)
+        || mappings.containerMappings.find((m) => m.domainClass === obj.eClass);
+
+      if (!mapping) {
+        // No mapping for this class — render as default
+        return {
+          id: obj.id,
+          type: 'default',
+          position: { x: 100, y: 100 },
+          data: { label: `${obj.eClass} (unmapped)` },
+        };
+      }
+
+      const isContainer = 'childrenPresentation' in mapping;
+      return {
+        id: obj.id,
+        type: isContainer ? 'vsmContainerNode' : 'vsmNode',
+        position: { x: 100 + Math.random() * 300, y: 100 + Math.random() * 300 },
+        data: {
+          mapping,
+          semanticData: { ...obj.attributes, name: obj.attributes.name || obj.id, eClass: obj.eClass },
+          selected: obj.id === selectedNodeId,
+        },
+      };
+    });
+
+    // Build edges from references + edge mappings
+    const newEdges: Edge[] = [];
+    for (const obj of objects) {
+      for (const [refName, targetIds] of Object.entries(obj.references)) {
+        for (const targetId of targetIds) {
+          // Find matching edge mapping
+          const edgeMapping = mappings.edgeMappings.find(
+            (em) => em.sourceReference === refName,
+          );
+          if (edgeMapping) {
+            newEdges.push({
+              id: `${obj.id}-${refName}-${targetId}`,
+              source: obj.id,
+              target: targetId,
+              type: 'vsmEdge',
+              data: {
+                edgeMapping,
+                sourceData: obj.attributes,
+                selected: false,
+              } as VsmEdgeData,
+            });
+          } else {
+            // No edge mapping — render as simple arrow
+            newEdges.push({
+              id: `${obj.id}-${refName}-${targetId}`,
+              source: obj.id,
+              target: targetId,
+              markerEnd: { type: MarkerType.ArrowClosed },
+              label: refName,
+              style: { stroke: 'var(--text-muted)', strokeWidth: 1.5 },
+            });
+          }
+        }
+      }
+    }
+
+    setNodes(newNodes as any);
+    setEdges(newEdges as any);
+  }, [objects, mappings, spec, selectedNodeId, setNodes, setEdges]);
+
+  // ─── Save ────────────────────────────────────────────────────────
   const handleSave = useCallback(async () => {
     if (!pid || !mmid || !modelId) return;
     setSaving(true);
     try {
-      const content = JSON.stringify({ nodes, edges });
-      await updateM1Model(pid, mmid, modelId, { content });
-      lastSavedRef.current = content;
+      // Collect positions from current nodes
+      const positions: Record<string, { x: number; y: number }> = {};
+      for (const node of nodes) {
+        positions[node.id] = node.position;
+      }
+
+      const content: ModelContent = {
+        objects,
+        positions,
+        activeLayers: Array.from(activeLayers),
+      };
+      const payload = JSON.stringify(content);
+      await updateM1Model(pid, mmid, modelId, { content: payload });
+      lastSavedRef.current = payload;
       setSaveStatus('saved');
       setError('');
     } catch (e: unknown) {
@@ -264,127 +301,163 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
     } finally {
       setSaving(false);
     }
-  }, [pid, mmid, modelId, nodes, edges]);
+  }, [pid, mmid, modelId, nodes, objects, activeLayers]);
 
-  /* Auto-save every 30 seconds */
+  // Auto-save
   useEffect(() => {
     const interval = setInterval(() => {
-      const currentContent = JSON.stringify({ nodes, edges });
-      if (currentContent !== lastSavedRef.current) {
+      const current = JSON.stringify({ objects, activeLayers: Array.from(activeLayers) });
+      if (current !== lastSavedRef.current) {
         handleSave();
       }
     }, 30000);
     return () => clearInterval(interval);
-  }, [handleSave, nodes, edges]);
+  }, [handleSave, objects, activeLayers]);
 
-  /* Export */
-  const handleExport = useCallback((format: 'json' | 'xmi') => {
-    if (format === 'json') {
-      setExportOutput(JSON.stringify({ nodes, edges }, null, 2));
-    } else {
-      /* Simple XMI-like export */
-      let xmi = `<?xml version="1.0" encoding="UTF-8"?>\n`;
-      xmi += `<${epkg?.nsPrefix || 'model'}:${epkg?.name || 'Model'} xmlns:${epkg?.nsPrefix || 'model'}="${epkg?.nsURI || ''}" xml:version="2.0">\n`;
-      for (const node of nodes) {
-        const data = node.data;
-        xmi += `  <${data.eClassName} name="${data.label}">\n`;
-        for (const [key, val] of Object.entries(data.attributes)) {
-          xmi += `    <${key}>${String(val)}</${key}>\n`;
-        }
-        xmi += `  </${data.eClassName}>\n`;
-      }
-      xmi += `</${epkg?.nsPrefix || 'model'}:${epkg?.name || 'Model'}>\n`;
-      setExportOutput(xmi);
-    }
-  }, [nodes, epkg]);
-
-  /* Add node from palette */
-  const addObjectNode = useCallback((eClass: EClassData) => {
-    const id = generateId();
-    const label = `${eClass.name}_${nodes.filter(n => n.data?.eClassName === eClass.name).length + 1}`;
-
-    /* Apply Sirius graphical spec style if available */
-    const specStyle = specMappings.get(eClass.name);
-    const nodeStyle = specStyle
-      ? {
-          background: specStyle.color,
-          border: `${specStyle.borderSize}px solid ${specStyle.borderColor}`,
-          borderRadius: specStyle.shape === 'ellipse' ? '50%' : specStyle.shape === 'diamond' ? 4 : 8,
-          padding: '12px 16px',
-          color: '#fff',
-          textShadow: '0 1px 3px rgba(0,0,0,0.3)',
-          fontSize: 13,
-          minWidth: 160,
-        }
-      : {
-          background: 'var(--surface)',
-          border: '1px solid var(--border)',
-          borderRadius: 8,
-          padding: '12px 16px',
-          color: 'var(--text)',
-          fontSize: 13,
-          minWidth: 160,
-        };
-
-    const newNode: M1ObjectNode = {
-      id,
-      type: 'default',
-      position: { x: 100 + Math.random() * 200, y: 100 + Math.random() * 200 },
-      data: {
-        eClassName: eClass.name,
-        attributes: defaultAttributes(eClass),
-        references: {},
-        label,
-        eClass,
-      },
-      style: nodeStyle,
+  // ─── Create node from tool ───────────────────────────────────────
+  const handleCreateNode = useCallback((tool: NodeCreationTool | ContainerCreationTool) => {
+    const newObj: SemanticObject = {
+      id: uid(),
+      eClass: tool.createType,
+      attributes: { name: `New ${tool.createType}` },
+      references: {},
     };
-    setNodes((nds) => [...nds, newNode]);
-  }, [nodes, setNodes, specMappings]);
-
-  /* Connect edges */
-  const onConnect = useCallback(
-    (connection: Connection) => {
-      setEdges((eds) => addEdge({
-        ...connection,
-        markerEnd: { type: MarkerType.ArrowClosed, color: 'var(--primary)' },
-        style: { stroke: 'var(--primary)', strokeWidth: 2 },
-      }, eds));
-    },
-    [setEdges],
-  );
-
-  /* Selection */
-  const onNodeClick = useCallback(
-    (_: React.MouseEvent, node: M1ObjectNode) => {
-      setSelectedNode(node);
-    },
-    [],
-  );
-
-  const onPaneClick = useCallback(() => {
-    setSelectedNode(null);
+    // Apply initial attributes from tool
+    if (tool.initialAttributes) {
+      for (const [key, expr] of Object.entries(tool.initialAttributes)) {
+        // Simple: strip quotes from string literals
+        const val = expr.replace(/^["']|["']$/g, '');
+        newObj.attributes[key] = val;
+      }
+    }
+    setObjects((prev) => [...prev, newObj]);
+    setSaveStatus('unsaved');
   }, []);
 
-  /* Update attribute */
-  const updateAttribute = useCallback((key: string, value: unknown) => {
-    if (!selectedNode) return;
-    setNodes((nds) =>
-      nds.map((n) =>
-        n.id === selectedNode.id
-          ? { ...n, data: { ...n.data, attributes: { ...n.data.attributes, [key]: value } } }
-          : n,
-      ),
-    );
-    setSelectedNode((prev) =>
-      prev ? { ...prev, data: { ...prev.data, attributes: { ...prev.data.attributes, [key]: value } } } : prev,
-    );
-  }, [selectedNode, setNodes]);
+  // ─── Connect (edge creation) ─────────────────────────────────────
+  const onConnect = useCallback((conn: Connection) => {
+    if (!conn.source || !conn.target) return;
 
-  /* ── Loading ──────────────────────── */
+    // Find the active edge creation tool
+    const edgeTool = allTools.find(
+      (t) => t.id === activeTool && t.type === 'edgeCreation',
+    ) as EdgeCreationTool | undefined;
+
+    if (!edgeTool || !edgeTool.referenceToSet) {
+      // No edge tool active — ignore
+      return;
+    }
+
+    // Add reference to source object
+    setObjects((prev) => prev.map((obj) => {
+      if (obj.id !== conn.source) return obj;
+      const refs = { ...obj.references };
+      const existing = refs[edgeTool.referenceToSet!] || [];
+      if (!existing.includes(conn.target!)) {
+        refs[edgeTool.referenceToSet!] = [...existing, conn.target!];
+      }
+      return { ...obj, references: refs };
+    }));
+    setSaveStatus('unsaved');
+    setActiveTool(null);
+    setConnectMode(false);
+  }, [activeTool, allTools]);
+
+  // ─── Delete selected ─────────────────────────────────────────────
+  const handleDelete = useCallback(() => {
+    if (!selectedNodeId) return;
+    const obj = objects.find((o) => o.id === selectedNodeId);
+    if (!obj) return;
+
+    const mapping = mappings.nodeMappings.find((m) => m.domainClass === obj.eClass);
+    if (mapping && !canDelete(mapping.id, allTools)) return; // No delete tool
+
+    setObjects((prev) => prev.filter((o) => o.id !== selectedNodeId));
+    // Also remove references pointing to deleted object
+    setObjects((prev) => prev.map((o) => {
+      const refs = { ...o.references };
+      for (const [key, targets] of Object.entries(refs)) {
+        refs[key] = targets.filter((t) => t !== selectedNodeId);
+      }
+      return { ...o, references: refs };
+    }));
+    setSelectedNodeId(null);
+    setSaveStatus('unsaved');
+  }, [selectedNodeId, objects, mappings, allTools]);
+
+  // ─── Update attribute ────────────────────────────────────────────
+  const handleUpdateAttribute = useCallback((key: string, value: unknown) => {
+    if (!selectedNodeId) return;
+    setObjects((prev) => prev.map((obj) =>
+      obj.id === selectedNodeId
+        ? { ...obj, attributes: { ...obj.attributes, [key]: value } }
+        : obj,
+    ));
+    setSaveStatus('unsaved');
+  }, [selectedNodeId]);
+
+  const handleDirectEdit = useCallback((value: string) => {
+    // Direct edit updates the label — handled via handleUpdateAttribute
+  }, []);
+
+  // ─── Layer toggle ────────────────────────────────────────────────
+  const handleToggleLayer = useCallback((layerId: string) => {
+    setActiveLayers((prev) => {
+      const next = new Set(prev);
+      if (next.has(layerId)) next.delete(layerId);
+      else next.add(layerId);
+      return next;
+    });
+  }, []);
+
+  // ─── Tool selection ──────────────────────────────────────────────
+  const handleSelectTool = useCallback((toolId: string | null) => {
+    setActiveTool(toolId);
+    const tool = allTools.find((t) => t.id === toolId);
+    setConnectMode(tool?.type === 'edgeCreation');
+  }, [allTools]);
+
+  // ─── Canvas interactions ─────────────────────────────────────────
+  const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
+    setSelectedNodeId(node.id);
+  }, []);
+
+  const onPaneClick = useCallback(() => {
+    setSelectedNodeId(null);
+  }, []);
+
+  // ─── Keyboard shortcuts ──────────────────────────────────────────
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (selectedNodeId && document.activeElement?.tagName !== 'INPUT') {
+          handleDelete();
+        }
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [selectedNodeId, handleDelete]);
+
+  // ─── Export ──────────────────────────────────────────────────────
+  const handleExport = useCallback((format: 'json' | 'xmi') => {
+    const data = format === 'json'
+      ? JSON.stringify({ objects }, null, 2)
+      : objects.map((o) => `  <${o.eClass} name="${o.attributes.name || o.id}"/>`).join('\n');
+
+    const blob = new Blob([format === 'xmi' ? `<?xml version="1.0"?>\n<Model>\n${data}\n</Model>` : data]);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `model.${format}`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [objects]);
+
+  // ─── Loading ─────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div>
+      <div style={{ padding: 24 }}>
         <div className="skeleton" style={{ height: 32, width: 200, marginBottom: 24 }} />
         <div className="skeleton" style={{ height: 400, borderRadius: 'var(--radius)' }} />
       </div>
@@ -395,23 +468,10 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
     return <ErrorPanel title="Error" message={error} compact />;
   }
 
-  const paletteItems = epkg ? concreteEClasses(epkg) : [];
-
-  /* Non-attribute fields (references) for inspector */
-  const refFields = selectedNode
-    ? (selectedNode.data.eClass.eStructuralFeatures || []).filter(
-        (f) => !('eType' in f) || 'upperBound' in f!,
-      )
-        .filter((f) => {
-          // It's a ref if it has containment/eOpposite
-          const ref = f as EReference;
-          return ref.containment !== undefined || ref.eOpposite !== undefined;
-        })
-    : [];
-
+  // ─── Render ──────────────────────────────────────────────────────
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg)' }}>
-      {/* ── Toolbar ────────────────────────────────────────── */}
+      {/* Toolbar */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 12, padding: '8px 20px',
         background: 'var(--surface)', borderBottom: '1px solid var(--border)', flexShrink: 0,
@@ -424,23 +484,24 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
           {m1Model?.name || 'Model Editor'}
         </span>
         <div style={{ flex: 1 }} />
-        {saveStatus === 'saved' && (
-          <span style={{ color: 'var(--success)', fontSize: 12 }}>Saved</span>
-        )}
-        {saveStatus === 'unsaved' && (
-          <span style={{ color: 'var(--warning)', fontSize: 12 }}>Unsaved changes</span>
-        )}
+
+        {/* Layer toggles */}
+        <LayerToggle
+          layers={allLayers}
+          activeLayers={activeLayers}
+          onToggleLayer={handleToggleLayer}
+        />
+
+        <div style={{ flex: 1 }} />
+        {saveStatus === 'saved' && <span style={{ color: 'var(--success)', fontSize: 11 }}>Saved</span>}
+        {saveStatus === 'unsaved' && <span style={{ color: 'var(--warning)', fontSize: 11 }}>Unsaved</span>}
         <button className="btn btn-secondary btn-sm" onClick={() => handleExport('json')}>
           <Download size={14} /> JSON
         </button>
         <button className="btn btn-secondary btn-sm" onClick={() => handleExport('xmi')}>
           <Download size={14} /> XMI
         </button>
-        <button
-          className="btn btn-primary btn-sm"
-          onClick={handleSave}
-          disabled={saving}
-        >
+        <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving}>
           {saving ? 'Saving...' : <><Save size={14} /> Save</>}
         </button>
       </div>
@@ -451,62 +512,24 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
         </div>
       )}
 
-      {/* ── Main layout ────────────────────────────────────── */}
+      {/* Main layout */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-
-        {/* ── Palette ───────────────────────────────────────── */}
+        {/* Left — VSM Palette */}
         <div style={{
-          width: 200, background: 'var(--surface)', borderRight: '1px solid var(--border)',
-          padding: 12, overflowY: 'auto', flexShrink: 0,
+          width: 220, background: 'var(--surface)', borderRight: '1px solid var(--border)',
+          overflowY: 'auto', flexShrink: 0,
         }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
-            Palette
-            {specMappings.size > 0 && (
-              <span style={{ fontSize: 9, fontWeight: 400, marginLeft: 6, color: 'var(--primary)', textTransform: 'none' }}>
-                ● Sirius
-              </span>
-            )}
-          </div>
-          {paletteItems.length === 0 && (
-            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-              No concrete EClasses found in metamodel
-            </div>
-          )}
-          {paletteItems.map((ec) => (
-            <div
-              key={ec.name}
-              onClick={() => addObjectNode(ec)}
-              draggable
-              onDragStart={(e) => {
-                e.dataTransfer.setData('application/json', JSON.stringify(ec));
-              }}
-              style={{
-                padding: '8px 10px', marginBottom: 4, borderRadius: 6, cursor: 'grab',
-                background: 'var(--border)', color: 'var(--text)', fontSize: 13,
-                transition: 'background 0.15s',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface-hover)')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--border)')}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                {specMappings.has(ec.name) && (
-                  <span style={{
-                    width: 10, height: 10, borderRadius: 2, flexShrink: 0,
-                    background: specMappings.get(ec.name)!.color,
-                    border: `1px solid ${specMappings.get(ec.name)!.borderColor}`,
-                  }} />
-                )}
-                <span style={{ fontWeight: 500 }}>{ec.name}</span>
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
-                {ec.eStructuralFeatures?.length || 0} features
-              </div>
-            </div>
-          ))}
+          <VsmPalette
+            toolSections={toolSections}
+            activeTool={activeTool}
+            onSelectTool={handleSelectTool}
+            onCreateNode={handleCreateNode}
+            connectMode={connectMode}
+          />
         </div>
 
-        {/* ── Canvas ────────────────────────────────────────── */}
-        <div ref={reactFlowWrapper} style={{ flex: 1, position: 'relative' }}>
+        {/* Center — Canvas */}
+        <div style={{ flex: 1, position: 'relative' }}>
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -515,152 +538,52 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
             onConnect={onConnect}
             onNodeClick={onNodeClick}
             onPaneClick={onPaneClick}
+            nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
+            connectionMode={connectMode ? ConnectionMode.Loose : ConnectionMode.Strict}
             fitView
-            selectionMode={SelectionMode.Partial}
-            colorMode="dark"
-            nodeDragThreshold={5}
-            defaultEdgeOptions={{
-              markerEnd: { type: MarkerType.ArrowClosed, color: 'var(--primary)' },
-              style: { stroke: 'var(--primary)', strokeWidth: 2 },
-            }}
+            minZoom={0.3}
+            maxZoom={2}
           >
-            <Background color="var(--border)" gap={20} />
-            <Controls />
-            <MiniMap
-              style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
-              nodeColor="var(--primary)"
-              maskColor="rgba(15,23,42,0.7)"
-            />
+            <Background gap={20} size={1} />
+            <Controls position="bottom-left" />
+            <MiniMap position="bottom-right" pannable zoomable />
+            {!spec && (
+              <Panel position="top-center">
+                <div style={{
+                  padding: '12px 20px', background: 'var(--surface)', border: '1px solid var(--border)',
+                  borderRadius: 8, fontSize: 13, color: 'var(--text-muted)',
+                }}>
+                  No Viewpoint Specification found. Create one in the Spec Editor to enable constrained modeling.
+                </div>
+              </Panel>
+            )}
           </ReactFlow>
         </div>
 
-        {/* ── Property Inspector ────────────────────────────── */}
+        {/* Right — Property Inspector */}
         <div style={{
           width: 260, background: 'var(--surface)', borderLeft: '1px solid var(--border)',
-          padding: 12, overflowY: 'auto', flexShrink: 0,
+          overflowY: 'auto', flexShrink: 0,
         }}>
-          {!selectedNode && (
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', marginTop: 40 }}>
-              Select a node to edit properties
-            </div>
-          )}
-
-          {selectedNode && (
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
-                {selectedNode.data.eClassName}
-              </div>
-
-              {/* Name */}
-              <div className="form-field" style={{ marginBottom: 12 }}>
-                <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Name</label>
-                <input
-                  value={selectedNode.data.label}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setNodes((nds) =>
-                      nds.map((n) =>
-                        n.id === selectedNode.id
-                          ? { ...n, data: { ...n.data, label: val } }
-                          : n,
-                      ),
-                    );
-                    setSelectedNode((prev) =>
-                      prev ? { ...prev, data: { ...prev.data, label: val } } : prev,
-                    );
-                  }}
-                  style={{
-                    width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border)',
-                    background: 'var(--bg)', color: 'var(--text)', fontSize: 13, fontFamily: 'inherit',
-                  }}
-                />
-              </div>
-
-              {/* Attributes */}
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8, marginTop: 16 }}>
-                Attributes
-              </div>
-              {Object.entries(selectedNode.data.attributes).map(([key, val]) => (
-                <div key={key} className="form-field" style={{ marginBottom: 10 }}>
-                  <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{key}</label>
-                  {typeof val === 'boolean' ? (
-                    <input
-                      type="checkbox"
-                      checked={val as boolean}
-                      onChange={(e) => updateAttribute(key, e.target.checked)}
-                      style={{ accentColor: 'var(--primary)' }}
-                    />
-                  ) : typeof val === 'number' ? (
-                    <input
-                      type="number"
-                      value={val}
-                      onChange={(e) => updateAttribute(key, Number(e.target.value))}
-                      style={{
-                        width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border)',
-                        background: 'var(--bg)', color: 'var(--text)', fontSize: 13, fontFamily: 'inherit',
-                      }}
-                    />
-                  ) : (
-                    <input
-                      type="text"
-                      value={String(val)}
-                      onChange={(e) => updateAttribute(key, e.target.value)}
-                      style={{
-                        width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border)',
-                        background: 'var(--bg)', color: 'var(--text)', fontSize: 13, fontFamily: 'inherit',
-                      }}
-                    />
-                  )}
-                </div>
-              ))}
-
-              {Object.keys(selectedNode.data.attributes).length === 0 && (
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-                  No attributes
-                </div>
-              )}
-            </div>
-          )}
+          <VsmPropertyInspector
+            semanticData={selectedObject?.attributes || null}
+            mapping={selectedMapping}
+            tools={allTools}
+            onUpdateAttribute={handleUpdateAttribute}
+            onDirectEdit={handleDirectEdit}
+          />
         </div>
       </div>
-
-      {/* ── Export Output ──────────────────────────────────── */}
-      {exportOutput && (
-        <div style={{
-          position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 100,
-          background: 'var(--bg)', borderTop: '1px solid var(--border)', maxHeight: '40%', overflow: 'auto',
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 16px', borderBottom: '1px solid var(--border)' }}>
-            <span style={{ color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600 }}>Export Output</span>
-            <button className="btn btn-ghost btn-sm" onClick={() => setExportOutput('')} style={{ color: 'var(--text-secondary)' }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-              </svg>
-            </button>
-          </div>
-          <pre style={{
-            padding: 16, fontSize: 12, color: 'var(--text)', fontFamily: "'JetBrains Mono', monospace",
-            whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0,
-          }}>
-            {exportOutput}
-          </pre>
-        </div>
-      )}
     </div>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/*  ModelEditor wrapper                                                */
+/*  Wrapper                                                            */
 /* ------------------------------------------------------------------ */
 
-interface ModelEditorProps {
-  projectId?: string;
-  metamodelId?: string;
-  modelId?: string;
-}
-
-export default function ModelEditor(props: ModelEditorProps) {
+export default function ModelEditor(props: { projectId?: string; metamodelId?: string; modelId?: string }) {
   return (
     <ReactFlowProvider>
       <ModelEditorInner {...props} />

@@ -88,6 +88,8 @@ export {
   History,
   ExternalLink,
   RefreshCw,
+  Lock,
+  Wand2,
 } from 'lucide-react';
 
 // Re-export type for consistent prop typing
