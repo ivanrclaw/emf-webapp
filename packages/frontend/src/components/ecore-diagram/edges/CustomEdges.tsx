@@ -1,21 +1,14 @@
 /**
  * @emf-webapp/frontend — Custom Edge Components for Ecore Diagram Editor
  *
- * Sigue las convenciones visuales del editor de diagramas .ecore de Eclipse:
+ * Sigue las convenciones visuales del editor de diagramas .ecore de Eclipse.
  *
- *   referenceEdge   → línea sólida, punta de flecha (▶) en el TARGET
- *                     etiqueta del nombre + cardinalidad cerca del SOURCE
+ * AHORA CON: Edge spreading (evita overlap de flechas paralelas) y
+ * crossing bridges (indicador visual de cruce).
  *
- *   containmentEdge → línea sólida, diamante relleno (◆) en el SOURCE
- *                     + punta de flecha (▶) en el TARGET
- *
- *   inheritanceEdge → línea discontinua, triángulo hueco (△) en el TARGET (padre)
- *
- * AMBOS handles son type="source" (connectionMode="loose" permite source→source).
- * Calculamos las coordenadas de los handles manualmente desde la posición de
- * los nodos, porque React Flow no puede calcularlas correctamente con source→source.
- *
- * Colores: modo oscuro/claro mediante CSS variables (var(--text), var(--border), etc.)
+ * referenceEdge   → línea sólida, punta de flecha (▶) en el TARGET
+ * containmentEdge → línea sólida, diamante relleno (◆) en SOURCE + flecha TARGET
+ * inheritanceEdge → línea discontinua, triángulo hueco (△) en TARGET
  */
 import React from 'react';
 import {
@@ -29,20 +22,17 @@ import {
   type Node,
 } from '@xyflow/react';
 import type { EcoreEdgeData, AppNode } from '../types';
+import { useEdgeRouting } from '../../../hooks/useEdgeRouting';
+import { spreadHandlePosition } from '../../../lib/edge-routing';
+import { CrossingBridges } from '../../shared/CrossingBridges';
 
 // ─────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────
 
-/** Ancho por defecto de un nodo EClass (lo usamos para calcular posiciones de handles) */
 const DEFAULT_NODE_WIDTH = 180;
 const DEFAULT_NODE_HEIGHT = 140;
 
-/**
- * Calcula las coordenadas (x, y, position) de un handle dado el lado del nodo.
- * Usa la posición real del nodo + dimensiones estimadas.
- * Soporta 4 lados: left, right, top, bottom.
- */
 function calcHandlePos(
   node: Node,
   side: 'left' | 'right' | 'top' | 'bottom',
@@ -50,20 +40,14 @@ function calcHandlePos(
   const measured = (node as any)?.measured;
   const w = measured?.width ?? DEFAULT_NODE_WIDTH;
   const h = measured?.height ?? DEFAULT_NODE_HEIGHT;
-
   switch (side) {
-    case 'left':
-      return { x: node.position.x, y: node.position.y + h / 2, position: Position.Left };
-    case 'right':
-      return { x: node.position.x + w, y: node.position.y + h / 2, position: Position.Right };
-    case 'top':
-      return { x: node.position.x + w / 2, y: node.position.y, position: Position.Top };
-    case 'bottom':
-      return { x: node.position.x + w / 2, y: node.position.y + h, position: Position.Bottom };
+    case 'left':   return { x: node.position.x, y: node.position.y + h / 2, position: Position.Left };
+    case 'right':  return { x: node.position.x + w, y: node.position.y + h / 2, position: Position.Right };
+    case 'top':    return { x: node.position.x + w / 2, y: node.position.y, position: Position.Top };
+    case 'bottom': return { x: node.position.x + w / 2, y: node.position.y + h, position: Position.Bottom };
   }
 }
 
-/** Formatea la cardinalidad estilo UML: [0..1], [*], [1], [0..*] */
 function formatCardinality(lowerBound: number, upperBound: number): string {
   const lo = `${lowerBound}`;
   const hi = upperBound === -1 ? '*' : `${upperBound}`;
@@ -71,7 +55,6 @@ function formatCardinality(lowerBound: number, upperBound: number): string {
   return `[${lo}..${hi}]`;
 }
 
-/** Color del texto/cardinalidad según el tipo de edge */
 function edgeColors(type: string) {
   switch (type) {
     case 'containmentEdge':
@@ -81,7 +64,6 @@ function edgeColors(type: string) {
   }
 }
 
-/** Renderiza el label combinado (refName + cardinalidad) */
 function renderCombinedLabel(
   label: string,
   cardinality: string,
@@ -94,7 +76,6 @@ function renderCombinedLabel(
   colors: { bg: string; text: string; border: string },
 ) {
   const combined = cardinality ? `${label} ${cardinality}` : label;
-  // Posición: 60% del camino desde source hacia target
   const px = labelX * 0.6 + sourceX * 0.4;
   const py = labelY * 0.6 + sourceY * 0.4;
   return (
@@ -125,72 +106,50 @@ const ARROW_MARKER = (id: string, color: string) => (
   <marker
     key={`arrow-${id}`}
     id={`arrow-${id}`}
-    viewBox="0 0 12 12"
-    refX="10"
-    refY="6"
-    markerWidth="10"
-    markerHeight="10"
-    orient="auto"
+    viewBox="0 0 12 12" refX="10" refY="6"
+    markerWidth="10" markerHeight="10" orient="auto"
   >
     <path d="M 1 1 L 11 6 L 1 11 Z" fill={color} />
   </marker>
 );
 
-/** SVG marker: diamante relleno (◆) para composición/containment */
 const DIAMOND_MARKER = (id: string, color: string) => (
   <marker
     key={`diamond-${id}`}
     id={`diamond-${id}`}
-    viewBox="0 0 14 14"
-    refX="14"
-    refY="7"
-    markerWidth="12"
-    markerHeight="12"
-    orient="auto"
+    viewBox="0 0 14 14" refX="14" refY="7"
+    markerWidth="12" markerHeight="12" orient="auto"
   >
     <polygon points="7,0 14,7 7,14 0,7" fill={color} stroke={color} strokeWidth={1} />
   </marker>
 );
 
-/** SVG marker: triángulo hueco (△) para herencia */
 const HOLLOW_TRIANGLE = (id: string, color: string) => (
   <marker
     key={`hollow-${id}`}
     id={`hollow-${id}`}
-    viewBox="0 0 14 14"
-    refX="12"
-    refY="7"
-    markerWidth="12"
-    markerHeight="12"
-    orient="auto"
+    viewBox="0 0 14 14" refX="12" refY="7"
+    markerWidth="12" markerHeight="12" orient="auto"
   >
     <polygon points="2,1 12,7 2,13" fill="transparent" stroke={color} strokeWidth={1.5} strokeLinejoin="round" />
   </marker>
 );
 
 // ─────────────────────────────────────────────────────────────────
-// Common edge logic
+// Common edge logic with spreading
 // ─────────────────────────────────────────────────────────────────
 
-/**
- * Hook que calcula las coordenadas de source y target handle
- * usando la posición de los nodos en lugar de confiar en
- * sourceX/sourceY/targetX/targetY de React Flow (que son incorrectos
- * con handles source→source en connectionMode='loose').
- *
- * Calcula dinámicamente el lado óptimo basándose en la posición actual
- * de los nodos, para que las aristas se reposicionen al mover nodos.
- */
-function useEdgeCoords(data: EcoreEdgeData | undefined) {
+function useEdgeCoords(
+  data: EcoreEdgeData | undefined,
+  groupSize: number,
+  groupIndex: number,
+) {
   const nodes = useNodes();
   const sourceNode = nodes.find((n) => n.id === data?.sourceId);
   const targetNode = nodes.find((n) => n.id === data?.targetId);
 
-  if (!sourceNode || !targetNode) {
-    return null;
-  }
+  if (!sourceNode || !targetNode) return null;
 
-  // Dynamically compute best handle sides based on current node positions
   const sMeasured = (sourceNode as any)?.measured;
   const tMeasured = (targetNode as any)?.measured;
   const sW = sMeasured?.width ?? DEFAULT_NODE_WIDTH;
@@ -222,47 +181,56 @@ function useEdgeCoords(data: EcoreEdgeData | undefined) {
       const dy = sp.y - tp.y;
       const dist = dx * dx + dy * dy;
       const sameSidePenalty = sSide === tSide ? 1.3 : 1.0;
-      const adjusted = dist * sameSidePenalty;
-      if (adjusted < bestDist) {
-        bestDist = adjusted;
+      if (dist * sameSidePenalty < bestDist) {
+        bestDist = dist * sameSidePenalty;
         bestSourceSide = sSide;
         bestTargetSide = tSide;
       }
     }
   }
 
-  const s = calcHandlePos(sourceNode, bestSourceSide);
-  const t = calcHandlePos(targetNode, bestTargetSide);
+  // Apply spreading
+  const spreadSource = spreadHandlePosition(
+    bestSourceSide, groupSize, groupIndex,
+    sourceNode.position.x, sourceNode.position.y, sW, sH,
+  );
+  const spreadTarget = spreadHandlePosition(
+    bestTargetSide, groupSize, groupIndex,
+    targetNode.position.x, targetNode.position.y, tW, tH,
+  );
 
   return {
-    sourceX: s.x,
-    sourceY: s.y,
-    sourcePosition: s.position,
-    targetX: t.x,
-    targetY: t.y,
-    targetPosition: t.position,
+    sourceX: spreadSource.x,
+    sourceY: spreadSource.y,
+    sourcePosition: calcHandlePos(sourceNode, bestSourceSide).position,
+    targetX: spreadTarget.x,
+    targetY: spreadTarget.y,
+    targetPosition: calcHandlePos(targetNode, bestTargetSide).position,
+    // Store these for label positioning
+    bestSourceSide,
+    bestTargetSide,
   };
 }
 
 // ─────────────────────────────────────────────────────────────────
-// 1. ReferenceEdge — Eclipse Ecore Tools convention
+// Edge components
 // ─────────────────────────────────────────────────────────────────
 
 function ReferenceEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
-  const { id, data, selected } = props;
-  const coords = useEdgeCoords(data);
+  const { id, data, selected, sourceX, sourceY, targetX, targetY, source: src, target: tgt } = props;
+  const { groupInfo } = useEdgeRouting(id, src, tgt);
+  const coords = useEdgeCoords(data, groupInfo.groupSize, groupInfo.groupIndex);
 
-  // Fallback: usa las props de React Flow (pueden ser incorrectas pero evita crash)
-  const sourceX = coords?.sourceX ?? props.sourceX;
-  const sourceY = coords?.sourceY ?? props.sourceY;
-  const targetX = coords?.targetX ?? props.targetX;
-  const targetY = coords?.targetY ?? props.targetY;
+  const effSourceX = coords?.sourceX ?? sourceX;
+  const effSourceY = coords?.sourceY ?? sourceY;
+  const effTargetX = coords?.targetX ?? targetX;
+  const effTargetY = coords?.targetY ?? targetY;
   const sourcePosition = coords?.sourcePosition ?? Position.Right;
   const targetPosition = coords?.targetPosition ?? Position.Left;
 
   const [edgePath, labelX, labelY] = getSmoothStepPath({
-    sourceX, sourceY, sourcePosition,
-    targetX, targetY, targetPosition,
+    sourceX: effSourceX, sourceY: effSourceY, sourcePosition,
+    targetX: effTargetX, targetY: effTargetY, targetPosition,
   });
 
   const ref = data?.reference;
@@ -272,46 +240,37 @@ function ReferenceEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
 
   return (
     <>
-      <defs>
-        {ARROW_MARKER(id, colors.stroke)}
-      </defs>
-
+      <defs>{ARROW_MARKER(id, colors.stroke)}</defs>
       <BaseEdge
         path={edgePath}
         interactionWidth={20}
         style={{
-          stroke: colors.stroke,
-          strokeWidth: 1.5,
-          strokeLinecap: 'round',
-          transition: 'opacity 0.15s',
-          opacity: selected ? 0.85 : 1,
+          stroke: colors.stroke, strokeWidth: 1.5, strokeLinecap: 'round',
+          transition: 'opacity 0.15s', opacity: selected ? 0.85 : 1,
         }}
         markerEnd={`url(#arrow-${id})`}
       />
-
-      {renderCombinedLabel(label, cardinality, labelX, labelY, sourceX, sourceY, targetX, targetY, colors)}
+      <CrossingBridges edgeId={id} crossings={[]} />
+      {renderCombinedLabel(label, cardinality, labelX, labelY, effSourceX, effSourceY, effTargetX, effTargetY, colors)}
     </>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────
-// 2. ContainmentEdge — Eclipse Ecore Tools convention
-// ─────────────────────────────────────────────────────────────────
-
 function ContainmentEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
-  const { id, data, selected } = props;
-  const coords = useEdgeCoords(data);
+  const { id, data, selected, sourceX, sourceY, targetX, targetY, source: src, target: tgt } = props;
+  const { groupInfo } = useEdgeRouting(id, src, tgt);
+  const coords = useEdgeCoords(data, groupInfo.groupSize, groupInfo.groupIndex);
 
-  const sourceX = coords?.sourceX ?? props.sourceX;
-  const sourceY = coords?.sourceY ?? props.sourceY;
-  const targetX = coords?.targetX ?? props.targetX;
-  const targetY = coords?.targetY ?? props.targetY;
+  const effSourceX = coords?.sourceX ?? sourceX;
+  const effSourceY = coords?.sourceY ?? sourceY;
+  const effTargetX = coords?.targetX ?? targetX;
+  const effTargetY = coords?.targetY ?? targetY;
   const sourcePosition = coords?.sourcePosition ?? Position.Right;
   const targetPosition = coords?.targetPosition ?? Position.Left;
 
   const [edgePath, labelX, labelY] = getSmoothStepPath({
-    sourceX, sourceY, sourcePosition,
-    targetX, targetY, targetPosition,
+    sourceX: effSourceX, sourceY: effSourceY, sourcePosition,
+    targetX: effTargetX, targetY: effTargetY, targetPosition,
   });
 
   const ref = data?.reference;
@@ -325,74 +284,58 @@ function ContainmentEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
         {DIAMOND_MARKER(id, colors.diamond)}
         {ARROW_MARKER(id, colors.stroke)}
       </defs>
-
       <BaseEdge
         path={edgePath}
         interactionWidth={20}
         style={{
-          stroke: colors.stroke,
-          strokeWidth: 2,
-          strokeLinecap: 'round',
-          transition: 'opacity 0.15s',
-          opacity: selected ? 0.85 : 1,
+          stroke: colors.stroke, strokeWidth: 2, strokeLinecap: 'round',
+          transition: 'opacity 0.15s', opacity: selected ? 0.85 : 1,
         }}
         markerStart={`url(#diamond-${id})`}
         markerEnd={`url(#arrow-${id})`}
       />
-
-      {renderCombinedLabel(label, cardinality, labelX, labelY, sourceX, sourceY, targetX, targetY, colors)}
+      <CrossingBridges edgeId={id} crossings={[]} />
+      {renderCombinedLabel(label, cardinality, labelX, labelY, effSourceX, effSourceY, effTargetX, effTargetY, colors)}
     </>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────
-// 3. InheritanceEdge — Eclipse Ecore Tools convention
-// ─────────────────────────────────────────────────────────────────
-
 function InheritanceEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
-  const { id, data, selected } = props;
-  const coords = useEdgeCoords(data);
+  const { id, data, selected, sourceX, sourceY, targetX, targetY, source: src, target: tgt } = props;
+  const { groupInfo } = useEdgeRouting(id, src, tgt);
+  const coords = useEdgeCoords(data, groupInfo.groupSize, groupInfo.groupIndex);
 
-  const sourceX = coords?.sourceX ?? props.sourceX;
-  const sourceY = coords?.sourceY ?? props.sourceY;
-  const targetX = coords?.targetX ?? props.targetX;
-  const targetY = coords?.targetY ?? props.targetY;
+  const effSourceX = coords?.sourceX ?? sourceX;
+  const effSourceY = coords?.sourceY ?? sourceY;
+  const effTargetX = coords?.targetX ?? targetX;
+  const effTargetY = coords?.targetY ?? targetY;
   const sourcePosition = coords?.sourcePosition ?? Position.Right;
   const targetPosition = coords?.targetPosition ?? Position.Left;
 
   const [edgePath] = getSmoothStepPath({
-    sourceX, sourceY, sourcePosition,
-    targetX, targetY, targetPosition,
+    sourceX: effSourceX, sourceY: effSourceY, sourcePosition,
+    targetX: effTargetX, targetY: effTargetY, targetPosition,
   });
 
   const color = 'var(--text-muted)';
 
   return (
     <>
-      <defs>
-        {HOLLOW_TRIANGLE(id, color)}
-      </defs>
-
+      <defs>{HOLLOW_TRIANGLE(id, color)}</defs>
       <BaseEdge
         path={edgePath}
         interactionWidth={20}
         style={{
-          stroke: color,
-          strokeWidth: 1.5,
-          strokeLinecap: 'round',
+          stroke: color, strokeWidth: 1.5, strokeLinecap: 'round',
           strokeDasharray: '6 4',
-          transition: 'opacity 0.15s',
-          opacity: selected ? 0.8 : 0.6,
+          transition: 'opacity 0.15s', opacity: selected ? 0.8 : 0.6,
         }}
         markerEnd={`url(#hollow-${id})`}
       />
+      <CrossingBridges edgeId={id} crossings={[]} />
     </>
   );
 }
-
-// ─────────────────────────────────────────────────────────────────
-// Edge type registry
-// ─────────────────────────────────────────────────────────────────
 
 export const edgeTypes = {
   referenceEdge: ReferenceEdge,

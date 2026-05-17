@@ -14,6 +14,8 @@ import {
   type EdgeProps,
 } from '@xyflow/react';
 import type { EdgeMapping, DecorationArrow, LineStyleType, RoutingStyle } from './types';
+import { useEdgeRouting } from '../../hooks/useEdgeRouting';
+import { CrossingBridges } from '../shared/CrossingBridges';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -117,12 +119,13 @@ function computePath(
   routingStyle: RoutingStyle,
   params: { sourceX: number; sourceY: number; sourcePosition: any; targetX: number; targetY: number; targetPosition: any },
 ): [string, number, number] {
+  let result: [string, number, number, number, number];
   if (routingStyle === 'manhattan' || routingStyle === 'tree') {
-    const [path, labelX, labelY] = getSmoothStepPath(params);
-    return [path, labelX, labelY];
+    result = getSmoothStepPath(params);
+  } else {
+    result = getBezierPath(params);
   }
-  const [path, labelX, labelY] = getBezierPath(params);
-  return [path, labelX, labelY];
+  return [result[0], result[1], result[2]];
 }
 
 /* ------------------------------------------------------------------ */
@@ -135,11 +138,16 @@ function SpecEdge(props: EdgeProps) {
     sourceX, sourceY, targetX, targetY,
     sourcePosition, targetPosition,
     data,
+    source: srcId,
+    target: tgtId,
   } = props;
 
   const edgeData = data as SpecEdgeData | undefined;
   const edgeMapping = edgeData?.edgeMapping;
   const selected = edgeData?.selected ?? false;
+
+  // Edge routing info
+  const { groupInfo } = useEdgeRouting(id, srcId, tgtId);
 
   if (!edgeMapping) {
     // Fallback: render a simple bezier edge
@@ -187,6 +195,8 @@ function SpecEdge(props: EdgeProps) {
           markerEnd: targetMarkerId ? `url(#${targetMarkerId})` : undefined,
         }}
       />
+
+      <CrossingBridges edgeId={id} crossings={[]} />
 
       {label && (
         <EdgeLabelRenderer>
