@@ -140,7 +140,19 @@ export class CodeTemplateService {
       throw new BadRequestException(`Template execution error: ${result.error}`);
     }
 
-    return { files: result.files };
+    // If MTL template produced named files via [file] blocks, return those
+    if (result.files.length > 0) {
+      return { files: result.files };
+    }
+
+    // Otherwise wrap raw output as a default file
+    const output = result.output ?? '';
+    if (output.trim()) {
+      return {
+        files: [{ name: `${metamodel.name}-output.txt`, content: output }],
+      };
+    }
+    return { files: [] };
   }
 
   // ================================================================
