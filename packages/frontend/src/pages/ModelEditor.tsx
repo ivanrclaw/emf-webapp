@@ -115,6 +115,8 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
   const lastSavedRef = useRef('');
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  // Stores loaded positions so nodes keep their place on re-render
+  const savedPositionsRef = useRef<Record<string, { x: number; y: number }>>({});
 
   // ─── Derived from spec + active layers ───────────────────────────
   const toolSections = useMemo(() => {
@@ -188,6 +190,7 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
               ? JSON.parse(m.content)
               : m.content;
             if (saved.objects) setObjects(saved.objects);
+            if (saved.positions) savedPositionsRef.current = saved.positions;
             if (saved.activeLayers) {
               setActiveLayers(new Set(saved.activeLayers));
             }
@@ -208,6 +211,11 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
   useEffect(() => {
     if (!spec) return;
 
+    // Preserve current ReactFlow node positions before rebuilding
+    for (const node of nodes) {
+      savedPositionsRef.current[node.id] = node.position;
+    }
+
     const newNodes: Node[] = objects.map((obj) => {
       const mapping = mappings.nodeMappings.find((m) => m.domainClass === obj.eClass)
         || mappings.containerMappings.find((m) => m.domainClass === obj.eClass);
@@ -223,10 +231,11 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
       }
 
       const isContainer = 'childrenPresentation' in mapping;
+      const savedPos = savedPositionsRef.current[obj.id];
       return {
         id: obj.id,
         type: isContainer ? 'vsmContainerNode' : 'vsmNode',
-        position: { x: 100 + Math.random() * 300, y: 100 + Math.random() * 300 },
+        position: savedPos ?? { x: 100 + Math.random() * 300, y: 100 + Math.random() * 300 },
         data: {
           mapping,
           semanticData: { ...obj.attributes, name: obj.attributes.name || obj.id, eClass: obj.eClass },
