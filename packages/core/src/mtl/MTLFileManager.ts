@@ -31,9 +31,9 @@ export class MTLFileManager {
    */
   getFiles(): Array<{ name: string; content: string }> {
     const result: Array<{ name: string; content: string }> = [];
-    for (const [name, content] of this.files) {
+    this.files.forEach((content, name) => {
       result.push({ name, content });
-    }
+    });
     return result;
   }
 

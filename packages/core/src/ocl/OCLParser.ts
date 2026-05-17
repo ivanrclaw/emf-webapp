@@ -1,20 +1,26 @@
 /**
  * OCLParser — Construye un AST (Abstract Syntax Tree) a partir de tokens OCL.
  *
- * Gramática simplificada:
- *   expression        → orExpression
- *   orExpression       → xorExpression (("or" | "xor" | "implies") xorExpression)*
- *   xorExpression      → andExpression (("and" | "implies") andExpression)*
- *   andExpression      → notExpression (("and") notExpression)*
- *   notExpression      → "not" notExpression | comparisonExpression
- *   comparisonExpression → additiveExpression (("=" | "<>" | ">" | "<" | ">=" | "<=") additiveExpression)?
- *   additiveExpression → multiplicativeExpression (("+" | "-") multiplicativeExpression)*
- *   multiplicativeExpression → unaryExpression (("*" | "/") unaryExpression)*
- *   unaryExpression   → ("-" | "not")? primary
- *   primary           → literal | self | identifier (call chain)
- *   callChain         → ("." identifier | "->" operation | "(" args ")")*
- *   operation         → identifier ("(" args ")")?
- *   args              → expression ("," expression)*
+ * Gramática extendida:
+ *   expression            → letExpression | ifExpression | orExpression
+ *   letExpression         → "let" IDENTIFIER (":" type)? "=" expression "in" expression | orExpression
+ *   ifExpression          → "if" expression "then" expression "else" expression "endif" | orExpression
+ *   orExpression          → xorExpression (("or" | "xor") xorExpression)*
+ *   xorExpression         → andExpression (("xor" | "implies") andExpression)*
+ *   andExpression         → notExpression ("and" notExpression)*
+ *   notExpression         → "not" notExpression | comparisonExpression
+ *   comparisonExpression  → additiveExpression (("=" | "<>" | ">" | "<" | ">=" | "<=") additiveExpression)?
+ *   additiveExpression    → multiplicativeExpression (("+" | "-") multiplicativeExpression)*
+ *   multiplicativeExpression → unaryExpression (("*" | "/" | "div" | "mod") unaryExpression)*
+ *   unaryExpression       → ("-" | "not")? primary
+ *   primary               → literal | self | "(" expression ")" | collectionLiteral | qualifiedName (call chain)
+ *   collectionLiteral     → ("Set" | "Bag" | "Sequence" | "OrderedSet") "{" args "}"
+ *   qualifiedName         → IDENTIFIER ("::" IDENTIFIER)*
+ *   callChain             → ("." identifier | "->" operation | "(" args ")")*
+ *   operation             → identifier (("(" args ")")? | lambdaOp | iterateOp)
+ *   lambdaOp              → "(" IDENTIFIER (":" type)? ( "|" expression )? ")"
+ *   iterateOp             → "(" IDENTIFIER (":" type)? ";" IDENTIFIER (":" type)? "=" expression "|" expression ")"
+ *   args                  → expression ("," expression)*
  */
 
 import { Token, TokenType, OCLLexer } from './OCLLexer.js';
@@ -26,12 +32,15 @@ export type ASTNode =
   | UnaryOpNode
   | BinaryOpNode
   | MethodCallNode
-  | CollectionOpNode;
+  | CollectionOpNode
+  | LetInNode
+  | IfNode
+  | CollectionLiteralNode;
 
 export interface LiteralNode {
   type: 'literal';
-  valueType: 'number' | 'string' | 'boolean';
-  value: number | string | boolean;
+  valueType: 'number' | 'string' | 'boolean' | 'null' | 'invalid';
+  value: number | string | boolean | null;
 }
 
 export interface IdentifierNode {
@@ -70,6 +79,31 @@ export interface CollectionOpNode {
   iterator?: string;
   body?: ASTNode;
   args?: ASTNode[];
+  /** For iterate: name of the accumulator variable */
+  iterAcc?: string;
+  /** For iterate: initial value expression for accumulator */
+  iterInit?: ASTNode;
+}
+
+export interface LetInNode {
+  type: 'letin';
+  varName: string;
+  varType?: string;
+  initExpr: ASTNode;
+  bodyExpr: ASTNode;
+}
+
+export interface IfNode {
+  type: 'if';
+  condition: ASTNode;
+  thenExpr: ASTNode;
+  elseExpr: ASTNode;
+}
+
+export interface CollectionLiteralNode {
+  type: 'collectionliteral';
+  collectionType: 'Set' | 'Bag' | 'Sequence' | 'OrderedSet';
+  elements: ASTNode[];
 }
 
 export class OCLParser {
@@ -94,8 +128,53 @@ export class OCLParser {
     }
   }
 
+  // ── Expression levels ───────────────────────────────────────────
+
   private expression(): ASTNode {
+    // let x = expr in body
+    if (this.match(TokenType.LET)) {
+      return this.parseLetIn();
+    }
+    // if cond then expr else expr endif
+    if (this.match(TokenType.IF)) {
+      return this.parseIfThenElse();
+    }
     return this.orExpression();
+  }
+
+  private parseLetIn(): ASTNode {
+    const varName = this.expect(TokenType.IDENTIFIER).value;
+    // Optional type annotation
+    let varType: string | undefined;
+    if (this.match(TokenType.COLON)) {
+      varType = this.parseQualifiedType();
+    }
+    this.expect(TokenType.EQUALS);
+    const initExpr = this.expression();
+    this.expect(TokenType.IN);
+    const bodyExpr = this.expression();
+    return {
+      type: 'letin',
+      varName,
+      varType,
+      initExpr,
+      bodyExpr,
+    } as LetInNode;
+  }
+
+  private parseIfThenElse(): ASTNode {
+    const condition = this.expression();
+    this.expect(TokenType.THEN);
+    const thenExpr = this.expression();
+    this.expect(TokenType.ELSE);
+    const elseExpr = this.expression();
+    this.expect(TokenType.ENDIF);
+    return {
+      type: 'if',
+      condition,
+      thenExpr,
+      elseExpr,
+    } as IfNode;
   }
 
   private orExpression(): ASTNode {
@@ -165,7 +244,12 @@ export class OCLParser {
 
   private multiplicativeExpression(): ASTNode {
     let left = this.unaryExpression();
-    while (this.match(TokenType.STAR) || this.match(TokenType.SLASH)) {
+    while (
+      this.match(TokenType.STAR) ||
+      this.match(TokenType.SLASH) ||
+      this.match(TokenType.DIV) ||
+      this.match(TokenType.MOD)
+    ) {
       const op = this.previous().value;
       const right = this.unaryExpression();
       left = { type: 'binary', operator: op, left, right };
@@ -177,6 +261,10 @@ export class OCLParser {
     if (this.match(TokenType.MINUS)) {
       const operand = this.unaryExpression();
       return { type: 'unary', operator: '-', operand };
+    }
+    if (this.match(TokenType.NOT)) {
+      const operand = this.unaryExpression();
+      return { type: 'unary', operator: 'not', operand };
     }
     return this.primary();
   }
@@ -204,6 +292,20 @@ export class OCLParser {
         value: this.previous().value === 'true',
       } as LiteralNode;
     }
+    if (this.match(TokenType.NULL)) {
+      return {
+        type: 'literal',
+        valueType: 'null',
+        value: null,
+      } as LiteralNode;
+    }
+    if (this.match(TokenType.INVALID)) {
+      return {
+        type: 'literal',
+        valueType: 'invalid',
+        value: null,
+      } as LiteralNode;
+    }
 
     // self
     if (this.match(TokenType.SELF)) {
@@ -212,9 +314,13 @@ export class OCLParser {
       return node;
     }
 
-    // identifier initial
+    // identifier or qualified name (MyEnum::LITERAL)
     if (this.match(TokenType.IDENTIFIER)) {
       const name = this.previous().value;
+      // Check for qualified names via ::
+      if (this.check(TokenType.COLON_COLON)) {
+        return this.parseQualifiedIdentifier(name);
+      }
 
       // Function call: identifier(...)
       if (this.check(TokenType.LPAREN) && this.peek()?.type !== TokenType.ARROW) {
@@ -234,6 +340,12 @@ export class OCLParser {
       return node;
     }
 
+    // Collection type keywords as identifier-like usage
+    // Set{...}, Bag{...}, Sequence{...}, OrderedSet{...}
+    if (this.isCollectionTypeKeyword()) {
+      return this.parseCollectionLiteral();
+    }
+
     // Parenthesized expression
     if (this.match(TokenType.LPAREN)) {
       const expr = this.expression();
@@ -243,6 +355,68 @@ export class OCLParser {
     }
 
     throw new Error(`Unexpected token '${this.peek()?.value ?? 'EOF'}' at position ${this.peek()?.position ?? -1}`);
+  }
+
+  private parseQualifiedIdentifier(firstPart: string): ASTNode {
+    const parts: string[] = [firstPart];
+    while (this.match(TokenType.COLON_COLON)) {
+      const next = this.expect(TokenType.IDENTIFIER).value;
+      parts.push(next);
+    }
+    const qualifiedName = parts.join('::');
+    let node: ASTNode = { type: 'identifier', name: qualifiedName } as IdentifierNode;
+    node = this.parseCallChain(node);
+    return node;
+  }
+
+  /** Parse a type annotation (e.g., "String", "ecore::EClass") */
+  private parseQualifiedType(): string {
+    const first = this.expect(TokenType.IDENTIFIER).value;
+    const parts: string[] = [first];
+    while (this.match(TokenType.COLON_COLON)) {
+      const next = this.expect(TokenType.IDENTIFIER).value;
+      parts.push(next);
+    }
+    return parts.join('::');
+  }
+
+  private isCollectionTypeKeyword(): boolean {
+    return (
+      this.check(TokenType.SET) ||
+      this.check(TokenType.BAG) ||
+      this.check(TokenType.SEQUENCE) ||
+      this.check(TokenType.ORDERED_SET)
+    );
+  }
+
+  private getCollectionTypeKeyword(): string | null {
+    const kw = this.peek();
+    if (!kw) return null;
+    switch (kw.type) {
+      case TokenType.SET: return 'Set';
+      case TokenType.BAG: return 'Bag';
+      case TokenType.SEQUENCE: return 'Sequence';
+      case TokenType.ORDERED_SET: return 'OrderedSet';
+      default: return null;
+    }
+  }
+
+  /** Parse Set{ expr, ... }, Bag{ expr, ... }, etc. */
+  private parseCollectionLiteral(): ASTNode {
+    const ct = this.getCollectionTypeKeyword();
+    if (!ct) throw new Error('Expected collection type keyword');
+    this.advance(); // consume the keyword
+    this.expect(TokenType.LBRACE);
+    const elements = this.parseArgs();
+    this.expect(TokenType.RBRACE);
+    let node: ASTNode = {
+      type: 'collectionliteral',
+      collectionType: ct,
+      elements,
+    } as CollectionLiteralNode;
+    // Allow call chain on the literal (e.g., Set{1,2}->size())
+    node = this.parseCallChain(node);
+    return node;
   }
 
   private parseCallChain(object: ASTNode): ASTNode {
@@ -268,68 +442,34 @@ export class OCLParser {
       if (this.match(TokenType.ARROW)) {
         const opName = this.expect(TokenType.IDENTIFIER).value;
 
-        // Lambda: ->forAll(x | expr), ->exists(x | expr), etc.
+        // Lambda-based operations: ->forAll(x | expr), ->exists(x | expr), ->select(x | expr),
+        // ->collect(x | expr), ->one(x | expr), ->isUnique(x | expr), ->sortedBy(x | expr),
+        // ->any(x | expr), ->reject(x | expr), ->closure(x | expr), ->collectNested(x | expr)
         if (
-          ['forAll', 'exists', 'select', 'collect', 'one', 'isUnique', 'sortedBy', 'any'].includes(opName)
+          ['forAll', 'exists', 'select', 'collect', 'one', 'isUnique', 'sortedBy', 'any',
+           'reject', 'closure', 'collectNested'].includes(opName)
         ) {
-          this.expect(TokenType.LPAREN);
-          const iterator = this.expect(TokenType.IDENTIFIER).value;
-          if (this.match(TokenType.PIPE)) {
-            // explicit iterator
-            const body = this.expression();
-            this.expect(TokenType.RPAREN);
-            node = {
-              type: 'collectionop',
-              source: node,
-              operation: opName,
-              iterator,
-              body,
-            } as CollectionOpNode;
-          } else {
-            // implicit or position-based — forAll(x), etc.
-            // treat as method call with the iterator name as argument
-            // Actually, standard OCL has forAll(x | expr) with pipe.
-            // But also: forAll(expr) with implicit iterator.
-            // Let's handle both:
-            // If we already consumed the iterator identifier, check if there's a pipe
-            // If no pipe, it might be a simple expression like forAll(x)
-            // Let's re-collect: We have IDENTIFIER (the iterator var name)
-            // See if next is PIPE
-            if (this.check(TokenType.PIPE)) {
-              this.advance();
-              const body = this.expression();
-              this.expect(TokenType.RPAREN);
-              node = {
-                type: 'collectionop',
-                source: node,
-                operation: opName,
-                iterator,
-                body,
-              } as CollectionOpNode;
-            } else {
-              // The "body" is just `iterator` itself (simple expression)
-              const exprNode: ASTNode = { type: 'identifier', name: iterator } as IdentifierNode;
-              this.expect(TokenType.RPAREN);
-              node = {
-                type: 'collectionop',
-                source: node,
-                operation: opName,
-                body: exprNode,
-              } as CollectionOpNode;
-            }
-          }
-        } else {
-          // Simple arrow call: ->size(), ->isEmpty(), etc.
-          this.expect(TokenType.LPAREN);
-          const args = this.parseArgs();
-          this.expect(TokenType.RPAREN);
-          node = {
-            type: 'collectionop',
-            source: node,
-            operation: opName,
-            args,
-          } as unknown as MethodCallNode;
+          node = this.parseLambdaOperation(node, opName);
+          continue;
         }
+
+        // ->iterate(iter : Type; acc : Type = init | body)
+        if (opName === 'iterate') {
+          node = this.parseIterateOperation(node);
+          continue;
+        }
+
+        // Simple arrow call: ->size(), ->isEmpty(), ->sum(), ->min(), ->max(), ->flatten()
+        // or ->at(i), ->includes(x), etc.
+        this.expect(TokenType.LPAREN);
+        const args = this.parseArgs();
+        this.expect(TokenType.RPAREN);
+        node = {
+          type: 'collectionop',
+          source: node,
+          operation: opName,
+          args,
+        } as CollectionOpNode;
         continue;
       }
 
@@ -339,9 +479,107 @@ export class OCLParser {
     return node;
   }
 
+  private parseLambdaOperation(source: ASTNode, opName: string): ASTNode {
+    this.expect(TokenType.LPAREN);
+    const iterator = this.expect(TokenType.IDENTIFIER).value;
+
+    // Optional type annotation on iterator
+    if (this.match(TokenType.COLON)) {
+      this.parseQualifiedType(); // consume but ignore type for now
+    }
+
+    if (this.match(TokenType.PIPE)) {
+      // explicit iterator: forAll(x | expr)
+      const body = this.expression();
+      this.expect(TokenType.RPAREN);
+      return {
+        type: 'collectionop',
+        source,
+        operation: opName,
+        iterator,
+        body,
+      } as CollectionOpNode;
+    } else {
+      // No pipe: the iterator variable IS the body (e.g., forAll(x) means forAll(x | x))
+      // Or it could be a simple expression like collect(x.property)
+      // Check if next is RPAREN — if so, it's simple iteration
+      if (this.check(TokenType.RPAREN)) {
+        this.advance(); // consume )
+        const exprNode: ASTNode = { type: 'identifier', name: iterator } as IdentifierNode;
+        return {
+          type: 'collectionop',
+          source,
+          operation: opName,
+          body: exprNode,
+        } as CollectionOpNode;
+      } else {
+        // It's collect(x.property) style — the iterator variable was already consumed
+        // Let's treat what follows as a property chain on the iterator
+        // Parse the rest up to RPAREN as the body, using implicit iterator name
+        const body = this.parseImplicitBody(iterator);
+        this.expect(TokenType.RPAREN);
+        return {
+          type: 'collectionop',
+          source,
+          operation: opName,
+          iterator,
+          body,
+        } as CollectionOpNode;
+      }
+    }
+  }
+
+  /**
+   * Parse a "body" that starts with a dot-chain on an implicit iterator variable.
+   * e.g., in "collect(x.name)", after consuming "x", we see ".name" which becomes
+   * the body expression "x.name".
+   */
+  private parseImplicitBody(iteratorName: string): ASTNode {
+    let node: ASTNode = { type: 'identifier', name: iteratorName } as IdentifierNode;
+    // Parse dot chain and arrow chain
+    node = this.parseCallChain(node);
+    return node;
+  }
+
+  private parseIterateOperation(source: ASTNode): ASTNode {
+    this.expect(TokenType.LPAREN);
+    // Iterator variable
+    const iterator = this.expect(TokenType.IDENTIFIER).value;
+    // Optional iterator type
+    if (this.match(TokenType.COLON)) {
+      this.parseQualifiedType(); // consume type
+    }
+    // Semicolon separator
+    this.expect(TokenType.SEMI);
+
+    // Accumulator variable
+    const accName = this.expect(TokenType.IDENTIFIER).value;
+    // Optional accumulator type
+    if (this.match(TokenType.COLON)) {
+      this.parseQualifiedType(); // consume type
+    }
+    // = and initial value
+    this.expect(TokenType.EQUALS);
+    const initExpr = this.expression();
+    // Pipe separator
+    this.expect(TokenType.PIPE);
+    const body = this.expression();
+    this.expect(TokenType.RPAREN);
+
+    return {
+      type: 'collectionop',
+      source,
+      operation: 'iterate',
+      iterator,
+      body,
+      iterAcc: accName,
+      iterInit: initExpr,
+    } as CollectionOpNode;
+  }
+
   private parseArgs(): ASTNode[] {
     const args: ASTNode[] = [];
-    if (!this.check(TokenType.RPAREN)) {
+    if (!this.check(TokenType.RPAREN) && !this.check(TokenType.RBRACE)) {
       args.push(this.expression());
       while (this.match(TokenType.COMMA)) {
         args.push(this.expression());

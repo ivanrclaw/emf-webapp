@@ -1,5 +1,6 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import Editor, { OnMount, BeforeMount } from '@monaco-editor/react';
 import {
   getMetamodel,
   getOCLConstraints,
@@ -35,6 +36,21 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
   const params = useParams<{ pid: string; mmid: string }>();
   const projectId = props.projectId || params.pid || '';
   const metamodelId = props.metamodelId || params.mmid || '';
+
+  const [monacoTheme, setMonacoTheme] = useState(() =>
+    document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'vs-dark'
+  );
+  const monacoDisposablesRef = useRef<any[]>([]);
+
+  // Sync Monaco theme with app theme toggle
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      const theme = document.documentElement.getAttribute('data-theme');
+      setMonacoTheme(theme === 'light' ? 'light' : 'vs-dark');
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
+  }, []);
 
   const [metamodel, setMetamodel] = useState<Metamodel | null>(null);
   const [constraints, setConstraints] = useState<OCLConstraint[]>([]);
@@ -81,6 +97,170 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
   }, [metamodelId, projectId]);
 
   useEffect(() => { load(); }, [load]);
+
+  // ── Monaco Language Registration ─────────────────────────────────
+
+  const handleBeforeMount: BeforeMount = (monaco) => {
+    // Register custom OCL language
+    monaco.languages.register({ id: 'emf-ocl' });
+
+    // Set Monarch tokens provider
+    monaco.languages.setMonarchTokensProvider('emf-ocl', {
+      keywords: [
+        'self', 'true', 'false', 'and', 'or', 'not', 'xor', 'implies',
+        'let', 'in', 'if', 'then', 'else', 'endif', 'inv', 'pre', 'post',
+        'def', 'init', 'derive', 'body', 'package', 'endpackage',
+        'context', 'result', 'null', 'invalid',
+      ],
+      typeKeywords: [
+        'String', 'Integer', 'Real', 'Boolean', 'OclVoid',
+        'Set', 'Bag', 'Sequence', 'OrderedSet', 'Tuple',
+      ],
+      collectionOperations: [
+        'forAll', 'exists', 'select', 'reject', 'collect', 'collectNested',
+        'closure', 'iterate', 'any', 'one', 'isUnique', 'sortedBy',
+        'size', 'isEmpty', 'notEmpty', 'includes', 'excludes',
+        'first', 'last', 'at', 'sum', 'min', 'max', 'flatten',
+        'including', 'excluding', 'union', 'intersection',
+        'append', 'prepend', 'asSet', 'asBag', 'asSequence',
+        'asOrderedSet', 'allInstances',
+      ],
+      operators: [
+        '=', '<>', '>', '<', '>=', '<=', '+', '-', '*', '/',
+        'div', 'mod', '->', '.', '::',
+      ],
+      brackets: [
+        { open: '(', close: ')', token: 'delimiter.parenthesis' },
+        { open: '{', close: '}', token: 'delimiter.curly' },
+      ],
+
+      tokenizer: {
+        root: [
+          // Line comments
+          [/--.*$/, 'comment'],
+
+          // Strings (double and single quoted)
+          [/"[^"]*"/, 'string'],
+          [/'[^']*'/, 'string'],
+
+          // Numbers
+          [/\d*\.\d+([eE][+-]?\d+)?/, 'number.float'],
+          [/\d+/, 'number'],
+
+          // Keywords
+          [/@?[a-zA-Z_]\w*/, {
+            cases: {
+              '@keywords': 'keyword',
+              '@typeKeywords': 'type',
+              '@collectionOperations': 'keyword.operator',
+              '@default': 'identifier',
+            },
+          }],
+
+          // Operators
+          [/->/, 'keyword.operator'],
+          [/::/, 'delimiter'],
+          [/[=<>!+\-*/]/, 'delimiter'],
+
+          // Brackets
+          [/[()]/, '@brackets'],
+          [/[{}]/, '@brackets'],
+
+          // Whitespace
+          [/\s+/, 'white'],
+        ],
+      },
+    } as any);
+
+    // Completion Item Provider
+    const eclassNamesSnapshot = eclassNames;
+    const allKeywords = [
+      ...['self', 'true', 'false', 'and', 'or', 'not', 'xor', 'implies',
+         'let', 'in', 'if', 'then', 'else', 'endif', 'inv', 'pre', 'post',
+         'def', 'init', 'derive', 'body', 'package', 'endpackage',
+         'context', 'result', 'null', 'invalid'],
+      ...['forAll', 'exists', 'select', 'reject', 'collect', 'collectNested',
+         'closure', 'iterate', 'any', 'one', 'isUnique', 'sortedBy',
+         'size', 'isEmpty', 'notEmpty', 'includes', 'excludes',
+         'first', 'last', 'at', 'sum', 'min', 'max', 'flatten',
+         'including', 'excluding', 'union', 'intersection',
+         'append', 'prepend', 'asSet', 'asBag', 'asSequence',
+         'asOrderedSet', 'allInstances'],
+      ...['String', 'Integer', 'Real', 'Boolean', 'OclVoid',
+         'Set', 'Bag', 'Sequence', 'OrderedSet', 'Tuple'],
+    ];
+
+    const disposable = monaco.languages.registerCompletionItemProvider('emf-ocl', {
+      provideCompletionItems: (model: any, position: any) => {
+        const word = model.getWordUntilPosition(position);
+        const range = {
+          startLineNumber: position.lineNumber,
+          endLineNumber: position.lineNumber,
+          startColumn: word.startColumn,
+          endColumn: word.endColumn,
+        };
+
+        const suggestions: any[] = [];
+
+        // OCL keywords
+        for (const k of allKeywords) {
+          suggestions.push({
+            label: k,
+            kind: monaco.languages.CompletionItemKind.Keyword,
+            insertText: k,
+            range,
+          });
+        }
+
+        // EClass names
+        for (const name of eclassNamesSnapshot) {
+          suggestions.push({
+            label: name,
+            kind: monaco.languages.CompletionItemKind.Class,
+            insertText: name,
+            range,
+          });
+        }
+
+        // Snippets
+        const snippets: Array<{ label: string; insertText: string; detail: string }> = [
+          { label: 'inv', insertText: 'inv:\n\t${1}', detail: 'Invariant' },
+          { label: 'pre', insertText: 'pre:\n\t${1}', detail: 'Pre-condition' },
+          { label: 'post', insertText: 'post:\n\t${1}', detail: 'Post-condition' },
+          { label: 'def', insertText: 'def: ${1:name}() : ${2:Type} = ${3:expression}', detail: 'Operation definition' },
+          { label: 'let', insertText: 'let ${1:var} : ${2:Type} = ${3:expr} in\n\t${4}', detail: 'Let expression' },
+          { label: 'if-then-else', insertText: 'if ${1:condition} then\n\t${2:thenExpr}\nelse\n\t${3:elseExpr}\nendif', detail: 'If-then-else-endif' },
+          { label: 'forAll', insertText: '${1:collection}->forAll(${2:e} | ${3:condition})', detail: 'forAll iterator' },
+          { label: 'exists', insertText: '${1:collection}->exists(${2:e} | ${3:condition})', detail: 'exists iterator' },
+          { label: 'select', insertText: '${1:collection}->select(${2:e} | ${3:condition})', detail: 'select iterator' },
+          { label: 'collect', insertText: '${1:collection}->collect(${2:e} | ${3:expression})', detail: 'collect iterator' },
+          { label: 'iterate', insertText: '${1:collection}->iterate(${2:e} : ${3:Type}; ${4:acc} : ${5:Type} = ${6:initial} | ${7:expression})', detail: 'iterate accumulator' },
+        ];
+
+        for (const s of snippets) {
+          suggestions.push({
+            label: s.label,
+            kind: monaco.languages.CompletionItemKind.Snippet,
+            insertText: s.insertText,
+            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+            detail: s.detail,
+            range,
+          });
+        }
+
+        return { suggestions };
+      },
+    });
+
+    // Store disposable for cleanup
+    monacoDisposablesRef.current = [disposable];
+  };
+
+  // ── Editor mount ──────────────────────────────────────────────────
+
+  const handleEditorMount: OnMount = () => {
+    // noop — language already registered in beforeMount
+  };
 
   // ── Save ──────────────────────────────────────────────────────────
 
@@ -252,18 +432,24 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
         </div>
         <div className="form-field" style={{ marginBottom: 12 }}>
           <label>OCL Expression {!formExpression && <span style={{ color: 'var(--danger)' }}>*</span>}</label>
-          <textarea
-            value={formExpression}
-            onChange={(e) => setFormExpression(e.target.value)}
-            placeholder="self.name <> '' and self.name.size() > 2"
-            rows={4}
-            style={{
-              width: '100%', padding: '8px 12px', borderRadius: 6,
-              border: `1px solid ${!formExpression ? 'var(--danger)' : 'var(--border)'}`, fontSize: '.8125rem',
-              fontFamily: "'JetBrains Mono', monospace", background: 'var(--bg)',
-              color: 'var(--text)', resize: 'vertical',
-            }}
-          />
+          <div style={{ border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
+            <Editor
+              height="120px"
+              language="emf-ocl"
+              value={formExpression}
+              onChange={(val) => setFormExpression(val || '')}
+              onMount={handleEditorMount}
+              beforeMount={handleBeforeMount}
+              theme={monacoTheme}
+              options={{
+                minimap: { enabled: false },
+                fontSize: 13,
+                lineNumbers: 'on',
+                scrollBeyondLastLine: false,
+                automaticLayout: true,
+              }}
+            />
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving || !formName || !formContext || !formExpression}>

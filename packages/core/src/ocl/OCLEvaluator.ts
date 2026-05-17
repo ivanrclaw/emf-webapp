@@ -3,10 +3,15 @@
  *
  * Soporta:
  * - Navegación por atributos y referencias
- * - Operaciones de colección (forAll, exists, select, etc.)
+ * - Operaciones de colección (forAll, exists, select, collect, reject, closure, etc.)
  * - Operadores aritméticos, comparación, lógicos
  * - String operations
- * - Type operations (oclIsTypeOf, oclIsKindOf, etc.)
+ * - Type operations (oclIsTypeOf, oclIsKindOf con herencia, etc.)
+ * - Let / in expressions
+ * - If / then / else / endif expressions
+ * - Collection literales (Set{}, Bag{}, Sequence{}, OrderedSet{})
+ * - iterate
+ * - div / mod
  */
 
 import {
@@ -18,6 +23,9 @@ import {
   BinaryOpNode,
   MethodCallNode,
   CollectionOpNode,
+  LetInNode,
+  IfNode,
+  CollectionLiteralNode,
 } from './OCLParser.js';
 
 export type EValue = string | number | boolean | null | undefined | OCLEObject | OCLEObject[] | Map<string, EValue>;
@@ -49,6 +57,8 @@ export type OCLResult =
 export class OCLEvaluator {
   constructor(
     private readonly eclassMap: Map<string, OCLEClassInfo>,
+    /** Optional map of class name -> list of superclass names for isKindOf inheritance checks */
+    private readonly eclassHierarchy?: Map<string, string[]>,
   ) {}
 
   evaluate(ast: ASTNode, context: OCLEObject): OCLResult {
@@ -80,6 +90,12 @@ export class OCLEvaluator {
         return this.evalMethodCall(node as MethodCallNode, context, scope);
       case 'collectionop':
         return this.evalCollectionOp(node as CollectionOpNode, context, scope);
+      case 'letin':
+        return this.evalLetIn(node as LetInNode, context, scope);
+      case 'if':
+        return this.evalIf(node as IfNode, context, scope);
+      case 'collectionliteral':
+        return this.evalCollectionLiteral(node as CollectionLiteralNode, context, scope);
       default:
         throw new Error(`Unknown node type: ${(node as any).type}`);
     }
@@ -90,9 +106,14 @@ export class OCLEvaluator {
     context: OCLEObject,
     scope: Map<string, EValue>,
   ): EValue {
-    // Check local scope first (iterator variables)
+    // Check local scope first (iterator variables, let-bound variables)
     if (scope.has(node.name)) {
       return scope.get(node.name)!;
+    }
+    // Check if it's a qualified enum literal like Status::ACTIVE
+    if (node.name.includes('::')) {
+      // Return the qualified name as a string value for enum literals
+      return node.name;
     }
     // Fall through: treat as feature access on context
     if (node.name in context.attributes) {
@@ -102,6 +123,59 @@ export class OCLEvaluator {
       return context.references[node.name];
     }
     throw new Error(`Undefined identifier '${node.name}' in context`);
+  }
+
+  private evalLetIn(
+    node: LetInNode,
+    context: OCLEObject,
+    scope: Map<string, EValue>,
+  ): EValue {
+    const initVal = this.evalNode(node.initExpr, context, scope);
+    const newScope = new Map(scope);
+    newScope.set(node.varName, initVal);
+    return this.evalNode(node.bodyExpr, context, newScope);
+  }
+
+  private evalIf(
+    node: IfNode,
+    context: OCLEObject,
+    scope: Map<string, EValue>,
+  ): EValue {
+    const cond = this.toBoolean(this.evalNode(node.condition, context, scope));
+    if (cond) {
+      return this.evalNode(node.thenExpr, context, scope);
+    } else {
+      return this.evalNode(node.elseExpr, context, scope);
+    }
+  }
+
+  private evalCollectionLiteral(
+    node: CollectionLiteralNode,
+    context: OCLEObject,
+    scope: Map<string, EValue>,
+  ): EValue {
+    const elements = node.elements.map((el) => this.evalNode(el, context, scope));
+
+    switch (node.collectionType) {
+      case 'Set':
+      case 'OrderedSet': {
+        // Deduplicate by JSON serialization (simple approach)
+        const seen = new Set<string>();
+        const unique: EValue[] = [];
+        for (const el of elements) {
+          const key = JSON.stringify(el);
+          if (!seen.has(key)) {
+            seen.add(key);
+            unique.push(el);
+          }
+        }
+        return unique as EValue;
+      }
+      case 'Bag':
+      case 'Sequence':
+      default:
+        return elements as EValue;
+    }
   }
 
   private evalUnary(
@@ -144,6 +218,16 @@ export class OCLEvaluator {
         const r = this.toNumber(right);
         if (r === 0) throw new Error('Division by zero');
         return this.toNumber(left) / r;
+      }
+      case 'div': {
+        const r = this.toNumber(right);
+        if (r === 0) throw new Error('Division by zero');
+        return Math.floor(this.toNumber(left) / r);
+      }
+      case 'mod': {
+        const r = this.toNumber(right);
+        if (r === 0) throw new Error('Division by zero');
+        return this.toNumber(left) % r;
       }
 
       // Comparison
@@ -206,6 +290,16 @@ export class OCLEvaluator {
         return Math.floor(this.toNumber(obj));
       case 'round':
         return Math.round(this.toNumber(obj));
+      case 'max':
+        if (typeof obj === 'number') {
+          return Math.max(obj, ...args.map((a) => this.toNumber(a)));
+        }
+        throw new Error(`max() called on non-numeric`);
+      case 'min':
+        if (typeof obj === 'number') {
+          return Math.min(obj, ...args.map((a) => this.toNumber(a)));
+        }
+        throw new Error(`min() called on non-numeric`);
 
       // Type operations
       case 'oclIsTypeOf':
@@ -285,6 +379,40 @@ export class OCLEvaluator {
         return col.length > 0 ? col[col.length - 1] : null;
       case 'at':
         return node.args?.[0] ? col[Number(this.evalNode(node.args[0], context, scope)) - 1] : null;
+      case 'sum': {
+        let total = 0;
+        for (const item of col) {
+          total += this.toNumber(item);
+        }
+        return total;
+      }
+      case 'min': {
+        if (col.length === 0) throw new Error('min() called on empty collection');
+        let result = this.toNumber(col[0]);
+        for (let i = 1; i < col.length; i++) {
+          result = Math.min(result, this.toNumber(col[i]));
+        }
+        return result as EValue;
+      }
+      case 'max': {
+        if (col.length === 0) throw new Error('max() called on empty collection');
+        let result = this.toNumber(col[0]);
+        for (let i = 1; i < col.length; i++) {
+          result = Math.max(result, this.toNumber(col[i]));
+        }
+        return result as EValue;
+      }
+      case 'flatten': {
+        const result: EValue[] = [];
+        for (const item of col) {
+          if (Array.isArray(item)) {
+            result.push(...item);
+          } else {
+            result.push(item);
+          }
+        }
+        return result as unknown as EValue;
+      }
 
       // Lambda-based operations
       case 'forAll': {
@@ -318,7 +446,19 @@ export class OCLEvaluator {
             result.push(item as OCLEObject);
           }
         }
-        return result;
+        return result as EValue;
+      }
+      case 'reject': {
+        if (!node.body) return col;
+        const result: OCLEObject[] = [];
+        for (const item of col) {
+          const newScope = new Map(scope);
+          newScope.set(node.iterator!, item);
+          if (!this.toBoolean(this.evalNode(node.body, context, newScope))) {
+            result.push(item as OCLEObject);
+          }
+        }
+        return result as EValue;
       }
       case 'collect': {
         if (!node.body) return col;
@@ -327,6 +467,48 @@ export class OCLEvaluator {
           newScope.set(node.iterator!, item);
           return this.evalNode(node.body!, context, newScope);
         }) as unknown as EValue;
+      }
+      case 'collectNested': {
+        // Same as collect but preserves nested collections (no flattening)
+        if (!node.body) return col;
+        return col.map((item) => {
+          const newScope = new Map(scope);
+          newScope.set(node.iterator!, item);
+          return this.evalNode(node.body!, context, newScope);
+        }) as unknown as EValue;
+      }
+      case 'closure': {
+        // closure: transitive closure — recursively traverse until no more results
+        if (!node.body) return col;
+        const seen = new Set<string>();
+        const result: EValue[] = [];
+        const queue: EValue[] = [...col];
+
+        while (queue.length > 0) {
+          const current = queue.shift()!;
+          const key = this.isEObject(current)
+            ? JSON.stringify((current as OCLEObject).attributes)
+            : JSON.stringify(current);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          result.push(current);
+
+          // Evaluate body on current element to get next level
+          const nextScope = new Map(scope);
+          nextScope.set(node.iterator!, current);
+          const nextItems = this.evalNode(node.body!, context, nextScope);
+          if (Array.isArray(nextItems)) {
+            for (const item of nextItems) {
+              const itemKey = this.isEObject(item)
+                ? JSON.stringify((item as OCLEObject).attributes)
+                : JSON.stringify(item);
+              if (!seen.has(itemKey)) {
+                queue.push(item);
+              }
+            }
+          }
+        }
+        return result as unknown as EValue;
       }
       case 'one': {
         if (!node.body) return col.length === 1;
@@ -380,6 +562,24 @@ export class OCLEvaluator {
         }
         return null;
       }
+      case 'iterate': {
+        if (!node.body || !node.iterator || !node.iterAcc) {
+          throw new Error('iterate requires iterator, accumulator, and body');
+        }
+        // Initialize accumulator
+        const accInit = node.iterInit
+          ? this.evalNode(node.iterInit, context, scope)
+          : null;
+        let acc = accInit;
+
+        for (const item of col) {
+          const newScope = new Map(scope);
+          newScope.set(node.iterator, item);
+          newScope.set(node.iterAcc, acc);
+          acc = this.evalNode(node.body, context, newScope);
+        }
+        return acc;
+      }
 
       default:
         throw new Error(`Unknown collection operation: ${node.operation}`);
@@ -428,10 +628,37 @@ export class OCLEvaluator {
     return false;
   }
 
+  /**
+   * Checks if obj is an instance of className or any of its subclasses.
+   * If eclassHierarchy is provided, walks the supertype chain.
+   */
   private isKindOf(obj: EValue, className: string): boolean {
-    if (this.isEObject(obj)) {
-      return obj.eClass === className;
+    if (!this.isEObject(obj)) {
+      return false;
     }
+    const eClass = obj.eClass;
+    if (eClass === className) return true;
+
+    // Walk the hierarchy if available
+    if (this.eclassHierarchy) {
+      const visited = new Set<string>();
+      const queue = [eClass];
+
+      while (queue.length > 0) {
+        const current = queue.shift()!;
+        if (visited.has(current)) continue;
+        visited.add(current);
+
+        const supers = this.eclassHierarchy.get(current);
+        if (supers) {
+          for (const superClass of supers) {
+            if (superClass === className) return true;
+            queue.push(superClass);
+          }
+        }
+      }
+    }
+
     return false;
   }
 }

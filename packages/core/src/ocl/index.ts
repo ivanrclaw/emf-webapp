@@ -17,6 +17,9 @@ export type {
   BinaryOpNode,
   MethodCallNode,
   CollectionOpNode,
+  LetInNode,
+  IfNode,
+  CollectionLiteralNode,
 } from './OCLParser.js';
 
 export { OCLEvaluator } from './OCLEvaluator.js';

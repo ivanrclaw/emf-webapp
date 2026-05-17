@@ -9,16 +9,22 @@ export type {
   MTLNode,
   MTLModule,
   MTLTemplate,
+  MTLQuery,
   MTLFile,
   MTLText,
   MTLExpression,
   MTLFor,
   MTLIf,
+  MTLElseIf,
+  MTLLet,
   MTLProtectedArea,
   MTLComment,
+  MTLTrace,
+  Visibility,
+  MTLParam,
+  MTLExecutionResult,
 } from './MTLTypes.js';
 
 export { MTLParser } from './MTLParser.js';
 export { MTLExecutor } from './MTLExecutor.js';
-export type { MTLExecutionResult } from './MTLExecutor.js';
 export { MTLFileManager } from './MTLFileManager.js';

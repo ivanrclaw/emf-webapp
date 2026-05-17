@@ -12,12 +12,16 @@ export enum TokenType {
   BOOLEAN = 'BOOLEAN',
   IDENTIFIER = 'IDENTIFIER',
   SELF = 'SELF',
+  NULL = 'NULL',
+  INVALID = 'INVALID',
 
   // Operators
   PLUS = 'PLUS',
   MINUS = 'MINUS',
   STAR = 'STAR',
   SLASH = 'SLASH',
+  MOD = 'MOD',
+  DIV = 'DIV',
   EQUALS = 'EQUALS',
   NOT_EQUALS = 'NOT_EQUALS',
   GT = 'GT',
@@ -39,13 +43,56 @@ export enum TokenType {
   // Delimiters
   LPAREN = 'LPAREN',
   RPAREN = 'RPAREN',
+  LBRACE = 'LBRACE',         // {
+  RBRACE = 'RBRACE',         // }
   DOT = 'DOT',
   COMMA = 'COMMA',
+  SEMI = 'SEMI',           // ;
   COLON = 'COLON',
+  COLON_COLON = 'COLON_COLON', // ::
 
   // Special
   ASSIGN = 'ASSIGN',         // =
   EOF = 'EOF',
+
+  // Control flow
+  LET = 'LET',
+  IN = 'IN',
+  IF = 'IF',
+  THEN = 'THEN',
+  ELSE = 'ELSE',
+  ENDIF = 'ENDIF',
+
+  // OCL document keywords
+  PACKAGE = 'PACKAGE',
+  ENDPACKAGE = 'ENDPACKAGE',
+  CONTEXT = 'CONTEXT',
+  INV = 'INV',
+  PRE = 'PRE',
+  POST = 'POST',
+  DEF = 'DEF',
+  INIT = 'INIT',
+  DERIVE = 'DERIVE',
+  BODY = 'BODY',
+  RESULT = 'RESULT',
+  AT_PRE = 'AT_PRE',
+
+  // Collection operation names (dedicated tokens for clarity)
+  REJECT = 'REJECT',
+  CLOSURE = 'CLOSURE',
+  COLLECT_NESTED = 'COLLECT_NESTED',
+  FLATTEN = 'FLATTEN',
+  ITERATE = 'ITERATE',
+  SUM = 'SUM',
+  MIN = 'MIN',
+  MAX = 'MAX',
+  ALL_INSTANCES = 'ALL_INSTANCES',
+
+  // Collection type names
+  SET = 'SET',
+  BAG = 'BAG',
+  SEQUENCE = 'SEQUENCE',
+  ORDERED_SET = 'ORDERED_SET',
 }
 
 export interface Token {
@@ -63,6 +110,41 @@ const KEYWORDS: Record<string, TokenType> = {
   not: TokenType.NOT,
   xor: TokenType.XOR,
   implies: TokenType.IMPLIES,
+  let: TokenType.LET,
+  in: TokenType.IN,
+  if: TokenType.IF,
+  then: TokenType.THEN,
+  else: TokenType.ELSE,
+  endif: TokenType.ENDIF,
+  package: TokenType.PACKAGE,
+  endpackage: TokenType.ENDPACKAGE,
+  context: TokenType.CONTEXT,
+  inv: TokenType.INV,
+  pre: TokenType.PRE,
+  post: TokenType.POST,
+  def: TokenType.DEF,
+  init: TokenType.INIT,
+  derive: TokenType.DERIVE,
+  body: TokenType.BODY,
+  result: TokenType.RESULT,
+  '@pre': TokenType.AT_PRE,
+  null: TokenType.NULL,
+  invalid: TokenType.INVALID,
+  mod: TokenType.MOD,
+  div: TokenType.DIV,
+  reject: TokenType.REJECT,
+  closure: TokenType.CLOSURE,
+  collectNested: TokenType.COLLECT_NESTED,
+  flatten: TokenType.FLATTEN,
+  iterate: TokenType.ITERATE,
+  sum: TokenType.SUM,
+  min: TokenType.MIN,
+  max: TokenType.MAX,
+  allInstances: TokenType.ALL_INSTANCES,
+  Set: TokenType.SET,
+  Bag: TokenType.BAG,
+  Sequence: TokenType.SEQUENCE,
+  OrderedSet: TokenType.ORDERED_SET,
 };
 
 export class OCLLexer {
@@ -138,8 +220,7 @@ export class OCLLexer {
           id += this.input[this.pos];
           this.pos++;
         }
-        // Check if it's "oclIsTypeOf" etc. - they're compound identifiers
-        const peek = this.input.substring(this.pos, this.pos + 10);
+        // Check for @pre suffix
         if (id === 'oclIsTypeOf' || id === 'oclIsKindOf' || id === 'oclAsType' || id === 'oclIsUndefined') {
           this.addToken(TokenType.IDENTIFIER, id);
         } else {
@@ -165,6 +246,12 @@ export class OCLLexer {
         this.pos += 2;
         continue;
       }
+      // :: (colon colon) for enum literals
+      if (ch === ':' && this.input[this.pos + 1] === ':') {
+        this.addToken(TokenType.COLON_COLON, '::');
+        this.pos += 2;
+        continue;
+      }
 
       // Single-char tokens
       const singleCharMap: Record<string, TokenType> = {
@@ -177,8 +264,11 @@ export class OCLLexer {
         '<': TokenType.LT,
         '(': TokenType.LPAREN,
         ')': TokenType.RPAREN,
+        '{': TokenType.LBRACE,
+        '}': TokenType.RBRACE,
         '.': TokenType.DOT,
         ',': TokenType.COMMA,
+        ';': TokenType.SEMI,
         ':': TokenType.COLON,
         '|': TokenType.PIPE,
       };
