@@ -653,18 +653,6 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
         <Panel position="top-right">
           <div style={{ display: 'flex', gap: 4 }}>
             <button
-              onClick={() => { model.autoLayout('TB'); setTimeout(() => reactFlowInstance.fitView({ padding: 0.15, duration: 300 }), 50); }}
-              title="Auto Layout (Top → Bottom)"
-              style={{
-                padding: '6px 10px', fontSize: 12, fontWeight: 600,
-                background: 'var(--surface)', border: '1px solid var(--border)',
-                borderRadius: 8, cursor: 'pointer', color: 'var(--text)',
-                boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-              }}
-            >
-              ↕ Layout
-            </button>
-            <button
               onClick={() => { model.autoLayout('LR'); setTimeout(() => reactFlowInstance.fitView({ padding: 0.15, duration: 300 }), 50); }}
               title="Auto Layout (Left → Right)"
               style={{
@@ -675,6 +663,18 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
               }}
             >
               ↔ Layout
+            </button>
+            <button
+              onClick={() => { model.autoLayout('TB'); setTimeout(() => reactFlowInstance.fitView({ padding: 0.15, duration: 300 }), 50); }}
+              title="Auto Layout (Top → Bottom)"
+              style={{
+                padding: '6px 10px', fontSize: 12, fontWeight: 600,
+                background: 'var(--surface)', border: '1px solid var(--border)',
+                borderRadius: 8, cursor: 'pointer', color: 'var(--text)',
+                boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+              }}
+            >
+              ↕ Layout
             </button>
           </div>
         </Panel>
