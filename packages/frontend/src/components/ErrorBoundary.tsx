@@ -5,7 +5,7 @@
  * y muestra un panel profesional de recuperación con acciones contextuales.
  */
 import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { AlertTriangle, RefreshCw, ChevronDown, ChevronRight, Copy } from './icons';
+import { AlertTriangle, RefreshCw, ChevronDown, ChevronRight, Copy, Trash2 } from './icons';
 
 interface Props {
   children: ReactNode;
@@ -54,6 +54,31 @@ export class ErrorBoundary extends Component<Props, State> {
   };
 
   handleReloadSession = (): void => {
+    window.location.reload();
+  };
+
+  handleClearStorage = (): void => {
+    // Clear all web storage
+    try { localStorage.clear(); } catch {}
+    try { sessionStorage.clear(); } catch {}
+
+    // Clear all cookies
+    document.cookie.split(';').forEach((c) => {
+      document.cookie = c
+        .replace(/^ +/, '')
+        .replace(/=.*/, `=;expires=${new Date(0).toUTCString()};path=/`);
+    });
+
+    // Also attempt to clear IndexedDB databases (name is app-specific)
+    if ('indexedDB' in window) {
+      indexedDB.databases?.().then((dbs) => {
+        dbs.forEach((db) => {
+          if (db.name) indexedDB.deleteDatabase(db.name);
+        });
+      }).catch(() => {});
+    }
+
+    // Reload fresh
     window.location.reload();
   };
 
@@ -248,7 +273,31 @@ export class ErrorBoundary extends Component<Props, State> {
                 Recargar sesión completa
               </button>
 
-              {/* Tertiary: Reportar error */}
+              {/* Tertiary: Limpiar almacenamiento */}
+              <button
+                onClick={this.handleClearStorage}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  height: 36,
+                  padding: '0 20px',
+                  borderRadius: 8,
+                  fontSize: 13,
+                  fontWeight: 500,
+                  border: '1px solid var(--danger)',
+                  background: 'transparent',
+                  color: 'var(--danger)',
+                  cursor: 'pointer',
+                  width: '100%',
+                }}
+              >
+                <Trash2 size={14} />
+                Limpiar almacenamiento y recargar
+              </button>
+
+              {/* Quaternary: Reportar error */}
               <button
                 onClick={this.handleReportError}
                 style={{
