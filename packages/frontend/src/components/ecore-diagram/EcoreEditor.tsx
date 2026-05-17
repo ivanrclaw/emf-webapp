@@ -693,7 +693,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
         <Panel position="top-right">
           <div style={{ display: 'flex', gap: 4 }}>
             <button
-              onClick={() => { model.autoLayout('LR'); requestAnimationFrame(() => reactFlowInstance.fitView({ padding: 0.15, duration: 300 })); }}
+              onClick={() => { model.autoLayout('LR'); setTimeout(() => reactFlowInstance.fitView({ padding: 0.15, duration: 300 }), 50); }}
               title="Auto Layout (Left → Right)"
               style={{
                 padding: '6px 10px', fontSize: 12, fontWeight: 600,
@@ -705,7 +705,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
               ↔ Layout
             </button>
             <button
-              onClick={() => { model.autoLayout('TB'); requestAnimationFrame(() => reactFlowInstance.fitView({ padding: 0.15, duration: 300 })); }}
+              onClick={() => { model.autoLayout('TB'); setTimeout(() => reactFlowInstance.fitView({ padding: 0.15, duration: 300 }), 50); }}
               title="Auto Layout (Top → Bottom)"
               style={{
                 padding: '6px 10px', fontSize: 12, fontWeight: 600,
