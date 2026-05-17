@@ -2,7 +2,8 @@
  * @emf-webapp/frontend — VsmEdge: Custom ReactFlow Edge for VSM Runtime
  *
  * Renders edges according to the resolved EdgeStyleSpec from the viewpoint specification.
- * Supports edge spreading for parallel edges and crossing bridges.
+ * Supports edge spreading: all edges from the same source side are spread independently
+ * of their targets, preventing visual overlap.
  */
 import React, { memo, useMemo } from 'react';
 import {
@@ -15,7 +16,7 @@ import {
   type Edge,
   type Node,
 } from '@xyflow/react';
-import type { EdgeMapping, EdgeStyleSpec, DecorationArrow } from '../spec-diagram/types';
+import type { EdgeMapping, EdgeStyleSpec } from '../spec-diagram/types';
 import { resolveEdgeStyle } from '../../lib/vsm-runtime';
 import { evaluateLabel } from '../../lib/expression-engine';
 import { useEdgeRouting } from '../../hooks/useEdgeRouting';
@@ -46,14 +47,14 @@ function getStrokeDasharray(lineStyle: string): string {
 
 // ─── SVG Marker Definitions ──────────────────────────────────────────────────
 
-function getMarkerId(edgeId: string, position: 'source' | 'target', decoration: DecorationArrow): string {
+function getMarkerId(edgeId: string, position: 'source' | 'target', decoration: string): string {
   return `vsm-marker-${edgeId}-${position}-${decoration}`;
 }
 
 function renderMarkerDef(
   edgeId: string,
   position: 'source' | 'target',
-  decoration: DecorationArrow,
+  decoration: string,
   color: string,
 ): React.ReactNode {
   if (decoration === 'none') return null;
@@ -107,20 +108,18 @@ function renderMarkerDef(
   }
 }
 
-// ─── Path Computation with Spreading ──────────────────────────────────────────
+// ─── Side from handle ─────────────────────────────────────────────────────────
 
-function computePath(
-  routingStyle: string,
-  sourceX: number, sourceY: number, sourcePosition: any,
-  targetX: number, targetY: number, targetPosition: any,
-): [string, number, number] {
-  let result: [string, number, number, number, number];
-  if (routingStyle === 'straight') {
-    result = getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
-  } else {
-    result = getSmoothStepPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
+function sideFromHandle(handle: string | null | undefined): 'left' | 'right' | 'top' | 'bottom' {
+  if (handle === 'top' || handle === 'bottom' || handle === 'left' || handle === 'right') {
+    return handle;
   }
-  return [result[0], result[1], result[2]];
+  // Position enum values used by ReactFlow
+  if (handle === '0') return 'left';
+  if (handle === '1') return 'top';
+  if (handle === '2') return 'right';
+  if (handle === '3') return 'bottom';
+  return 'right'; // default
 }
 
 // ─── VsmEdge Component ────────────────────────────────────────────────────────
@@ -136,16 +135,16 @@ function VsmEdgeComponent(props: EdgeProps<Edge<VsmEdgeData>>) {
     target: tgtId,
   } = props;
 
+  // sourceHandle/targetHandle from edge data or props
+  const sourceHandle = (props as any).sourceHandle ?? (props as any).sourceHandleId;
+  const targetHandle = (props as any).targetHandle ?? (props as any).targetHandleId;
+
   const edgeMapping = data?.edgeMapping;
   const sourceData = data?.sourceData;
   const targetData = data?.targetData;
 
-  // Edge routing: get group info for spreading
-  const { groupInfo } = useEdgeRouting(
-    id,
-    srcId,
-    tgtId,
-  );
+  // Edge routing: group by source side AND target side independently
+  const { groupInfo } = useEdgeRouting(id, srcId, tgtId, sourceHandle, targetHandle);
 
   // Resolve effective style
   const resolvedStyle: EdgeStyleSpec = useMemo(() => {
@@ -159,15 +158,16 @@ function VsmEdgeComponent(props: EdgeProps<Edge<VsmEdgeData>>) {
     return resolveEdgeStyle(edgeMapping, { source: sourceData, target: targetData });
   }, [edgeMapping, sourceData, targetData]);
 
-  // Apply spreading: adjust handle positions
+  // Apply spreading on BOTH source and target sides independently
   const nodes = useNodes();
   const sNode = nodes.find((n) => n.id === srcId);
   const tNode = nodes.find((n) => n.id === tgtId);
 
   const { effSourceX, effSourceY, effTargetX, effTargetY } = useMemo(() => {
-    if (!sNode || !tNode || groupInfo.groupSize <= 1) {
+    if (!sNode || !tNode) {
       return { effSourceX: sourceX, effSourceY: sourceY, effTargetX: targetX, effTargetY: targetY };
     }
+
     const sMeas = (sNode as any)?.measured;
     const tMeas = (tNode as any)?.measured;
     const sW = sMeas?.width ?? 160;
@@ -175,29 +175,31 @@ function VsmEdgeComponent(props: EdgeProps<Edge<VsmEdgeData>>) {
     const tW = tMeas?.width ?? 160;
     const tH = tMeas?.height ?? 64;
 
-    const sideMap: Record<string, 'left' | 'right' | 'top' | 'bottom'> = {
-      '0': 'left', '2': 'right', '1': 'top', '3': 'bottom',
-    };
-    const srcSide = sideMap[String(sourcePosition)] ?? 'right';
-    const tgtSide = sideMap[String(targetPosition)] ?? 'left';
+    const srcSide = sideFromHandle(sourceHandle);
+    const tgtSide = sideFromHandle(targetHandle);
 
-    const sp = spreadHandlePosition(srcSide, groupInfo.groupSize, groupInfo.groupIndex,
-      sNode.position.x, sNode.position.y, sW, sH);
-    const tp = spreadHandlePosition(tgtSide, groupInfo.groupSize, groupInfo.groupIndex,
-      tNode.position.x, tNode.position.y, tW, tH);
+    // Source side spreading: all edges from this side are spread together
+    const sp = spreadHandlePosition(
+      srcSide, groupInfo.sourceGroupSize, groupInfo.sourceGroupIndex,
+      sNode.position.x, sNode.position.y, sW, sH,
+    );
+
+    // Target side spreading: all edges to this side are spread together
+    const tp = spreadHandlePosition(
+      tgtSide, groupInfo.targetGroupSize, groupInfo.targetGroupIndex,
+      tNode.position.x, tNode.position.y, tW, tH,
+    );
 
     return { effSourceX: sp.x, effSourceY: sp.y, effTargetX: tp.x, effTargetY: tp.y };
-  }, [sNode, tNode, sourcePosition, targetPosition, sourceX, sourceY, targetX, targetY, groupInfo]);
+  }, [sNode, tNode, sourceHandle, targetHandle, sourceX, sourceY, targetX, targetY, groupInfo]);
 
   // Compute path based on routing style
-  const [edgePath, labelX, labelY] = useMemo(
-    () => computePath(
-      resolvedStyle.routingStyle,
-      effSourceX, effSourceY, sourcePosition,
-      effTargetX, effTargetY, targetPosition,
-    ),
-    [resolvedStyle.routingStyle, effSourceX, effSourceY, sourcePosition, effTargetX, effTargetY, targetPosition],
-  );
+  const [edgePath, labelX, labelY] = useMemo(() => {
+    const result = resolvedStyle.routingStyle === 'straight'
+      ? getBezierPath({ sourceX: effSourceX, sourceY: effSourceY, sourcePosition, targetX: effTargetX, targetY: effTargetY, targetPosition })
+      : getSmoothStepPath({ sourceX: effSourceX, sourceY: effSourceY, sourcePosition, targetX: effTargetX, targetY: effTargetY, targetPosition });
+    return [result[0], result[1], result[2]];
+  }, [resolvedStyle.routingStyle, effSourceX, effSourceY, sourcePosition, effTargetX, effTargetY, targetPosition]);
 
   // Evaluate center label expression
   const centerLabel = useMemo(() => {

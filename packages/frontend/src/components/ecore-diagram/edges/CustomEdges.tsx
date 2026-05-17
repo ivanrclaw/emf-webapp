@@ -25,6 +25,7 @@ import type { EcoreEdgeData, AppNode } from '../types';
 import { useEdgeRouting } from '../../../hooks/useEdgeRouting';
 import { spreadHandlePosition } from '../../../lib/edge-routing';
 import { CrossingBridges } from '../../shared/CrossingBridges';
+import type { EdgeGroupInfo } from '../../../lib/edge-routing';
 
 // ─────────────────────────────────────────────────────────────────
 // Helpers
@@ -141,8 +142,7 @@ const HOLLOW_TRIANGLE = (id: string, color: string) => (
 
 function useEdgeCoords(
   data: EcoreEdgeData | undefined,
-  groupSize: number,
-  groupIndex: number,
+  groupInfo: EdgeGroupInfo,
 ) {
   const nodes = useNodes();
   const sourceNode = nodes.find((n) => n.id === data?.sourceId);
@@ -189,13 +189,13 @@ function useEdgeCoords(
     }
   }
 
-  // Apply spreading
+  // Apply spreading: source side and target side independently
   const spreadSource = spreadHandlePosition(
-    bestSourceSide, groupSize, groupIndex,
+    bestSourceSide, groupInfo.sourceGroupSize, groupInfo.sourceGroupIndex,
     sourceNode.position.x, sourceNode.position.y, sW, sH,
   );
   const spreadTarget = spreadHandlePosition(
-    bestTargetSide, groupSize, groupIndex,
+    bestTargetSide, groupInfo.targetGroupSize, groupInfo.targetGroupIndex,
     targetNode.position.x, targetNode.position.y, tW, tH,
   );
 
@@ -206,7 +206,6 @@ function useEdgeCoords(
     targetX: spreadTarget.x,
     targetY: spreadTarget.y,
     targetPosition: calcHandlePos(targetNode, bestTargetSide).position,
-    // Store these for label positioning
     bestSourceSide,
     bestTargetSide,
   };
@@ -219,7 +218,7 @@ function useEdgeCoords(
 function ReferenceEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
   const { id, data, selected, sourceX, sourceY, targetX, targetY, source: src, target: tgt } = props;
   const { groupInfo } = useEdgeRouting(id, src, tgt);
-  const coords = useEdgeCoords(data, groupInfo.groupSize, groupInfo.groupIndex);
+  const coords = useEdgeCoords(data, groupInfo);
 
   const effSourceX = coords?.sourceX ?? sourceX;
   const effSourceY = coords?.sourceY ?? sourceY;
@@ -259,7 +258,7 @@ function ReferenceEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
 function ContainmentEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
   const { id, data, selected, sourceX, sourceY, targetX, targetY, source: src, target: tgt } = props;
   const { groupInfo } = useEdgeRouting(id, src, tgt);
-  const coords = useEdgeCoords(data, groupInfo.groupSize, groupInfo.groupIndex);
+  const coords = useEdgeCoords(data, groupInfo);
 
   const effSourceX = coords?.sourceX ?? sourceX;
   const effSourceY = coords?.sourceY ?? sourceY;
@@ -303,7 +302,7 @@ function ContainmentEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
 function InheritanceEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
   const { id, data, selected, sourceX, sourceY, targetX, targetY, source: src, target: tgt } = props;
   const { groupInfo } = useEdgeRouting(id, src, tgt);
-  const coords = useEdgeCoords(data, groupInfo.groupSize, groupInfo.groupIndex);
+  const coords = useEdgeCoords(data, groupInfo);
 
   const effSourceX = coords?.sourceX ?? sourceX;
   const effSourceY = coords?.sourceY ?? sourceY;

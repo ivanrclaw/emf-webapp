@@ -1,11 +1,12 @@
 /**
  * @emf-webapp/frontend — Edge Routing Utilities (Pure Logic)
  *
- * Edge spreading: when multiple edges connect the same pair of sides,
- * offsets handle positions along the side to prevent overlap.
+ * Edge spreading: offsets handle positions along a node side when multiple
+ * edges share that side, preventing visual overlap.
  *
- * Crossing detection: detects edge path intersections and returns
- * coordinates for visual bridge rendering.
+ * KEY INSIGHT: grouping is done per SIDE, not per edge pair (source→target).
+ * All edges exiting from the same source side are spread together, regardless
+ * of their target. All edges entering the same target side are spread together.
  */
 import { Position, getSmoothStepPath } from '@xyflow/react';
 
@@ -14,8 +15,14 @@ export const SIDE_MARGIN = 12;
 export const BRIDGE_RADIUS = 4;
 
 export interface EdgeGroupInfo {
-  groupSize: number;
-  groupIndex: number;
+  /** How many edges share this source side? */
+  sourceGroupSize: number;
+  /** This edge's index among edges sharing its source side */
+  sourceGroupIndex: number;
+  /** How many edges share this target side? */
+  targetGroupSize: number;
+  /** This edge's index among edges sharing its target side */
+  targetGroupIndex: number;
 }
 
 export interface CrossingPoint {
@@ -25,31 +32,76 @@ export interface CrossingPoint {
   angle: number;
 }
 
-// ─── Edge Grouping ──────────────────────────────────────────────────────────
+// ─── Edge Grouping (by source side and target side independently) ────────────
 
+/**
+ * Groups edges into two independent dimensions:
+ * 1. Source side: edges leaving from the same node+side get spread
+ * 2. Target side: edges arriving at the same node+side get spread
+ *
+ * @param edges Array of edge objects with id, source, target, sourcePosition, targetPosition
+ *              (sourcePosition/targetPosition are strings like 'left', 'right', 'top', 'bottom'
+ *               or Position enum values)
+ * @returns Map<edgeId, EdgeGroupInfo>
+ */
 export function collectEdgeGroups(
   edges: Array<{
     id: string;
     source: string;
     target: string;
+    sourcePosition?: string | null;
+    targetPosition?: string | null;
     sourceHandle?: string | null;
     targetHandle?: string | null;
   }>,
 ): Map<string, EdgeGroupInfo> {
-  const groups = new Map<string, string[]>();
-  const keyFor = (e: typeof edges[0]) =>
-    `${e.source}|${e.target}|${e.sourceHandle ?? 'default'}|${e.targetHandle ?? 'default'}`;
+  // Use (sourceId, effectiveSide) as key for source grouping
+  const sourceGroups = new Map<string, string[]>();
+  const targetGroups = new Map<string, string[]>();
+
+  function effectiveSide(pos: string | null | undefined, handle: string | null | undefined): string {
+    if (handle && ['top', 'bottom', 'left', 'right'].includes(handle)) return handle;
+    if (pos && ['0', '1', '2', '3'].includes(pos)) {
+      const map: Record<string, string> = { '0': 'left', '1': 'top', '2': 'right', '3': 'bottom' };
+      return map[pos] ?? 'right';
+    }
+    // Default fallback based on handle id conventions
+    if (handle === 'top' || handle === 'bottom' || handle === 'left' || handle === 'right') return handle!;
+    return 'right'; // default
+  }
 
   edges.forEach((e) => {
-    const k = keyFor(e);
-    if (!groups.has(k)) groups.set(k, []);
-    groups.get(k)!.push(e.id);
+    const sKey = `${e.source}|${effectiveSide(e.sourcePosition, e.sourceHandle)}`;
+    if (!sourceGroups.has(sKey)) sourceGroups.set(sKey, []);
+    sourceGroups.get(sKey)!.push(e.id);
+
+    const tKey = `${e.target}|${effectiveSide(e.targetPosition, e.targetHandle)}`;
+    if (!targetGroups.has(tKey)) targetGroups.set(tKey, []);
+    targetGroups.get(tKey)!.push(e.id);
   });
 
+  const srcIdx = new Map<string, number>();
+  sourceGroups.forEach((ids) => ids.forEach((id, i) => srcIdx.set(id, i)));
+  const srcSize = new Map<string, number>();
+  sourceGroups.forEach((ids, key) => ids.forEach((id) => srcSize.set(id, ids.length)));
+
+  const tgtIdx = new Map<string, number>();
+  targetGroups.forEach((ids) => ids.forEach((id, i) => tgtIdx.set(id, i)));
+  const tgtSize = new Map<string, number>();
+  targetGroups.forEach((ids, key) => ids.forEach((id) => tgtSize.set(id, ids.length)));
+
   const result = new Map<string, EdgeGroupInfo>();
-  groups.forEach((ids) => {
-    ids.forEach((id, idx) => result.set(id, { groupSize: ids.length, groupIndex: idx }));
+  // Collect all unique edge IDs
+  const allIds = new Set(edges.map((e) => e.id));
+  allIds.forEach((id) => {
+    result.set(id, {
+      sourceGroupSize: srcSize.get(id) ?? 1,
+      sourceGroupIndex: srcIdx.get(id) ?? 0,
+      targetGroupSize: tgtSize.get(id) ?? 1,
+      targetGroupIndex: tgtIdx.get(id) ?? 0,
+    });
   });
+
   return result;
 }
 
@@ -73,7 +125,8 @@ export function spreadHandlePosition(
     }
   }
 
-  const usableSpan = Math.min(EDGE_SPACING * (groupSize - 1), Math.min(nodeHeight, nodeWidth) - 2 * SIDE_MARGIN);
+  const sideLen = (side === 'left' || side === 'right') ? nodeHeight : nodeWidth;
+  const usableSpan = Math.min(EDGE_SPACING * (groupSize - 1), sideLen - 2 * SIDE_MARGIN);
   const spacing = groupSize > 1 ? Math.max(usableSpan / (groupSize - 1), 4) : 0;
   const startOffset = -(spacing * (groupSize - 1)) / 2;
 
@@ -114,8 +167,10 @@ export function getSpreadSmoothStepPath(
     targetX: number;
     targetY: number;
     targetPosition: Position;
-    groupSize: number;
-    groupIndex: number;
+    sourceGroupSize: number;
+    sourceGroupIndex: number;
+    targetGroupSize: number;
+    targetGroupIndex: number;
     sourceNode: { x: number; y: number; width: number; height: number };
     targetNode: { x: number; y: number; width: number; height: number };
   },
@@ -124,23 +179,18 @@ export function getSpreadSmoothStepPath(
   const targetSide = positionToSide(params.targetPosition);
 
   const sp = spreadHandlePosition(
-    sourceSide, params.groupSize, params.groupIndex,
+    sourceSide, params.sourceGroupSize, params.sourceGroupIndex,
     params.sourceNode.x, params.sourceNode.y, params.sourceNode.width, params.sourceNode.height,
   );
   const tp = spreadHandlePosition(
-    targetSide, params.groupSize, params.groupIndex,
+    targetSide, params.targetGroupSize, params.targetGroupIndex,
     params.targetNode.x, params.targetNode.y, params.targetNode.width, params.targetNode.height,
   );
 
   const result = getSmoothStepPath({
-    sourceX: sp.x,
-    sourceY: sp.y,
-    sourcePosition: params.sourcePosition,
-    targetX: tp.x,
-    targetY: tp.y,
-    targetPosition: params.targetPosition,
+    sourceX: sp.x, sourceY: sp.y, sourcePosition: params.sourcePosition,
+    targetX: tp.x, targetY: tp.y, targetPosition: params.targetPosition,
   });
-  // getSmoothStepPath returns [path, labelX, labelY, offsetX, offsetY]
   return [result[0], result[1], result[2]];
 }
 
@@ -189,7 +239,6 @@ export function detectCrossings(
   edgePaths: Array<{ edgeId: string; pathD: string }>,
 ): CrossingPoint[] {
   const crossings: CrossingPoint[] = [];
-
   for (let i = 0; i < edgePaths.length; i++) {
     const segs1 = parseSegments(edgePaths[i].pathD);
     if (segs1.length < 2) continue;
