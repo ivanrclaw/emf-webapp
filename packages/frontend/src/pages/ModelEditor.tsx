@@ -282,7 +282,17 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
 
     setNodes(newNodes as any);
     setEdges(newEdges as any);
-  }, [objects, mappings, spec, selectedNodeId, setNodes, setEdges]);
+  }, [objects, mappings, spec, setNodes, setEdges]);
+
+  // ─── Update selection independently (without rebuilding all nodes) ─
+  useEffect(() => {
+    setNodes((nds) =>
+      nds.map((n) => ({
+        ...n,
+        data: { ...n.data, selected: n.id === selectedNodeId },
+      })),
+    );
+  }, [selectedNodeId, setNodes]);
 
   // ─── Save ────────────────────────────────────────────────────────
   const handleSave = useCallback(async () => {
