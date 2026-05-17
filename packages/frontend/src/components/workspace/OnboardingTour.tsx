@@ -90,15 +90,6 @@ export function OnboardingTour() {
     }
   }, [step, finish]);
 
-  // Auto-dismiss if visible and card doesn't appear after 3 seconds
-  useEffect(() => {
-    if (!visible) return;
-    const timer = setTimeout(() => {
-      finish();
-    }, 3000);
-    return () => clearTimeout(timer);
-  }, [visible, finish]);
-
   useEffect(() => {
     if (!visible) return;
     const currentStep = STEPS[step];
