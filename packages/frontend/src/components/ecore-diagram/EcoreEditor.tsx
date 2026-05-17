@@ -22,6 +22,7 @@ import {
   MiniMap,
   BackgroundVariant,
   SelectionMode,
+  ConnectionMode,
   Panel,
   useReactFlow,
   type Node,
@@ -61,6 +62,11 @@ function isEnum(c: any): c is SerializableEEnum {
 }
 function isDataType(c: any): c is SerializableEDataType {
   return c && !('eAttributes' in c) && !('eLiterals' in c);
+}
+
+let _counter = 0;
+function genId(prefix: string): string {
+  return `${prefix}_${Date.now()}_${++_counter}`;
 }
 
 // ── Panel components ───────────────────────────────────────────
@@ -133,6 +139,25 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
         if (cancelled) return;
         setProjectName(proj.name);
         const content = mm.content as any;
+
+        // Ensure legacy classifiers without IDs get auto-generated IDs
+        if (content && typeof content === 'object') {
+          if (Array.isArray(content.eClassifiers)) {
+            content.eClassifiers.forEach((c: any) => {
+              if (!c.id) c.id = genId('ec');
+              if (c.eAttributes) {
+                c.eAttributes.forEach((a: any) => { if (!a.id) a.id = genId('attr'); });
+              }
+              if (c.eReferences) {
+                c.eReferences.forEach((r: any) => { if (!r.id) r.id = genId('ref'); });
+              }
+              if (c.eLiterals) {
+                c.eLiterals.forEach((l: any) => { if (!l.id) l.id = genId('lit'); });
+              }
+            });
+          }
+        }
+
         if (content && typeof content === 'object' && content.name) {
           const pkg: SerializableEPackage = {
             name: content.name || 'model',
@@ -420,7 +445,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
     (_: any, node: Node) => {
       const data = node.data as EcoreNodeData;
       const typeMap: Record<string, string> = { eClassNode: 'class', eEnumNode: 'enum', eDataTypeNode: 'dataType' };
-      model.setSelected(node.id, typeMap[node.type] ?? 'class');
+      model.setSelected(node.id, (node.type ? typeMap[node.type] : undefined) ?? 'class');
     },
     [model],
   );
@@ -567,7 +592,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
         nodeTypes={nodeTypes as any}
         edgeTypes={edgeTypes as any}
         fitView
-        connectionMode="loose"
+        connectionMode={ConnectionMode.Loose}
         selectionMode={SelectionMode.Partial}
         deleteKeyCode={['Delete', 'Backspace']}
         multiSelectionKeyCode="Shift"

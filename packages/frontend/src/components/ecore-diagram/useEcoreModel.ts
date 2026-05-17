@@ -163,31 +163,72 @@ function pkgToNodes(
 }
 
 /**
- * Determinación de handles para edges con smart routing.
- * Escoge source/target handle según la posición relativa de los nodos:
- *   - Source a la izquierda del target → source=Right, target=Left (flujo natural →)
- *   - Source a la derecha del target → source=Left, target=Right (flujo inverso ←)
- * Esto evita que las aristas crucen los nodos sin importar desde qué handle
- * arrastró el usuario (connectionMode='loose' permite cualquier handle).
+ * Determinación de handles para edges con smart routing (4 lados).
+ * Escoge el par source/target handle que minimiza la distancia entre
+ * los puntos de conexión, evitando que las aristas crucen los nodos.
+ *
+ * Algoritmo: calcula la distancia entre cada combinación de lados
+ * (source: left/right/top/bottom × target: left/right/top/bottom)
+ * y elige la que produce el camino más corto y natural.
  */
+type HandleSide = 'left' | 'right' | 'top' | 'bottom';
+
+const DEFAULT_W = 180;
+const DEFAULT_H = 140;
+
+function getHandlePoint(
+  pos: { x: number; y: number },
+  side: HandleSide,
+  w = DEFAULT_W,
+  h = DEFAULT_H,
+): { x: number; y: number } {
+  switch (side) {
+    case 'left': return { x: pos.x, y: pos.y + h / 2 };
+    case 'right': return { x: pos.x + w, y: pos.y + h / 2 };
+    case 'top': return { x: pos.x + w / 2, y: pos.y };
+    case 'bottom': return { x: pos.x + w / 2, y: pos.y + h };
+  }
+}
+
 function bestHandleForEdge(
   sourceId: string,
   targetId: string,
   posMap?: Map<string, { x: number; y: number }>,
-): { sourceHandlePos: 'left' | 'right'; targetHandlePos: 'left' | 'right' } {
+): { sourceHandlePos: HandleSide; targetHandlePos: HandleSide } {
   const sourcePos = posMap?.get(sourceId);
   const targetPos = posMap?.get(targetId);
 
   if (!sourcePos || !targetPos) {
-    // Fallback: flujo natural derecha
-    return { sourceHandlePos: 'right', targetHandlePos: 'left' } as const;
+    return { sourceHandlePos: 'right', targetHandlePos: 'left' };
   }
 
-  if (sourcePos.x < targetPos.x) {
-    return { sourceHandlePos: 'right', targetHandlePos: 'left' } as const;
-  } else {
-    return { sourceHandlePos: 'left', targetHandlePos: 'right' } as const;
+  const sides: HandleSide[] = ['left', 'right', 'top', 'bottom'];
+  let bestDist = Infinity;
+  let bestSource: HandleSide = 'right';
+  let bestTarget: HandleSide = 'left';
+
+  for (const sSide of sides) {
+    const sp = getHandlePoint(sourcePos, sSide);
+    for (const tSide of sides) {
+      const tp = getHandlePoint(targetPos, tSide);
+      const dx = sp.x - tp.x;
+      const dy = sp.y - tp.y;
+      const dist = dx * dx + dy * dy; // squared distance (no need for sqrt)
+
+      // Penalize same-side connections (both left or both right etc.)
+      // because they produce U-shaped paths that look worse
+      const sameSidePenalty = sSide === tSide ? 1.3 : 1.0;
+      const adjusted = dist * sameSidePenalty;
+
+      if (adjusted < bestDist) {
+        bestDist = adjusted;
+        bestSource = sSide;
+        bestTarget = tSide;
+      }
+    }
   }
+
+  return { sourceHandlePos: bestSource, targetHandlePos: bestTarget };
 }
 
 function pkgToEdges(pkg: SerializableEPackage, _posMap?: Map<string, { x: number; y: number }>): AppEdge[] {

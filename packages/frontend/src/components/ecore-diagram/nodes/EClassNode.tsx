@@ -91,7 +91,7 @@ export default function EClassNode(props: NodeProps) {
         <span className={`${styles.itemBadge} ${styles.badgeRequired}`}>*</span>
       )}
       {a.derived && (
-        <span className={`${styles.itemBadge} ${styles.badgeDerived}`}>/</span>
+        <span className={`${styles.itemBadge} ${styles.badgeDerived}`} title="Derived">&nbsp;derived&nbsp;</span>
       )}
     </div>
   );
@@ -114,9 +114,11 @@ export default function EClassNode(props: NodeProps) {
 
   return (
     <div className={styles.node} onClick={() => onSelect(classifier.id, 'class')}>
-      {/* ── Handles ──────────────────────────────────────── */}
+      {/* ── Handles (4 sides for optimal edge routing) ──── */}
       <Handle type="source" position={Position.Left} id="left" />
       <Handle type="source" position={Position.Right} id="right" />
+      <Handle type="source" position={Position.Top} id="top" />
+      <Handle type="source" position={Position.Bottom} id="bottom" />
 
       {/* ── OCL Violation Badge ─────────────────────────── */}
       {data.violations && data.violations.length > 0 && (

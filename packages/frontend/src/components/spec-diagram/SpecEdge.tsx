@@ -10,7 +10,7 @@ import { BaseEdge, getBezierPath, EdgeLabelRenderer, type EdgeProps } from '@xyf
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-export interface SpecEdgeData {
+export interface SpecEdgeData extends Record<string, unknown> {
   /** Estilo de línea */
   lineStyle: 'solid' | 'dash' | 'dot' | 'dash-dot';
   /** Decoración del lado source */

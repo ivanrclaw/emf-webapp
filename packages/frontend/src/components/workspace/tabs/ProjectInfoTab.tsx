@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { getProject, getMetamodels, createMetamodel } from '../../../api/client';
+import { getProject, getMetamodels, createMetamodel, type Metamodel } from '../../../api/client';
 import { useToast } from '../../ToastProvider';
 import { Box, Calendar, Hash, Link2, Pencil, Plus } from '../../icons';
 
@@ -14,13 +14,6 @@ interface Project {
   description?: string;
   createdAt: string;
   updatedAt: string;
-}
-
-interface Metamodel {
-  id: string;
-  name: string;
-  nsUri: string;
-  nsPrefix: string;
 }
 
 export function ProjectInfoTab({ projectId, onOpenTab }: ProjectInfoTabProps) {
@@ -68,8 +61,8 @@ export function ProjectInfoTab({ projectId, onOpenTab }: ProjectInfoTabProps) {
     try {
       await createMetamodel(projectId, {
         name: trimmed,
-        ns_uri: newNsUri.trim() || 'http://example.org/default',
-        ns_prefix: newNsPrefix.trim() || 'default',
+        nsUri: newNsUri.trim() || 'http://example.org/default',
+        nsPrefix: newNsPrefix.trim() || 'default',
       });
       setNewName('');
       setNewNsUri('http://example.org/default');

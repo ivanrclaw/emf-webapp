@@ -54,11 +54,13 @@ export class MetamodelService {
     },
   ): Promise<Metamodel> {
     const safeName = data.name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    const finalNsUri = data.nsURI || (data as any).ns_uri || `http://${safeName}.emf-webapp/1.0`;
+    const finalNsPrefix = data.nsPrefix || (data as any).ns_prefix || safeName;
     const mm = this.repo.create({
       project_id: projectId,
       name: data.name,
-      ns_uri: data.nsURI || `http://${safeName}.emf-webapp/1.0`,
-      ns_prefix: data.nsPrefix || safeName,
+      ns_uri: finalNsUri,
+      ns_prefix: finalNsPrefix,
       content: data.content || {},
     });
     return this.repo.save(mm);

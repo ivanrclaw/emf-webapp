@@ -10,8 +10,10 @@ import {
   ReactFlow,
   ReactFlowProvider,
   Background,
+  BackgroundVariant,
   Controls,
   MiniMap,
+  ConnectionMode,
   useNodesState,
   useEdgesState,
   addEdge,
@@ -192,8 +194,8 @@ function SpecEditorInner({ projectId: propProjectId, metamodelId: propMetamodelI
   const posMapRef = useRef<Map<string, { x: number; y: number }>>(new Map());
 
   // Node/edge state for React Flow
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node<SpecNodeData>>([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge<SpecEdgeData>>([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
   /* ── Load ─────────────────────────────────────────────────────── */
 
@@ -286,7 +288,7 @@ function SpecEditorInner({ projectId: propProjectId, metamodelId: propMetamodelI
 
   /* ── Drag -> update posMap ────────────────────────────────────── */
 
-  const onNodesChangeWithPos: OnNodesChange = useCallback((changes) => {
+  const onNodesChangeWithPos = useCallback((changes: any[]) => {
     for (const ch of changes) {
       if (ch.type === 'position' && ch.position) {
         posMapRef.current.set(ch.id, ch.position);
@@ -773,11 +775,11 @@ function SpecEditorInner({ projectId: propProjectId, metamodelId: propMetamodelI
             edgeTypes={edgeTypes}
             fitView
             fitViewOptions={{ padding: 0.3 }}
-            connectionMode="loose"
+            connectionMode={ConnectionMode.Loose}
             deleteKeyCode={['Backspace', 'Delete']}
             style={{ background: 'var(--bg)' }}
           >
-            <Background variant="dots" gap={20} size={1} color="var(--border)" />
+            <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="var(--border)" />
             <Controls position="bottom-left" style={{ background: 'var(--surface)' }} />
             <MiniMap
               position="bottom-right"

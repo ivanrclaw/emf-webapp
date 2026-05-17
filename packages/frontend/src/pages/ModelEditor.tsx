@@ -76,13 +76,15 @@ interface EPackage {
 }
 
 /* React Flow node data */
-interface M1ObjectNodeData {
+interface M1ObjectNodeData extends Record<string, unknown> {
   eClassName: string;
   attributes: Record<string, unknown>;
   references: Record<string, string[]>;
   label: string;
   eClass: EClassData;
 }
+
+type M1ObjectNode = Node<M1ObjectNodeData>;
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -186,14 +188,14 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'unsaved' | ''>('');
-  const [selectedNode, setSelectedNode] = useState<Node<M1ObjectNodeData> | null>(null);
+  const [selectedNode, setSelectedNode] = useState<M1ObjectNode | null>(null);
   const [exportOutput, setExportOutput] = useState('');
 
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const lastSavedRef = useRef('');
 
-  const [nodes, setNodes, onNodesChange] = useNodesState<M1ObjectNodeData>([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<M1ObjectNode>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
   /* Load data */
   useEffect(() => {
@@ -324,7 +326,7 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
           minWidth: 160,
         };
 
-    const newNode: Node<M1ObjectNodeData> = {
+    const newNode: M1ObjectNode = {
       id,
       type: 'default',
       position: { x: 100 + Math.random() * 200, y: 100 + Math.random() * 200 },
@@ -354,7 +356,7 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
 
   /* Selection */
   const onNodeClick = useCallback(
-    (_: React.MouseEvent, node: Node<M1ObjectNodeData>) => {
+    (_: React.MouseEvent, node: M1ObjectNode) => {
       setSelectedNode(node);
     },
     [],
@@ -403,7 +405,7 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
         .filter((f) => {
           // It's a ref if it has containment/eOpposite
           const ref = f as EReference;
-          return ref.containage !== undefined || ref.eOpposite !== undefined;
+          return ref.containment !== undefined || ref.eOpposite !== undefined;
         })
     : [];
 

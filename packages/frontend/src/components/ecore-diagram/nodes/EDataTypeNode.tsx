@@ -62,9 +62,11 @@ export default function EDataTypeNode(props: NodeProps) {
 
   return (
     <div className={styles.node} onClick={() => onSelect(classifier.id, 'dataType')}>
-      {/* ── Handles ──────────────────────────────────────── */}
-      <Handle type="target" position={Position.Left} />
-      <Handle type="source" position={Position.Right} />
+      {/* ── Handles (4 sides for optimal edge routing) ──── */}
+      <Handle type="source" position={Position.Left} id="left" />
+      <Handle type="source" position={Position.Right} id="right" />
+      <Handle type="source" position={Position.Top} id="top" />
+      <Handle type="source" position={Position.Bottom} id="bottom" />
 
       {/* ── Header ───────────────────────────────────────── */}
       <div className={styles.header} onDoubleClick={handleDoubleClick}>

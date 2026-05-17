@@ -6,13 +6,13 @@
  * Soporta tres shapes: rectangle, ellipse, diamond.
  */
 import { useMemo } from 'react';
-import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-export interface SpecNodeData {
+export interface SpecNodeData extends Record<string, unknown> {
   /** Nombre de la clase del dominio */
   label: string;
   /** Tipo de shape visual */
@@ -209,8 +209,8 @@ function DiamondContent({
 /*  SpecNode Component                                                 */
 /* ------------------------------------------------------------------ */
 
-export default function SpecNode(props: NodeProps) {
-  const data = props.data as SpecNodeData;
+export default function SpecNode(props: NodeProps<Node<SpecNodeData>>) {
+  const data = props.data;
   const { shape, color, borderColor, borderSize, label, labelPosition, selected } = data;
 
   const shapeContent = useMemo(() => {

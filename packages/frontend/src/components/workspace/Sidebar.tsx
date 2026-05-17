@@ -83,7 +83,7 @@ export default function Sidebar({
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to load projects';
       setError(msg);
-      addToast(msg, 'error', { retryable: true, onRetry: fetchProjects });
+      addToast(msg, 'error', { onRetry: fetchProjects });
     } finally {
       setLoading(false);
     }

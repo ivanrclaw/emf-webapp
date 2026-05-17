@@ -11,6 +11,7 @@ export interface EditorActions {
   exportEcore: () => void;
   exportZip: () => void;
   exportGenmodel: () => void;
+  autoLayout: (direction?: 'TB' | 'LR') => void;
   importEcore: () => void;
   importEclipseZip: () => void;
   undo: () => void;
@@ -52,6 +53,7 @@ const defaultActions: EditorActions = {
   exportEcore: noop,
   exportZip: noop,
   exportGenmodel: noop,
+  autoLayout: noop,
   importEcore: noop,
   importEclipseZip: noop,
   undo: noop,

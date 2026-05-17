@@ -379,10 +379,12 @@ const ReferenceForm: React.FC<{
   onChange: (updates: Partial<SerializableEReference>) => void;
 }> = ({ ref, pkg, onChange }) => {
   const targetOptions = useMemo(
-    () =>
-      pkg.eClassifiers
+    () => [
+      { value: '', label: '-- Select target class --' },
+      ...pkg.eClassifiers
         .filter((c) => isEClass(c))
         .map((c) => ({ value: c.id, label: c.name })),
+    ],
     [pkg],
   );
 

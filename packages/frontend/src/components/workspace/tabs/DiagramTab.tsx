@@ -14,7 +14,10 @@ export function DiagramTab({ projectId, metamodelId }: DiagramTabProps) {
   const handleDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragOver(true);
+    // Only show overlay when dragging actual files (not toolbox items)
+    if (e.dataTransfer.types.includes('Files')) {
+      setIsDragOver(true);
+    }
   }, []);
 
   const handleDragLeave = useCallback((e: DragEvent<HTMLDivElement>) => {
@@ -30,6 +33,8 @@ export function DiagramTab({ projectId, metamodelId }: DiagramTabProps) {
       setIsDragOver(false);
 
       const files = Array.from(e.dataTransfer.files);
+      // Silently ignore non-file drags (toolbox items, etc.)
+      if (files.length === 0) return;
       const ecoreFile = files.find(
         (f) => f.name.endsWith('.ecore') || f.name.endsWith('.xml'),
       );

@@ -41,20 +41,26 @@ const DEFAULT_NODE_HEIGHT = 140;
 /**
  * Calcula las coordenadas (x, y, position) de un handle dado el lado del nodo.
  * Usa la posición real del nodo + dimensiones estimadas.
+ * Soporta 4 lados: left, right, top, bottom.
  */
 function calcHandlePos(
   node: Node,
-  side: 'left' | 'right',
+  side: 'left' | 'right' | 'top' | 'bottom',
 ): { x: number; y: number; position: Position } {
   const measured = (node as any)?.measured;
   const w = measured?.width ?? DEFAULT_NODE_WIDTH;
   const h = measured?.height ?? DEFAULT_NODE_HEIGHT;
 
-  const x = side === 'left' ? node.position.x : node.position.x + w;
-  const y = node.position.y + h / 2;
-  const position = side === 'left' ? Position.Left : Position.Right;
-
-  return { x, y, position };
+  switch (side) {
+    case 'left':
+      return { x: node.position.x, y: node.position.y + h / 2, position: Position.Left };
+    case 'right':
+      return { x: node.position.x + w, y: node.position.y + h / 2, position: Position.Right };
+    case 'top':
+      return { x: node.position.x + w / 2, y: node.position.y, position: Position.Top };
+    case 'bottom':
+      return { x: node.position.x + w / 2, y: node.position.y + h, position: Position.Bottom };
+  }
 }
 
 /** Formatea la cardinalidad estilo UML: [0..1], [*], [1], [0..*] */
@@ -69,9 +75,9 @@ function formatCardinality(lowerBound: number, upperBound: number): string {
 function edgeColors(type: string) {
   switch (type) {
     case 'containmentEdge':
-      return { stroke: 'var(--primary)', text: 'var(--primary)', bg: 'var(--primary-bg)', diamond: 'var(--primary)' };
+      return { stroke: 'var(--primary)', text: 'var(--primary)', bg: 'var(--primary-bg)', border: 'var(--primary)', diamond: 'var(--primary)' };
     default:
-      return { stroke: 'var(--border)', text: 'var(--text-secondary)', bg: 'var(--surface)', diamond: '' };
+      return { stroke: 'var(--border)', text: 'var(--text-secondary)', bg: 'var(--surface)', border: 'var(--border)', diamond: '' };
   }
 }
 
@@ -171,6 +177,9 @@ const HOLLOW_TRIANGLE = (id: string, color: string) => (
  * usando la posición de los nodos en lugar de confiar en
  * sourceX/sourceY/targetX/targetY de React Flow (que son incorrectos
  * con handles source→source en connectionMode='loose').
+ *
+ * Calcula dinámicamente el lado óptimo basándose en la posición actual
+ * de los nodos, para que las aristas se reposicionen al mover nodos.
  */
 function useEdgeCoords(data: EcoreEdgeData | undefined) {
   const nodes = useNodes();
@@ -181,11 +190,49 @@ function useEdgeCoords(data: EcoreEdgeData | undefined) {
     return null;
   }
 
-  const sourceSide = data?.sourceHandlePos ?? 'right';
-  const targetSide = data?.targetHandlePos ?? 'left';
+  // Dynamically compute best handle sides based on current node positions
+  const sMeasured = (sourceNode as any)?.measured;
+  const tMeasured = (targetNode as any)?.measured;
+  const sW = sMeasured?.width ?? DEFAULT_NODE_WIDTH;
+  const sH = sMeasured?.height ?? DEFAULT_NODE_HEIGHT;
+  const tW = tMeasured?.width ?? DEFAULT_NODE_WIDTH;
+  const tH = tMeasured?.height ?? DEFAULT_NODE_HEIGHT;
 
-  const s = calcHandlePos(sourceNode, sourceSide);
-  const t = calcHandlePos(targetNode, targetSide);
+  type Side = 'left' | 'right' | 'top' | 'bottom';
+  const sides: Side[] = ['left', 'right', 'top', 'bottom'];
+
+  function getPoint(pos: { x: number; y: number }, side: Side, w: number, h: number) {
+    switch (side) {
+      case 'left': return { x: pos.x, y: pos.y + h / 2 };
+      case 'right': return { x: pos.x + w, y: pos.y + h / 2 };
+      case 'top': return { x: pos.x + w / 2, y: pos.y };
+      case 'bottom': return { x: pos.x + w / 2, y: pos.y + h };
+    }
+  }
+
+  let bestDist = Infinity;
+  let bestSourceSide: Side = 'right';
+  let bestTargetSide: Side = 'left';
+
+  for (const sSide of sides) {
+    const sp = getPoint(sourceNode.position, sSide, sW, sH);
+    for (const tSide of sides) {
+      const tp = getPoint(targetNode.position, tSide, tW, tH);
+      const dx = sp.x - tp.x;
+      const dy = sp.y - tp.y;
+      const dist = dx * dx + dy * dy;
+      const sameSidePenalty = sSide === tSide ? 1.3 : 1.0;
+      const adjusted = dist * sameSidePenalty;
+      if (adjusted < bestDist) {
+        bestDist = adjusted;
+        bestSourceSide = sSide;
+        bestTargetSide = tSide;
+      }
+    }
+  }
+
+  const s = calcHandlePos(sourceNode, bestSourceSide);
+  const t = calcHandlePos(targetNode, bestTargetSide);
 
   return {
     sourceX: s.x,

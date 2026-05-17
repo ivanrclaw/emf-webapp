@@ -156,6 +156,34 @@ function snakeToCamel(obj: unknown): unknown {
   return obj;
 }
 
+// ── Domain types ─────────────────────────────────────────────────
+
+export interface Project {
+  id: string;
+  name: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Metamodel {
+  id: string;
+  projectId: string;
+  name: string;
+  nsUri?: string;
+  nsPrefix?: string;
+  content: Record<string, any>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 // ── Projects ──────────────────────────────────────────────────────
 
 export function getProjects(): Promise<PaginatedResponse<Project>> {
