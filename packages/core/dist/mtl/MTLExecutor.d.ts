@@ -1,14 +1,14 @@
 /**
- * @emf-webapp/core — MTL Executor
+ * @emf-webapp/core — MTL Executor (Full Acceleo-compatible)
  *
  * Executes a parsed MTL template AST against an EMF model context (EObject).
- * Resolves expressions via dot-notation navigation on EObject attributes/references,
- * expands for loops, evaluates if/else conditions, handles protected areas,
- * and collects file outputs.
+ * Supports: for with separator/before/after, if/elseif/else, let, file with
+ * dynamic names, protected areas, trace, queries, template guards, overrides.
  */
 import type { MTLNode } from './MTLTypes.js';
 import type { EObject } from '../ecore/interfaces.js';
 export interface MTLExecutionResult {
+    output: string;
     files: Array<{
         name: string;
         content: string;
@@ -17,51 +17,35 @@ export interface MTLExecutionResult {
 }
 export declare class MTLExecutor {
     private fileManager;
+    private traceOutput;
     constructor();
     /**
      * Execute parsed MTL templates against a model object.
-     * Finds the @main template and generates file outputs.
      */
-    execute(templates: MTLNode[], model: EObject): MTLExecutionResult;
-    /**
-     * Find the template marked as @main in the AST.
-     */
+    execute(nodes: MTLNode[], model: EObject): MTLExecutionResult;
+    private resolveQueryCache;
     private findMainTemplate;
-    /**
-     * Execute an array of MTL nodes in the given context.
-     * Returns the concatenated text output.
-     */
     private executeNodes;
-    /**
-     * Execute a single MTL node and return its text output.
-     */
     private executeNode;
+    private evaluateExpression;
     /**
-     * Resolve a dot-notation expression against the context.
-     *
-     * Supports:
-     *   - 'self' → current context object
-     *   - 'paramName.attribute.subAttribute' → navigation chains
-     *   - String literals like 'hello'
-     *   - Number literals like 42
-     *   - Boolean literals: true, false
-     *
-     * For EObject instances, uses the EMF reflexive API (eGet) when possible.
+     * Resolve dot-notation and method call chains.
+     * Supports: self.attr, obj.method(), obj->method(args), obj.attr.sub
+     * Also handles function/query calls from context (e.g., generateInterface(c))
      */
-    private resolveExpression;
-    /**
-     * Resolve a property/attribute name on an object.
-     * For EObject, uses the EMF reflexive API (eGet).
-     * For plain objects, uses direct property access.
-     */
+    private resolveNavigation;
+    private executeArrowOp;
+    private executeArrowOpWithLambda;
+    private resolvePropertyOrMethod;
+    private callMethod;
+    private flattenEAllContents;
+    private evaluateExpressionAsString;
     private resolveOnObject;
-    /**
-     * Check if an object implements the EObject interface duck-typingly.
-     */
     private isEObject;
-    /**
-     * Determine truthiness for if-condition evaluation.
-     */
     private isTruthy;
+    private splitByOperatorOutsideParens;
+    private findOperatorOutsideParens;
+    private parseFunctionArgs;
+    private splitDotChain;
 }
 //# sourceMappingURL=MTLExecutor.d.ts.map

@@ -3,10 +3,15 @@
  *
  * Soporta:
  * - Navegación por atributos y referencias
- * - Operaciones de colección (forAll, exists, select, etc.)
+ * - Operaciones de colección (forAll, exists, select, collect, reject, closure, etc.)
  * - Operadores aritméticos, comparación, lógicos
  * - String operations
- * - Type operations (oclIsTypeOf, oclIsKindOf, etc.)
+ * - Type operations (oclIsTypeOf, oclIsKindOf con herencia, etc.)
+ * - Let / in expressions
+ * - If / then / else / endif expressions
+ * - Collection literales (Set{}, Bag{}, Sequence{}, OrderedSet{})
+ * - iterate
+ * - div / mod
  */
 import { ASTNode } from './OCLParser.js';
 export type EValue = string | number | boolean | null | undefined | OCLEObject | OCLEObject[] | Map<string, EValue>;
@@ -36,10 +41,17 @@ export type OCLResult = {
 };
 export declare class OCLEvaluator {
     private readonly eclassMap;
-    constructor(eclassMap: Map<string, OCLEClassInfo>);
+    /** Optional map of class name -> list of superclass names for isKindOf inheritance checks */
+    private readonly eclassHierarchy?;
+    constructor(eclassMap: Map<string, OCLEClassInfo>, 
+    /** Optional map of class name -> list of superclass names for isKindOf inheritance checks */
+    eclassHierarchy?: Map<string, string[]> | undefined);
     evaluate(ast: ASTNode, context: OCLEObject): OCLResult;
     private evalNode;
     private evalIdentifier;
+    private evalLetIn;
+    private evalIf;
+    private evalCollectionLiteral;
     private evalUnary;
     private evalBinary;
     private evalMethodCall;
@@ -49,6 +61,10 @@ export declare class OCLEvaluator {
     private isEqual;
     private isEObject;
     private isTypeOf;
+    /**
+     * Checks if obj is an instance of className or any of its subclasses.
+     * If eclassHierarchy is provided, walks the supertype chain.
+     */
     private isKindOf;
 }
 //# sourceMappingURL=OCLEvaluator.d.ts.map

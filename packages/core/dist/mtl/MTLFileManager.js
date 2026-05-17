@@ -28,9 +28,9 @@ export class MTLFileManager {
      */
     getFiles() {
         const result = [];
-        for (const [name, content] of this.files) {
+        this.files.forEach((content, name) => {
             result.push({ name, content });
-        }
+        });
         return result;
     }
     /**

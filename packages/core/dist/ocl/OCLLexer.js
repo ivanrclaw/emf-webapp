@@ -12,11 +12,15 @@ export var TokenType;
     TokenType["BOOLEAN"] = "BOOLEAN";
     TokenType["IDENTIFIER"] = "IDENTIFIER";
     TokenType["SELF"] = "SELF";
+    TokenType["NULL"] = "NULL";
+    TokenType["INVALID"] = "INVALID";
     // Operators
     TokenType["PLUS"] = "PLUS";
     TokenType["MINUS"] = "MINUS";
     TokenType["STAR"] = "STAR";
     TokenType["SLASH"] = "SLASH";
+    TokenType["MOD"] = "MOD";
+    TokenType["DIV"] = "DIV";
     TokenType["EQUALS"] = "EQUALS";
     TokenType["NOT_EQUALS"] = "NOT_EQUALS";
     TokenType["GT"] = "GT";
@@ -35,12 +39,51 @@ export var TokenType;
     // Delimiters
     TokenType["LPAREN"] = "LPAREN";
     TokenType["RPAREN"] = "RPAREN";
+    TokenType["LBRACE"] = "LBRACE";
+    TokenType["RBRACE"] = "RBRACE";
     TokenType["DOT"] = "DOT";
     TokenType["COMMA"] = "COMMA";
+    TokenType["SEMI"] = "SEMI";
     TokenType["COLON"] = "COLON";
+    TokenType["COLON_COLON"] = "COLON_COLON";
     // Special
     TokenType["ASSIGN"] = "ASSIGN";
     TokenType["EOF"] = "EOF";
+    // Control flow
+    TokenType["LET"] = "LET";
+    TokenType["IN"] = "IN";
+    TokenType["IF"] = "IF";
+    TokenType["THEN"] = "THEN";
+    TokenType["ELSE"] = "ELSE";
+    TokenType["ENDIF"] = "ENDIF";
+    // OCL document keywords
+    TokenType["PACKAGE"] = "PACKAGE";
+    TokenType["ENDPACKAGE"] = "ENDPACKAGE";
+    TokenType["CONTEXT"] = "CONTEXT";
+    TokenType["INV"] = "INV";
+    TokenType["PRE"] = "PRE";
+    TokenType["POST"] = "POST";
+    TokenType["DEF"] = "DEF";
+    TokenType["INIT"] = "INIT";
+    TokenType["DERIVE"] = "DERIVE";
+    TokenType["BODY"] = "BODY";
+    TokenType["RESULT"] = "RESULT";
+    TokenType["AT_PRE"] = "AT_PRE";
+    // Collection operation names (dedicated tokens for clarity)
+    TokenType["REJECT"] = "REJECT";
+    TokenType["CLOSURE"] = "CLOSURE";
+    TokenType["COLLECT_NESTED"] = "COLLECT_NESTED";
+    TokenType["FLATTEN"] = "FLATTEN";
+    TokenType["ITERATE"] = "ITERATE";
+    TokenType["SUM"] = "SUM";
+    TokenType["MIN"] = "MIN";
+    TokenType["MAX"] = "MAX";
+    TokenType["ALL_INSTANCES"] = "ALL_INSTANCES";
+    // Collection type names
+    TokenType["SET"] = "SET";
+    TokenType["BAG"] = "BAG";
+    TokenType["SEQUENCE"] = "SEQUENCE";
+    TokenType["ORDERED_SET"] = "ORDERED_SET";
 })(TokenType || (TokenType = {}));
 const KEYWORDS = {
     self: TokenType.SELF,
@@ -51,6 +94,41 @@ const KEYWORDS = {
     not: TokenType.NOT,
     xor: TokenType.XOR,
     implies: TokenType.IMPLIES,
+    let: TokenType.LET,
+    in: TokenType.IN,
+    if: TokenType.IF,
+    then: TokenType.THEN,
+    else: TokenType.ELSE,
+    endif: TokenType.ENDIF,
+    package: TokenType.PACKAGE,
+    endpackage: TokenType.ENDPACKAGE,
+    context: TokenType.CONTEXT,
+    inv: TokenType.INV,
+    pre: TokenType.PRE,
+    post: TokenType.POST,
+    def: TokenType.DEF,
+    init: TokenType.INIT,
+    derive: TokenType.DERIVE,
+    body: TokenType.BODY,
+    result: TokenType.RESULT,
+    '@pre': TokenType.AT_PRE,
+    null: TokenType.NULL,
+    invalid: TokenType.INVALID,
+    mod: TokenType.MOD,
+    div: TokenType.DIV,
+    reject: TokenType.REJECT,
+    closure: TokenType.CLOSURE,
+    collectNested: TokenType.COLLECT_NESTED,
+    flatten: TokenType.FLATTEN,
+    iterate: TokenType.ITERATE,
+    sum: TokenType.SUM,
+    min: TokenType.MIN,
+    max: TokenType.MAX,
+    allInstances: TokenType.ALL_INSTANCES,
+    Set: TokenType.SET,
+    Bag: TokenType.BAG,
+    Sequence: TokenType.SEQUENCE,
+    OrderedSet: TokenType.ORDERED_SET,
 };
 export class OCLLexer {
     input;
@@ -122,8 +200,7 @@ export class OCLLexer {
                     id += this.input[this.pos];
                     this.pos++;
                 }
-                // Check if it's "oclIsTypeOf" etc. - they're compound identifiers
-                const peek = this.input.substring(this.pos, this.pos + 10);
+                // Check for @pre suffix
                 if (id === 'oclIsTypeOf' || id === 'oclIsKindOf' || id === 'oclAsType' || id === 'oclIsUndefined') {
                     this.addToken(TokenType.IDENTIFIER, id);
                 }
@@ -149,6 +226,12 @@ export class OCLLexer {
                 this.pos += 2;
                 continue;
             }
+            // :: (colon colon) for enum literals
+            if (ch === ':' && this.input[this.pos + 1] === ':') {
+                this.addToken(TokenType.COLON_COLON, '::');
+                this.pos += 2;
+                continue;
+            }
             // Single-char tokens
             const singleCharMap = {
                 '+': TokenType.PLUS,
@@ -160,8 +243,11 @@ export class OCLLexer {
                 '<': TokenType.LT,
                 '(': TokenType.LPAREN,
                 ')': TokenType.RPAREN,
+                '{': TokenType.LBRACE,
+                '}': TokenType.RBRACE,
                 '.': TokenType.DOT,
                 ',': TokenType.COMMA,
+                ';': TokenType.SEMI,
                 ':': TokenType.COLON,
                 '|': TokenType.PIPE,
             };

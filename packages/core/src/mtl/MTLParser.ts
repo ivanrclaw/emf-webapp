@@ -196,6 +196,7 @@ export class MTLParser {
     const nodes: MTLNode[] = [];
     let moduleNode: MTLModule | null = null;
     const imports: string[] = [];
+    let pendingMain = false;
 
     while (this.pos < this.tokens.length) {
       const token = this.peek()!;
@@ -223,6 +224,10 @@ export class MTLParser {
             break;
           }
           case TagType.Template: {
+            if (pendingMain) {
+              tag.isMain = true;
+              pendingMain = false;
+            }
             const tmpl = this.parseTemplateBlock(tag);
             if (tmpl) {
               if (moduleNode) moduleNode.templates.push(tmpl);
@@ -246,7 +251,10 @@ export class MTLParser {
           }
           case TagType.Comment: {
             this.consume();
-            // Skip encoding comments and @main markers at top level
+            // Track @main markers to flag the next template
+            if (tag.commentText?.trim() === '@main') {
+              pendingMain = true;
+            }
             break;
           }
           default:

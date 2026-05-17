@@ -10,10 +10,14 @@ export declare enum TokenType {
     BOOLEAN = "BOOLEAN",
     IDENTIFIER = "IDENTIFIER",
     SELF = "SELF",
+    NULL = "NULL",
+    INVALID = "INVALID",
     PLUS = "PLUS",
     MINUS = "MINUS",
     STAR = "STAR",
     SLASH = "SLASH",
+    MOD = "MOD",
+    DIV = "DIV",
     EQUALS = "EQUALS",
     NOT_EQUALS = "NOT_EQUALS",
     GT = "GT",
@@ -29,11 +33,46 @@ export declare enum TokenType {
     PIPE = "PIPE",// |
     LPAREN = "LPAREN",
     RPAREN = "RPAREN",
+    LBRACE = "LBRACE",// {
+    RBRACE = "RBRACE",// }
     DOT = "DOT",
     COMMA = "COMMA",
+    SEMI = "SEMI",// ;
     COLON = "COLON",
+    COLON_COLON = "COLON_COLON",// ::
     ASSIGN = "ASSIGN",// =
-    EOF = "EOF"
+    EOF = "EOF",
+    LET = "LET",
+    IN = "IN",
+    IF = "IF",
+    THEN = "THEN",
+    ELSE = "ELSE",
+    ENDIF = "ENDIF",
+    PACKAGE = "PACKAGE",
+    ENDPACKAGE = "ENDPACKAGE",
+    CONTEXT = "CONTEXT",
+    INV = "INV",
+    PRE = "PRE",
+    POST = "POST",
+    DEF = "DEF",
+    INIT = "INIT",
+    DERIVE = "DERIVE",
+    BODY = "BODY",
+    RESULT = "RESULT",
+    AT_PRE = "AT_PRE",
+    REJECT = "REJECT",
+    CLOSURE = "CLOSURE",
+    COLLECT_NESTED = "COLLECT_NESTED",
+    FLATTEN = "FLATTEN",
+    ITERATE = "ITERATE",
+    SUM = "SUM",
+    MIN = "MIN",
+    MAX = "MAX",
+    ALL_INSTANCES = "ALL_INSTANCES",
+    SET = "SET",
+    BAG = "BAG",
+    SEQUENCE = "SEQUENCE",
+    ORDERED_SET = "ORDERED_SET"
 }
 export interface Token {
     type: TokenType;

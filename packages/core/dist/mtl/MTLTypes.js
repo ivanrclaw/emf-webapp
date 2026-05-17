@@ -1,7 +1,10 @@
 /**
- * @emf-webapp/core — MTL Types
+ * @emf-webapp/core — MTL Types (Full Acceleo-compatible AST)
  *
- * AST node types for Acceleo/MTL-like template language.
+ * Complete AST node types for the Acceleo/MTL template language.
+ * Supports: module, import, template (with guards, visibility, overrides,
+ * multi-params), query, for (with separator/before/after), if/elseif/else,
+ * let, file (dynamic names), protected areas, expressions with full OCL.
  */
 export {};
 //# sourceMappingURL=MTLTypes.js.map

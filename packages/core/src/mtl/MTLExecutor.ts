@@ -101,15 +101,20 @@ export class MTLExecutor {
   }
 
   private findMainTemplate(nodes: MTLNode[]): MTLTemplate | null {
+    let fallback: MTLTemplate | null = null;
     for (const node of nodes) {
-      if (node.type === 'template' && node.isMain) return node;
+      if (node.type === 'template') {
+        if (node.isMain) return node;
+        if (!fallback && node.visibility === 'public') fallback = node;
+      }
       if (node.type === 'module') {
         for (const tmpl of node.templates) {
           if (tmpl.isMain) return tmpl;
+          if (!fallback && tmpl.visibility === 'public') fallback = tmpl;
         }
       }
     }
-    return null;
+    return fallback;
   }
 
   private executeNodes(nodes: MTLNode[], context: Record<string, any>): string {
