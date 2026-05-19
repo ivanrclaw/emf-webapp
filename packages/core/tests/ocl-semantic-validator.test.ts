@@ -237,13 +237,12 @@ describe('OCLSemanticValidator — Warnings', () => {
 // ── Collection Operation Checks ───────────────────────────────────
 
 describe('OCLSemanticValidator — Collection Checks', () => {
-  it('error when collection op on non-collection', () => {
+  it('String can use collection ops (String is Sequence in OCL 2.4)', () => {
     const result = validate('name->size()');
-    // name is String, not a collection — but size() works on String too
-    // The type inference should handle this gracefully
-    // Actually in OCL, String is not a collection, so ->size() is invalid
+    // String is treated as a collection (Sequence of characters) in OCL 2.4
     const errs = errors(result);
-    expect(errs.some((e) => e.code === 'OCL_NOT_COLLECTION')).toBe(true);
+    expect(errs.some((e) => e.code === 'OCL_NOT_COLLECTION')).toBe(false);
+    expect(result.valid).toBe(true);
   });
 
   it('valid collection op on multi-valued ref', () => {

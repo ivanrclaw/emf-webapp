@@ -165,6 +165,35 @@ export class OCLSemanticValidator {
   }
 
   /**
+   * Check if a class (or any of its supertypes) has a given feature.
+   */
+  private classHasFeature(className: string, featureName: string): boolean {
+    const cls = this.metamodel.classes.find((c) => c.name === className);
+    if (!cls) return false;
+
+    const hasAttr = cls.attributes.some((a) => a.name === featureName);
+    if (hasAttr) return true;
+
+    const hasRef = cls.references.some((r) => r.name === featureName);
+    if (hasRef) return true;
+
+    const hasOp = cls.operations?.some((o) => o.name === featureName) ?? false;
+    if (hasOp) return true;
+
+    // Traverse supertypes
+    if (this.metamodel.hierarchy) {
+      const supers = this.metamodel.hierarchy.get(className);
+      if (supers) {
+        for (const superName of supers) {
+          if (this.classHasFeature(superName, featureName)) return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  /**
    * Walk the AST to produce additional semantic diagnostics beyond type inference.
    */
   private walkAST(
@@ -286,9 +315,11 @@ export class OCLSemanticValidator {
       for (const arg of node.args) this.walkAST(arg, ctx, classMap, diagnostics);
     }
 
-    // Check source is actually a collection
+    // Check source is actually a collection (or String, which behaves as Sequence in OCL)
     const sourceType = this.inferenceEngine.infer(node.source, ctx).type;
-    if (sourceType.kind !== 'collection' && sourceType.kind !== 'any') {
+    const sourceKind = sourceType.kind;
+    const isStringCollection = sourceKind === 'primitive' && sourceType.name === 'String';
+    if (sourceKind !== 'collection' && sourceKind !== 'any' && !isStringCollection) {
       diagnostics.push({
         severity: 'error',
         message: `Collection operation '${node.operation}' called on non-collection type: ${typeToString(sourceType)}`,
@@ -349,29 +380,23 @@ export class OCLSemanticValidator {
     // Skip check for 'any' type (unresolved)
     if (objType.kind === 'any' || objType.kind === 'invalid') return;
 
-    // For class types, check features
+    // For class types, check features (including inherited)
     if (objType.kind === 'class') {
-      const cls = classMap.get(objType.name);
-      if (cls) {
-        const hasAttr = cls.attributes.some((a) => a.name === node.method);
-        const hasRef = cls.references.some((r) => r.name === node.method);
-        const hasOp = cls.operations?.some((o) => o.name === node.method) ?? false;
+      const hasFeature = this.classHasFeature(objType.name, node.method);
+      // Also check standard library operations for OclAny
+      const stdOps = getOperationsForType(objType);
+      const hasStdOp = stdOps.some((op) => op.name === node.method);
 
-        // Also check standard library operations for OclAny
-        const stdOps = getOperationsForType(objType);
-        const hasStdOp = stdOps.some((op) => op.name === node.method);
-
-        if (!hasAttr && !hasRef && !hasOp && !hasStdOp) {
-          diagnostics.push({
-            severity: 'error',
-            message: `Property or operation '${node.method}' not found on type '${objType.name}'`,
-            offset: 0,
+      if (!hasFeature && !hasStdOp) {
+        diagnostics.push({
+          severity: 'error',
+          message: `Property or operation '${node.method}' not found on type '${objType.name}'`,
+          offset: 0,
             length: 0,
             code: 'OCL_UNDEFINED_FEATURE',
           });
         }
       }
-    }
 
     // For primitive types, check standard library
     if (objType.kind === 'primitive') {
@@ -392,11 +417,8 @@ export class OCLSemanticValidator {
     if (objType.kind === 'collection') {
       const elemType = objType.elementType;
       if (elemType.kind === 'class') {
-        const cls = classMap.get(elemType.name);
-        if (cls) {
-          const hasAttr = cls.attributes.some((a) => a.name === node.method);
-          const hasRef = cls.references.some((r) => r.name === node.method);
-          if (!hasAttr && !hasRef) {
+        const hasFeature = this.classHasFeature(elemType.name, node.method);
+        if (!hasFeature) {
             // Check if it's a collection operation used with dot instead of arrow
             const collOps = ['size', 'isEmpty', 'notEmpty', 'includes', 'excludes',
               'first', 'last', 'sum', 'min', 'max', 'flatten', 'asSet', 'asBag',
@@ -413,7 +435,6 @@ export class OCLSemanticValidator {
           }
         }
       }
-    }
   }
 
   private checkLetIn(

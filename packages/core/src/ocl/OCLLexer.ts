@@ -308,8 +308,8 @@ export class OCLLexer {
         continue;
       }
 
-      // Unknown char — skip
-      this.pos++;
+      // Unknown char — error
+      throw new Error(`Unexpected character '${ch}' at position ${this.pos}`);
     }
 
     this.addToken(TokenType.EOF, '');

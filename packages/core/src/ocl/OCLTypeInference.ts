@@ -331,12 +331,20 @@ export class OCLTypeInferenceEngine {
   ): OCLType {
     const sourceType = this.inferNode(node.source, contextClass, scope, errors);
 
-    if (sourceType.kind !== 'collection') {
+    // Treat String as a collection (Sequence of characters) as per OCL 2.4
+    const isStringCollection = sourceType.kind === 'primitive' && sourceType.name === 'String';
+
+    if (sourceType.kind !== 'collection' && !isStringCollection) {
       errors.push({ message: `Collection operation '${node.operation}' called on non-collection type '${typeToString(sourceType)}'`, node });
       return OCL.Any;
     }
 
-    const elemType = sourceType.elementType;
+    // Normalize: treat String as a collection type for type inference
+    const effectiveType: import('./OCLTypes.js').CollectionType = isStringCollection
+      ? { kind: 'collection', collectionKind: 'Sequence', elementType: OCL.String }
+      : sourceType as import('./OCLTypes.js').CollectionType;
+
+    const elemType = effectiveType.elementType;
     const op = node.operation;
 
     // Infer body type if present (with iterator in scope)
@@ -358,7 +366,7 @@ export class OCLTypeInferenceEngine {
       // Same collection type (filter)
       case 'select':
       case 'reject':
-        return sourceType;
+        return effectiveType;
 
       // any → element type
       case 'any':
@@ -366,7 +374,7 @@ export class OCLTypeInferenceEngine {
 
       // collect → Bag/Sequence of body type
       case 'collect': {
-        const resultKind = sourceType.collectionKind === 'Sequence' || sourceType.collectionKind === 'OrderedSet'
+        const resultKind = effectiveType.collectionKind === 'Sequence' || effectiveType.collectionKind === 'OrderedSet'
           ? 'Sequence' : 'Bag';
         // Flatten if body returns a collection
         const finalElem = bodyType.kind === 'collection' ? bodyType.elementType : bodyType;
@@ -375,7 +383,7 @@ export class OCLTypeInferenceEngine {
 
       // collectNested → same as collect but no flattening
       case 'collectNested': {
-        const resultKind = sourceType.collectionKind === 'Sequence' || sourceType.collectionKind === 'OrderedSet'
+        const resultKind = effectiveType.collectionKind === 'Sequence' || effectiveType.collectionKind === 'OrderedSet'
           ? 'Sequence' : 'Bag';
         return { kind: 'collection', collectionKind: resultKind, elementType: bodyType };
       }
@@ -386,7 +394,7 @@ export class OCLTypeInferenceEngine {
 
       // sortedBy → OrderedSet or Sequence
       case 'sortedBy': {
-        return sourceType.collectionKind === 'Set' || sourceType.collectionKind === 'OrderedSet'
+        return effectiveType.collectionKind === 'Set' || effectiveType.collectionKind === 'OrderedSet'
           ? OCL.OrderedSetOf(elemType)
           : OCL.SequenceOf(elemType);
       }
@@ -415,8 +423,8 @@ export class OCLTypeInferenceEngine {
       case 'sum':
         return elemType;
       case 'flatten':
-        if (elemType.kind === 'collection') return { ...sourceType, elementType: elemType.elementType };
-        return sourceType;
+        if (elemType.kind === 'collection') return { ...effectiveType, elementType: elemType.elementType } as OCLType;
+        return effectiveType;
 
       // Conversion
       case 'asSet':

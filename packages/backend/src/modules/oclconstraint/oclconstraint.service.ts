@@ -5,7 +5,7 @@
  * Incluye un endpoint `validate` que evalúa todas las constraints
  * de un metamodelo contra un modelo concreto.
  */
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { OCLConstraint } from './oclconstraint.entity.js';
@@ -48,6 +48,15 @@ export class OCLConstraintService {
       severity?: 'error' | 'warning' | 'info';
     },
   ): Promise<OCLConstraint> {
+    if (!data.expression || data.expression.trim().length === 0) {
+      throw new BadRequestException('OCL expression cannot be empty');
+    }
+    if (!data.name || data.name.trim().length === 0) {
+      throw new BadRequestException('Constraint name cannot be empty');
+    }
+    if (!data.context || data.context.trim().length === 0) {
+      throw new BadRequestException('Constraint context cannot be empty');
+    }
     const constraint = this.repo.create({
       metamodel_id: mmid,
       name: data.name,
@@ -257,7 +266,16 @@ export class OCLConstraintService {
       })),
     }));
 
-    const metamodelInfo = { classes };
+    // Build hierarchy map (eSuperTypes reference from IDs to names)
+    const hierarchy = new Map<string, string[]>();
+    for (const cls of classifiers) {
+      if (cls.eSuperTypes && cls.eSuperTypes.length > 0) {
+        const parents = cls.eSuperTypes.map((st: string) => idToName[st] || st);
+        hierarchy.set(cls.name, parents);
+      }
+    }
+
+    const metamodelInfo = { classes, hierarchy };
     const validator = new OCLSemanticValidator(metamodelInfo);
     const result = validator.validate(expression, contextClass);
     return result.diagnostics;

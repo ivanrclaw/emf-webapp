@@ -40,6 +40,10 @@ export declare class OCLSemanticValidator {
      */
     validate(expression: string, contextClassName: string): SemanticValidationResult;
     /**
+     * Check if a class (or any of its supertypes) has a given feature.
+     */
+    private classHasFeature;
+    /**
      * Walk the AST to produce additional semantic diagnostics beyond type inference.
      */
     private walkAST;
