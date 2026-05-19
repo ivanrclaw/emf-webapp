@@ -171,6 +171,20 @@ export class OCLTypeInferenceEngine {
       return OCL.Enum(enumName, []);
     }
 
+    // Check if it's a class name in the metamodel (for static calls like Person.allInstances())
+    // Only if it's NOT a feature of the context class (features take priority)
+    if (this.classMap.has(node.name)) {
+      // Check if context class also has a feature with this name — if so, prefer the feature
+      const ctxCls = this.classMap.get(contextClass);
+      const hasFeature = ctxCls && (
+        ctxCls.attributes.some(a => a.name === node.name) ||
+        ctxCls.references.some(r => r.name === node.name)
+      );
+      if (!hasFeature) {
+        return OCL.Class(node.name);
+      }
+    }
+
     // Feature of context class (implicit self)
     return this.resolveFeatureType(contextClass, node.name, errors, node);
   }
@@ -290,6 +304,19 @@ export class OCLTypeInferenceEngine {
 
     // Object is a class → feature navigation or operation
     if (objectType.kind === 'class') {
+      // Special handling for oclAsType — type narrowing
+      if (method === 'oclAsType' && node.args.length > 0) {
+        const argNode = node.args[0];
+        if (argNode.type === 'identifier' && this.classMap.has((argNode as IdentifierNode).name)) {
+          return OCL.Class((argNode as IdentifierNode).name);
+        }
+      }
+
+      // Special handling for allInstances — returns Set(ClassName)
+      if (method === 'allInstances') {
+        return OCL.SetOf(objectType);
+      }
+
       // First check standard library operations (oclIsTypeOf, etc.)
       const stdOps = getOperationsForType(objectType);
       const stdOp = stdOps.find((op) => op.name === method);

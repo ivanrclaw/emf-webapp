@@ -37,7 +37,14 @@ export declare class OCLCompletionEngine {
     private readonly metamodel;
     private readonly inferenceEngine;
     private readonly classMap;
+    readonly hierarchy: Map<string, string[]>;
     constructor(metamodel: MetamodelInfo);
+    /**
+     * Collect all features (attributes + references + operations) from
+     * a class and its supertypes via the hierarchy.
+     */
+    private getAllFeatures;
+    private makeOperationItem;
     /**
      * Get completions at a given cursor position in an OCL expression.
      */

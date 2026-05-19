@@ -35,7 +35,12 @@ export declare class OCLDefinitionEngine {
     private readonly metamodel;
     private readonly inferenceEngine;
     private readonly classMap;
+    private readonly hierarchy;
     constructor(metamodel: MetamodelInfo);
+    /**
+     * Find a feature (attribute/reference/operation) by name in a class hierarchy.
+     */
+    private findFeatureInHierarchy;
     /**
      * Resolve the definition of the symbol at the given cursor position.
      */

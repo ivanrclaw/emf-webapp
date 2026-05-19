@@ -35,13 +35,57 @@ export interface OCLHoverInfo {
 export class OCLHoverEngine {
   private readonly inferenceEngine: OCLTypeInferenceEngine;
   private readonly classMap: Map<string, MetamodelClass>;
+  private readonly hierarchy: Map<string, string[]>;
 
   constructor(private readonly metamodel: MetamodelInfo) {
     this.inferenceEngine = new OCLTypeInferenceEngine(metamodel);
     this.classMap = new Map();
+    this.hierarchy = metamodel.hierarchy ?? new Map();
     for (const cls of metamodel.classes) {
       this.classMap.set(cls.name, cls);
     }
+  }
+
+  /**
+   * Find a feature (attribute/reference/operation) by name in a class hierarchy.
+   */
+  private findFeatureInHierarchy(
+    className: string,
+    featureName: string,
+    seen?: Set<string>,
+  ): { kind: 'attribute' | 'reference' | 'operation'; type: string; many?: boolean; owner: string; targetClass?: string; containment?: boolean } | null {
+    seen = seen || new Set<string>();
+    if (seen.has(className)) return null;
+    seen.add(className);
+    const cls = this.classMap.get(className);
+    if (!cls) return null;
+
+    // Check attributes
+    const attr = cls.attributes.find((a) => a.name === featureName);
+    if (attr) {
+      return { kind: 'attribute', type: attr.type, many: attr.many, owner: className };
+    }
+    // Check references
+    const ref = cls.references.find((r) => r.name === featureName);
+    if (ref) {
+      return { kind: 'reference', type: ref.targetClass, many: ref.many, owner: className, targetClass: ref.targetClass, containment: ref.containment };
+    }
+    // Check operations
+    if (cls.operations) {
+      const op = cls.operations.find((o) => o.name === featureName);
+      if (op) {
+        return { kind: 'operation', type: op.returnType, owner: className };
+      }
+    }
+    // Recurse into supertypes
+    const supers = this.hierarchy.get(className);
+    if (supers) {
+      for (const superName of supers) {
+        const result = this.findFeatureInHierarchy(superName, featureName, seen);
+        if (result) return result;
+      }
+    }
+    return null;
   }
 
   /**
@@ -132,28 +176,35 @@ export class OCLHoverEngine {
       const receiverType = this.inferType(receiverExpr, contextClassName);
 
       if (receiverType) {
-        // Check if it's a feature of the class
+        // Check if it's a feature of the class (incl. inherited)
         if (receiverType.kind === 'class') {
-          const cls = this.classMap.get(receiverType.name);
-          if (cls) {
-            const attr = cls.attributes.find((a) => a.name === word);
-            if (attr) {
-              const typeStr = this.eTypeToOCL(attr.type, attr.many);
+          const feature = this.findFeatureInHierarchy(receiverType.name, word);
+          if (feature) {
+            if (feature.kind === 'attribute') {
+              const typeStr = this.eTypeToOCL(feature.type, feature.many);
               return {
                 word,
                 range,
                 type: typeStr,
-                documentation: `**${word}** : ${typeStr}\n\nAttribute of \`${receiverType.name}\``,
+                documentation: `**${word}** : ${typeStr}\n\nAttribute of \`${feature.owner}\``,
               };
             }
-            const ref = cls.references.find((r) => r.name === word);
-            if (ref) {
-              const typeStr = ref.many ? `Set(${ref.targetClass})` : ref.targetClass;
+            if (feature.kind === 'reference') {
+              const typeStr = feature.many ? `Set(${feature.targetClass})` : feature.targetClass;
               return {
                 word,
                 range,
                 type: typeStr,
-                documentation: `**${word}** : ${typeStr}\n\nReference to \`${ref.targetClass}\`${ref.containment ? ' (containment)' : ''}`,
+                documentation: `**${word}** : ${typeStr}\n\nReference to \`${feature.targetClass}\`${feature.containment ? ' (containment)' : ''}`,
+              };
+            }
+            if (feature.kind === 'operation') {
+              const opType = this.eTypeToOCL(feature.type);
+              return {
+                word,
+                range,
+                type: opType,
+                documentation: `**${word}** : ${opType}\n\nOperation of \`${feature.owner}\``,
               };
             }
           }
@@ -176,27 +227,34 @@ export class OCLHoverEngine {
       }
     }
 
-    // It's a direct identifier — check context class features
-    const cls = this.classMap.get(contextClassName);
-    if (cls) {
-      const attr = cls.attributes.find((a) => a.name === word);
-      if (attr) {
-        const typeStr = this.eTypeToOCL(attr.type, attr.many);
+    // It's a direct identifier — check context class features (incl. inherited)
+    const feature = this.findFeatureInHierarchy(contextClassName, word);
+    if (feature) {
+      if (feature.kind === 'attribute') {
+        const typeStr = this.eTypeToOCL(feature.type, feature.many);
         return {
           word,
           range,
           type: typeStr,
-          documentation: `**${word}** : ${typeStr}\n\nAttribute of \`${contextClassName}\``,
+          documentation: `**${word}** : ${typeStr}\n\nAttribute of \`${feature.owner}\``,
         };
       }
-      const ref = cls.references.find((r) => r.name === word);
-      if (ref) {
-        const typeStr = ref.many ? `Set(${ref.targetClass})` : ref.targetClass;
+      if (feature.kind === 'reference') {
+        const typeStr = feature.many ? `Set(${feature.targetClass})` : feature.targetClass;
         return {
           word,
           range,
           type: typeStr,
-          documentation: `**${word}** : ${typeStr}\n\nReference to \`${ref.targetClass}\`${ref.containment ? ' (containment)' : ''}`,
+          documentation: `**${word}** : ${typeStr}\n\nReference to \`${feature.targetClass}\`${feature.containment ? ' (containment)' : ''}`,
+        };
+      }
+      if (feature.kind === 'operation') {
+        const opType = this.eTypeToOCL(feature.type);
+        return {
+          word,
+          range,
+          type: opType,
+          documentation: `**${word}** : ${opType}\n\nOperation of \`${feature.owner}\``,
         };
       }
     }

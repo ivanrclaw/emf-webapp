@@ -24,7 +24,12 @@ export declare class OCLHoverEngine {
     private readonly metamodel;
     private readonly inferenceEngine;
     private readonly classMap;
+    private readonly hierarchy;
     constructor(metamodel: MetamodelInfo);
+    /**
+     * Find a feature (attribute/reference/operation) by name in a class hierarchy.
+     */
+    private findFeatureInHierarchy;
     /**
      * Get hover information at a cursor position.
      */

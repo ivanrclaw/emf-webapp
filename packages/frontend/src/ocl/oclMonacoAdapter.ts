@@ -371,7 +371,7 @@ export function getOCLMonarchTokens(): any {
         // Double colon
         [/::/, 'delimiter'],
         // @ as a prefix (e.g., @pre) — tokenize separately to avoid Monarch attr ref issue
-        [/@/, { token: 'delimiter', next: '@at_pre' }],
+        [/@/, { token: 'delimiter', next: 'pre_state' }],
 
         // Identifiers and keywords
         [/[a-zA-Z_]\w*/, {
@@ -394,7 +394,7 @@ export function getOCLMonarchTokens(): any {
         // Whitespace
         [/\s+/, 'white'],
       ],
-      '@at_pre': [
+      'pre_state': [
         [/pre\b/, 'keyword', '@pop'],
         [/./, { token: '@pop', next: '@root' }],
       ],

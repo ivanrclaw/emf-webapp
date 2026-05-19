@@ -20,6 +20,7 @@ import {
   MetamodelClass,
   MetamodelFeature,
   MetamodelReference,
+  MetamodelOperation,
 } from './OCLTypeInference.js';
 
 // ── Completion Item Types ─────────────────────────────────────────
@@ -67,12 +68,63 @@ export class OCLCompletionEngine {
   private readonly inferenceEngine: OCLTypeInferenceEngine;
   private readonly classMap: Map<string, MetamodelClass>;
 
+  public readonly hierarchy: Map<string, string[]>;
+
   constructor(private readonly metamodel: MetamodelInfo) {
     this.inferenceEngine = new OCLTypeInferenceEngine(metamodel);
     this.classMap = new Map();
+    this.hierarchy = metamodel.hierarchy ?? new Map();
     for (const cls of metamodel.classes) {
       this.classMap.set(cls.name, cls);
     }
+  }
+
+  /**
+   * Collect all features (attributes + references + operations) from
+   * a class and its supertypes via the hierarchy.
+   */
+  private getAllFeatures(className: string): {
+    attributes: MetamodelFeature[];
+    references: MetamodelReference[];
+    operations: MetamodelOperation[];
+  } {
+    const attrs: MetamodelFeature[] = [];
+    const refs: MetamodelReference[] = [];
+    const ops: MetamodelOperation[] = [];
+    const seen = new Set<string>();
+
+    const walk = (name: string) => {
+      if (seen.has(name)) return;
+      seen.add(name);
+      const cls = this.classMap.get(name);
+      if (!cls) return;
+      for (const a of cls.attributes) attrs.push(a);
+      for (const r of cls.references) refs.push(r);
+      if (cls.operations) {
+        for (const o of cls.operations) ops.push(o);
+      }
+      const supers = this.hierarchy.get(name);
+      if (supers) {
+        for (const s of supers) walk(s);
+      }
+    };
+
+    walk(className);
+    return { attributes: attrs, references: refs, operations: ops };
+  }
+
+  // ── Type helper for operation features ────────────────────────
+  private makeOperationItem(
+    op: MetamodelOperation,
+  ): OCLCompletionItem {
+    const params = (op.params || []).map((p) => `${p.name}: ${p.type}`).join(', ');
+    return {
+      label: op.name,
+      kind: 'operation',
+      detail: `${op.name}(${params}) : ${op.returnType}`,
+      insertText: op.params?.length ? `${op.name}($1)` : `${op.name}()`,
+      sortOrder: 30,
+    };
   }
 
   /**
@@ -154,26 +206,16 @@ export class OCLCompletionEngine {
     const objType = this.inferTypeOfExpression(ctx.expressionBefore, contextClassName);
 
     if (objType.kind === 'class') {
-      // Add class features
-      const cls = this.classMap.get(objType.name);
-      if (cls) {
-        for (const attr of cls.attributes) {
-          items.push(this.makeAttributeItem(attr));
-        }
-        for (const ref of cls.references) {
-          items.push(this.makeReferenceItem(ref));
-        }
-        if (cls.operations) {
-          for (const op of cls.operations) {
-            items.push({
-              label: op.name,
-              kind: 'operation',
-              detail: `${op.name}(${op.params?.map((p) => `${p.name}: ${p.type}`).join(', ') ?? ''}) : ${op.returnType}`,
-              insertText: op.params?.length ? `${op.name}($1)` : `${op.name}()`,
-              sortOrder: 30,
-            });
-          }
-        }
+      // Add class features (including inherited)
+      const all = this.getAllFeatures(objType.name);
+      for (const attr of all.attributes) {
+        items.push(this.makeAttributeItem(attr));
+      }
+      for (const ref of all.references) {
+        items.push(this.makeReferenceItem(ref));
+      }
+      for (const op of all.operations) {
+        items.push(this.makeOperationItem(op));
       }
     }
 
@@ -224,15 +266,13 @@ export class OCLCompletionEngine {
   private completeIdentifier(ctx: CompletionContext, contextClassName: string): OCLCompletionItem[] {
     const items: OCLCompletionItem[] = [];
 
-    // Context class features
-    const cls = this.classMap.get(contextClassName);
-    if (cls) {
-      for (const attr of cls.attributes) {
-        items.push(this.makeAttributeItem(attr));
-      }
-      for (const ref of cls.references) {
-        items.push(this.makeReferenceItem(ref));
-      }
+    // Context class features (including inherited)
+    const all = this.getAllFeatures(contextClassName);
+    for (const attr of all.attributes) {
+      items.push(this.makeAttributeItem(attr));
+    }
+    for (const ref of all.references) {
+      items.push(this.makeReferenceItem(ref));
     }
 
     // Keywords
@@ -300,8 +340,9 @@ export class OCLCompletionEngine {
   }
 
   private makeStdLibItem(op: OCLOperationSignature): OCLCompletionItem {
-    const params = op.params?.map((p) => `${p.name}: ${p.type}`).join(', ') ?? '';
-    const signature = `${op.name}(${params}) : ${op.returnType}`;
+    const params = op.params?.map((p) => `${p.name}: ${typeof p.type === 'string' ? p.type : typeToString(p.type as OCLType)}`).join(', ') ?? '';
+    const retStr = typeof op.returnType === 'string' ? op.returnType : typeToString(op.returnType as OCLType);
+    const signature = `${op.name}(${params}) : ${retStr}`;
     const hasParams = op.params && op.params.length > 0;
     return {
       label: op.name,

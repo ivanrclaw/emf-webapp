@@ -382,6 +382,11 @@ export class OCLSemanticValidator {
 
     // For class types, check features (including inherited)
     if (objType.kind === 'class') {
+      // Skip allInstances — it's a valid static operation on any class
+      if (node.method === 'allInstances') return;
+      // Skip oclAsType — type narrowing handled by inference engine
+      if (node.method === 'oclAsType') return;
+
       const hasFeature = this.classHasFeature(objType.name, node.method);
       // Also check standard library operations for OclAny
       const stdOps = getOperationsForType(objType);

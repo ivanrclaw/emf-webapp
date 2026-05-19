@@ -12,13 +12,42 @@ export class OCLDefinitionEngine {
     metamodel;
     inferenceEngine;
     classMap;
+    hierarchy;
     constructor(metamodel) {
         this.metamodel = metamodel;
         this.inferenceEngine = new OCLTypeInferenceEngine(metamodel);
         this.classMap = new Map();
+        this.hierarchy = metamodel.hierarchy ?? new Map();
         for (const cls of metamodel.classes) {
             this.classMap.set(cls.name, cls);
         }
+    }
+    /**
+     * Find a feature (attribute/reference/operation) by name in a class hierarchy.
+     */
+    findFeatureInHierarchy(className, featureName, seen) {
+        seen = seen || new Set();
+        if (seen.has(className))
+            return null;
+        seen.add(className);
+        const cls = this.classMap.get(className);
+        if (!cls)
+            return null;
+        if (cls.attributes.some((a) => a.name === featureName))
+            return cls;
+        if (cls.references.some((r) => r.name === featureName))
+            return cls;
+        if (cls.operations && cls.operations.some((o) => o.name === featureName))
+            return cls;
+        const supers = this.hierarchy.get(className);
+        if (supers) {
+            for (const superName of supers) {
+                const result = this.findFeatureInHierarchy(superName, featureName, seen);
+                if (result)
+                    return result;
+            }
+        }
+        return null;
     }
     /**
      * Resolve the definition of the symbol at the given cursor position.
@@ -61,10 +90,10 @@ export class OCLDefinitionEngine {
             const receiverExpr = before.slice(0, before.length - separator.length);
             const receiverType = this.inferType(receiverExpr, contextClassName);
             if (receiverType && receiverType.kind === 'class') {
-                const cls = this.classMap.get(receiverType.name);
-                if (cls) {
-                    // Check attributes
-                    const attr = cls.attributes.find((a) => a.name === word);
+                // Find feature (incl. inherited)
+                const ownerCls = this.findFeatureInHierarchy(receiverType.name, word);
+                if (ownerCls) {
+                    const attr = ownerCls.attributes.find((a) => a.name === word);
                     if (attr) {
                         return {
                             word,
@@ -72,14 +101,13 @@ export class OCLDefinitionEngine {
                             target: {
                                 kind: 'attribute',
                                 name: word,
-                                ownerClass: receiverType.name,
+                                ownerClass: ownerCls.name,
                                 type: attr.type,
                                 many: attr.many,
                             },
                         };
                     }
-                    // Check references
-                    const ref = cls.references.find((r) => r.name === word);
+                    const ref = ownerCls.references.find((r) => r.name === word);
                     if (ref) {
                         return {
                             word,
@@ -87,16 +115,15 @@ export class OCLDefinitionEngine {
                             target: {
                                 kind: 'reference',
                                 name: word,
-                                ownerClass: receiverType.name,
+                                ownerClass: ownerCls.name,
                                 type: ref.targetClass,
                                 many: ref.many,
                                 containment: ref.containment,
                             },
                         };
                     }
-                    // Check operations
-                    if (cls.operations) {
-                        const op = cls.operations.find((o) => o.name === word);
+                    if (ownerCls.operations) {
+                        const op = ownerCls.operations.find((o) => o.name === word);
                         if (op) {
                             return {
                                 word,
@@ -104,7 +131,7 @@ export class OCLDefinitionEngine {
                                 target: {
                                     kind: 'operation',
                                     name: word,
-                                    ownerClass: receiverType.name,
+                                    ownerClass: ownerCls.name,
                                     type: op.returnType,
                                 },
                             };
@@ -113,10 +140,10 @@ export class OCLDefinitionEngine {
                 }
             }
         }
-        // Direct identifier — resolve against context class
-        const cls = this.classMap.get(contextClassName);
-        if (cls) {
-            const attr = cls.attributes.find((a) => a.name === word);
+        // Direct identifier — resolve against context class (incl. inherited)
+        const ownerCls = this.findFeatureInHierarchy(contextClassName, word);
+        if (ownerCls) {
+            const attr = ownerCls.attributes.find((a) => a.name === word);
             if (attr) {
                 return {
                     word,
@@ -124,13 +151,13 @@ export class OCLDefinitionEngine {
                     target: {
                         kind: 'attribute',
                         name: word,
-                        ownerClass: contextClassName,
+                        ownerClass: ownerCls.name,
                         type: attr.type,
                         many: attr.many,
                     },
                 };
             }
-            const ref = cls.references.find((r) => r.name === word);
+            const ref = ownerCls.references.find((r) => r.name === word);
             if (ref) {
                 return {
                     word,
@@ -138,15 +165,15 @@ export class OCLDefinitionEngine {
                     target: {
                         kind: 'reference',
                         name: word,
-                        ownerClass: contextClassName,
+                        ownerClass: ownerCls.name,
                         type: ref.targetClass,
                         many: ref.many,
                         containment: ref.containment,
                     },
                 };
             }
-            if (cls.operations) {
-                const op = cls.operations.find((o) => o.name === word);
+            if (ownerCls.operations) {
+                const op = ownerCls.operations.find((o) => o.name === word);
                 if (op) {
                     return {
                         word,
@@ -154,7 +181,7 @@ export class OCLDefinitionEngine {
                         target: {
                             kind: 'operation',
                             name: word,
-                            ownerClass: contextClassName,
+                            ownerClass: ownerCls.name,
                             type: op.returnType,
                         },
                     };
