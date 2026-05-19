@@ -1,4 +1,3 @@
-import React from 'react';
 import OCLConstraintPage from '../../../pages/OCLConstraintPage';
 
 interface OCLTabProps {
@@ -8,7 +7,7 @@ interface OCLTabProps {
 
 export function OCLTab({ projectId, metamodelId }: OCLTabProps) {
   return (
-    <div style={{ height: '100%', overflow: 'auto', padding: '24px 32px' }}>
+    <div style={{ height: '100%', overflow: 'hidden' }}>
       <OCLConstraintPage projectId={projectId} metamodelId={metamodelId} />
     </div>
   );

@@ -365,3 +365,65 @@ describe('OCLDefinitionEngine', () => {
     });
   });
 });
+
+// ── Completion after binary operators (bug fix) ─────────────────────
+
+describe('OCLCompletionEngine — receiver extraction after binary ops', () => {
+  const engine = new OCLCompletionEngine(testMetamodel);
+
+  it('provides completions after <> self.', () => {
+    const expr = 'self.age <> self.';
+    const items = engine.complete(expr, expr.length, 'Person');
+    const names = items.map(i => i.label);
+    expect(names).toContain('name');
+    expect(names).toContain('age');
+    expect(names).toContain('active');
+  });
+
+  it('provides completions after <> self.n (prefix filter)', () => {
+    const expr = 'self.age <> self.n';
+    const items = engine.complete(expr, expr.length, 'Person');
+    const names = items.map(i => i.label);
+    expect(names).toContain('name');
+    expect(names).not.toContain('age');
+  });
+
+  it('provides completions after and self.', () => {
+    const expr = 'self.age > 0 and self.';
+    const items = engine.complete(expr, expr.length, 'Person');
+    const names = items.map(i => i.label);
+    expect(names).toContain('name');
+    expect(names).toContain('employer');
+  });
+
+  it('provides completions after implies self.', () => {
+    const expr = 'self.age > 0 implies self.';
+    const items = engine.complete(expr, expr.length, 'Person');
+    const names = items.map(i => i.label);
+    expect(names).toContain('name');
+  });
+
+  it('provides completions after not self.', () => {
+    const expr = 'not self.';
+    const items = engine.complete(expr, expr.length, 'Person');
+    const names = items.map(i => i.label);
+    expect(names).toContain('active');
+  });
+
+  it('provides completions on chained navigation after binary op', () => {
+    const expr = 'self.age > 0 and self.employer.';
+    const items = engine.complete(expr, expr.length, 'Person');
+    const names = items.map(i => i.label);
+    expect(names).toContain('companyName');
+    expect(names).toContain('revenue');
+  });
+
+  it('provides arrow completions after binary op', () => {
+    const expr = 'self.age > 0 and self.friends->';
+    const items = engine.complete(expr, expr.length, 'Person');
+    const names = items.map(i => i.label);
+    expect(names).toContain('select');
+    expect(names).toContain('forAll');
+    expect(names).toContain('size');
+  });
+});

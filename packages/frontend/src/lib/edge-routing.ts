@@ -10,7 +10,7 @@
  */
 import { Position, getSmoothStepPath } from '@xyflow/react';
 
-export const EDGE_SPACING = 16;
+export const EDGE_SPACING = 24;
 export const SIDE_MARGIN = 12;
 export const BRIDGE_RADIUS = 4;
 
@@ -74,25 +74,51 @@ export function collectEdgeGroups(
     return 'right'; // default
   }
 
+  // Unified grouping: all edges touching (nodeId, side) regardless of direction
+  // Each entry stores { edgeId, role: 'source' | 'target' }
+  const unifiedGroups = new Map<string, Array<{ id: string; role: 'source' | 'target' }>>();
+
   edges.forEach((e) => {
-    const sKey = `${e.source}|${effectiveSide(e.sourcePosition, e.sourceHandle)}`;
+    const sSide = effectiveSide(e.sourcePosition, e.sourceHandle);
+    const sKey = `${e.source}|${sSide}`;
     if (!sourceGroups.has(sKey)) sourceGroups.set(sKey, []);
     sourceGroups.get(sKey)!.push(e.id);
 
-    const tKey = `${e.target}|${effectiveSide(e.targetPosition, e.targetHandle)}`;
+    // Add to unified group for source node+side
+    if (!unifiedGroups.has(sKey)) unifiedGroups.set(sKey, []);
+    unifiedGroups.get(sKey)!.push({ id: e.id, role: 'source' });
+
+    const tSide = effectiveSide(e.targetPosition, e.targetHandle);
+    const tKey = `${e.target}|${tSide}`;
     if (!targetGroups.has(tKey)) targetGroups.set(tKey, []);
     targetGroups.get(tKey)!.push(e.id);
+
+    // Add to unified group for target node+side
+    if (!unifiedGroups.has(tKey)) unifiedGroups.set(tKey, []);
+    unifiedGroups.get(tKey)!.push({ id: e.id, role: 'target' });
   });
 
-  const srcIdx = new Map<string, number>();
-  sourceGroups.forEach((ids) => ids.forEach((id, i) => srcIdx.set(id, i)));
-  const srcSize = new Map<string, number>();
-  sourceGroups.forEach((ids, key) => ids.forEach((id) => srcSize.set(id, ids.length)));
+  // Build unified index/size maps per edge per role
+  // sourceUnifiedIdx: for edge X as source at node+side, what's its index in the unified group?
+  const sourceUnifiedIdx = new Map<string, number>();
+  const sourceUnifiedSize = new Map<string, number>();
+  const targetUnifiedIdx = new Map<string, number>();
+  const targetUnifiedSize = new Map<string, number>();
 
-  const tgtIdx = new Map<string, number>();
-  targetGroups.forEach((ids) => ids.forEach((id, i) => tgtIdx.set(id, i)));
-  const tgtSize = new Map<string, number>();
-  targetGroups.forEach((ids, key) => ids.forEach((id) => tgtSize.set(id, ids.length)));
+  unifiedGroups.forEach((entries) => {
+    entries.forEach((entry, i) => {
+      if (entry.role === 'source') {
+        sourceUnifiedIdx.set(entry.id, i);
+        sourceUnifiedSize.set(entry.id, entries.length);
+      } else {
+        targetUnifiedIdx.set(entry.id, i);
+        targetUnifiedSize.set(entry.id, entries.length);
+      }
+    });
+  });
+
+  // Legacy source/target groups kept for backward compat but no longer used for spreading
+  // (unified groups above supersede them)
 
   // Pair grouping: edges connecting the same two nodes (bidirectional)
   // Key is sorted pair so A→B and B→A are in the same group
@@ -117,10 +143,10 @@ export function collectEdgeGroups(
   const allIds = new Set(edges.map((e) => e.id));
   allIds.forEach((id) => {
     result.set(id, {
-      sourceGroupSize: srcSize.get(id) ?? 1,
-      sourceGroupIndex: srcIdx.get(id) ?? 0,
-      targetGroupSize: tgtSize.get(id) ?? 1,
-      targetGroupIndex: tgtIdx.get(id) ?? 0,
+      sourceGroupSize: sourceUnifiedSize.get(id) ?? 1,
+      sourceGroupIndex: sourceUnifiedIdx.get(id) ?? 0,
+      targetGroupSize: targetUnifiedSize.get(id) ?? 1,
+      targetGroupIndex: targetUnifiedIdx.get(id) ?? 0,
       pairGroupSize: pairSize.get(id) ?? 1,
       pairGroupIndex: pairIdx.get(id) ?? 0,
     });

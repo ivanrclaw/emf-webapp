@@ -54,6 +54,14 @@ export declare class OCLCompletionEngine {
      */
     private analyzeContext;
     /**
+     * Extract the receiver sub-expression from text before a dot/arrow.
+     * For "self.salary <> self", returns "self".
+     * For "self.department", returns "self.department".
+     * For "(x + y)", returns "(x + y)".
+     * Scans backwards to find where the current navigation chain starts.
+     */
+    private extractReceiver;
+    /**
      * Completions after '.' — features + OclAny operations on the inferred type.
      */
     private completeDot;

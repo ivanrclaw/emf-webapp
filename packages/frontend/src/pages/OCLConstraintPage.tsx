@@ -1,6 +1,5 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import Editor, { OnMount, BeforeMount } from '@monaco-editor/react';
 import {
   getMetamodel,
   getOCLConstraints,
@@ -8,28 +7,49 @@ import {
   updateOCLConstraint,
   deleteOCLConstraint,
   validateOCLConstraints,
+  diagnoseOCLExpression,
   getM1Models,
   Metamodel,
   OCLConstraint,
   OCLValidationResult,
 } from '../api/client';
-import { Save, Plus, List, Trash2 } from '../components/icons';
 import ErrorPanel from '../components/feedback/ErrorPanel';
 
-/* ------------------------------------------------------------------ */
-/*  OCL Constraints Page                                               */
-/* ------------------------------------------------------------------ */
-
-const SEVERITY_OPTIONS = ['error', 'warning', 'info'] as const;
-const SEVERITY_COLORS: Record<string, string> = {
-  error: 'var(--danger)',
-  warning: '#f59e0b',
-  info: '#3b82f6',
-};
+import { OCLToolbar } from '../components/ocl/OCLToolbar';
+import { OCLConstraintBrowser } from '../components/ocl/OCLConstraintBrowser';
+import { OCLEditorPane } from '../components/ocl/OCLEditorPane';
+import { OCLInspector } from '../components/ocl/OCLInspector';
+import { OCLProblemsPanel } from '../components/ocl/OCLProblemsPanel';
+import { OCLStatusBar } from '../components/ocl/OCLStatusBar';
+import { ResizablePanel } from '../components/workspace/ResizablePanel';
+import { ResizablePanelV } from '../components/workspace/ResizablePanelV';
+import type {
+  ConstraintFormState,
+  CursorPosition,
+  DiagnosticsMap,
+  OCLDiagnostic,
+  RunSummaries,
+} from '../components/ocl/types';
+import {
+  isFormEqual,
+  offsetToLineColumn,
+  runStatusFromResult,
+} from '../components/ocl/types';
 
 interface OCLConstraintPageProps {
   projectId?: string;
   metamodelId?: string;
+}
+
+const EMPTY_FORM: ConstraintFormState = {
+  name: '',
+  context: '',
+  expression: '',
+  severity: 'error',
+};
+
+function isFormEqualLocal(a: ConstraintFormState, c: OCLConstraint | null): boolean {
+  return isFormEqual(a, c);
 }
 
 export default function OCLConstraintPage(props: OCLConstraintPageProps) {
@@ -37,41 +57,63 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
   const projectId = props.projectId || params.pid || '';
   const metamodelId = props.metamodelId || params.mmid || '';
 
-  const [monacoTheme, setMonacoTheme] = useState(() =>
-    document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'vs-dark'
+  // ── Theme sync ─────────────────────────────────────────────
+  const [theme, setTheme] = useState<'light' | 'dark'>(() =>
+    document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark',
   );
-  const monacoDisposablesRef = useRef<any[]>([]);
-
-  // Sync Monaco theme with app theme toggle
   useEffect(() => {
     const observer = new MutationObserver(() => {
-      const theme = document.documentElement.getAttribute('data-theme');
-      setMonacoTheme(theme === 'light' ? 'light' : 'vs-dark');
+      const t = document.documentElement.getAttribute('data-theme');
+      setTheme(t === 'light' ? 'light' : 'dark');
     });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+    });
     return () => observer.disconnect();
   }, []);
 
+  // ── Data ──────────────────────────────────────────────────
   const [metamodel, setMetamodel] = useState<Metamodel | null>(null);
   const [constraints, setConstraints] = useState<OCLConstraint[]>([]);
-  const [eclassNames, setEclassNames] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [results, setResults] = useState<OCLValidationResult[] | null>(null);
-  const [validating, setValidating] = useState(false);
   const [models, setModels] = useState<Array<{ id: string; name: string; content: any }>>([]);
   const [selectedModelId, setSelectedModelId] = useState<string>('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  // Form state
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [formName, setFormName] = useState('');
-  const [formContext, setFormContext] = useState('');
-  const [formExpression, setFormExpression] = useState('');
-  const [formSeverity, setFormSeverity] = useState('error');
+  // ── Selection / form ──────────────────────────────────────
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isNew, setIsNew] = useState(false);
+  const [form, setForm] = useState<ConstraintFormState>(EMPTY_FORM);
+
+  // ── Engine state ──────────────────────────────────────────
+  const [diagnosticsMap, setDiagnosticsMap] = useState<DiagnosticsMap>({});
+  const [validationResults, setValidationResults] = useState<OCLValidationResult[] | null>(null);
+  const [runSummaries, setRunSummaries] = useState<RunSummaries>({});
+  const [cursor, setCursor] = useState<CursorPosition | null>(null);
   const [saving, setSaving] = useState(false);
+  const [validating, setValidating] = useState(false);
+  const [lastSaved, setLastSaved] = useState<string | null>(null);
+  const [problemsVisible, setProblemsVisible] = useState(true);
 
-  // ── Load ──────────────────────────────────────────────────────────
+  const eclassNames = useMemo(() => {
+    const content = metamodel?.content || {};
+    const classifiers: { name: string }[] = content.eClassifiers || [];
+    return classifiers.map((c) => c.name);
+  }, [metamodel]);
 
+  const selectedConstraint = useMemo(
+    () => constraints.find((c) => c.id === selectedId) || null,
+    [constraints, selectedId],
+  );
+
+  const dirty = useMemo(() => {
+    if (isNew) return form.name !== '' || form.context !== '' || form.expression !== '';
+    if (!selectedConstraint) return false;
+    return !isFormEqualLocal(form, selectedConstraint);
+  }, [form, selectedConstraint, isNew]);
+
+  // ── Load ──────────────────────────────────────────────────
   const load = useCallback(async () => {
     if (!metamodelId) return;
     setLoading(true);
@@ -85,10 +127,28 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
       setConstraints(cList);
       setModels(mList as any);
 
-      // Extract EClass names
-      const content = mm.content || {};
-      const classifiers: { name: string }[] = content.eClassifiers || [];
-      setEclassNames(classifiers.map((c) => c.name));
+      // Pick a constraint to focus
+      const stored = (() => {
+        try {
+          return localStorage.getItem(`ocl-ide.last:${metamodelId}`);
+        } catch {
+          return null;
+        }
+      })();
+      const initial = (stored && cList.find((c) => c.id === stored)) || cList[0];
+      if (initial) {
+        setSelectedId(initial.id);
+        setIsNew(false);
+        setForm({
+          name: initial.name,
+          context: initial.context,
+          expression: initial.expression,
+          severity: initial.severity,
+        });
+      } else {
+        setSelectedId(null);
+        setForm(EMPTY_FORM);
+      }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load');
     } finally {
@@ -96,146 +156,238 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
     }
   }, [metamodelId, projectId]);
 
-  useEffect(() => { load(); }, [load]);
-
-  // ── Monaco Language Registration ─────────────────────────────────
-
-  // Use a ref to always get current formContext
-  const formContextRef = useRef(formContext);
-  formContextRef.current = formContext;
-
-  const handleBeforeMount: BeforeMount = (monaco) => {
-    // Register custom OCL language
-    monaco.languages.register({ id: 'emf-ocl' });
-
-    // Import and use the professional tokenizer + providers
-    import('./../ocl/oclMonacoAdapter').then(({ registerOCLProviders, getOCLMonarchTokens }) => {
-      // Set enhanced Monarch tokens provider
-      monaco.languages.setMonarchTokensProvider('emf-ocl', getOCLMonarchTokens() as any);
-
-      // Register professional completion, hover, definition, and signature providers
-      const providers = registerOCLProviders(
-        monaco,
-        metamodel?.content || {},
-        formContextRef.current || '',
-      );
-
-      // Store disposables for cleanup
-      monacoDisposablesRef.current = providers.disposables;
-
-      // Keep context class in sync
-      const interval = setInterval(() => {
-        providers.setContextClass(formContextRef.current || '');
-      }, 500);
-      monacoDisposablesRef.current.push({ dispose: () => clearInterval(interval) });
-    });
-  };
-
-  // ── Editor mount ──────────────────────────────────────────────────
-
-  const editorRef = useRef<any>(null);
-  const monacoRef = useRef<any>(null);
-  const diagnosticTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const handleEditorMount: OnMount = (editor, monaco) => {
-    editorRef.current = editor;
-    monacoRef.current = monaco;
-  };
-
-  // ── Real-time diagnostics (debounced) ─────────────────────────────
-
   useEffect(() => {
-    if (!formExpression || !formContext || !metamodel?.content || !monacoRef.current || !editorRef.current) return;
+    load();
+  }, [load]);
 
-    if (diagnosticTimerRef.current) clearTimeout(diagnosticTimerRef.current);
+  // ── Initial diagnose all (background) ────────────────────
+  useEffect(() => {
+    if (!metamodel?.content || constraints.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const updates: DiagnosticsMap = {};
+      for (const c of constraints) {
+        if (!c.expression || !c.context) continue;
+        try {
+          const diags = await diagnoseOCLExpression(
+            metamodelId,
+            c.expression,
+            c.context,
+            metamodel.content,
+          );
+          if (cancelled) return;
+          updates[c.id] = (diags as any[]).map((d): OCLDiagnostic => {
+            const lc = offsetToLineColumn(c.expression, d.offset);
+            return {
+              offset: d.offset,
+              length: d.length || 1,
+              message: d.message,
+              severity: d.severity,
+              line: lc.line,
+              column: lc.column,
+            };
+          });
+        } catch {
+          /* ignore */
+        }
+      }
+      if (!cancelled) {
+        setDiagnosticsMap((prev) => ({ ...prev, ...updates }));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [metamodel?.content, constraints.map((c) => c.id).join(',')]);
 
-    diagnosticTimerRef.current = setTimeout(async () => {
+  // ── Diagnose current expression (debounced) ──────────────
+  const diagnoseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!metamodel?.content || !form.expression || !form.context) {
+      // Clear current expr diagnostics if nothing to diagnose
+      const targetId = isNew ? '__new__' : selectedId;
+      if (targetId) {
+        setDiagnosticsMap((prev) => {
+          if (!prev[targetId]) return prev;
+          const next = { ...prev };
+          delete next[targetId];
+          return next;
+        });
+      }
+      return;
+    }
+    if (diagnoseTimerRef.current) clearTimeout(diagnoseTimerRef.current);
+
+    diagnoseTimerRef.current = setTimeout(async () => {
       try {
-        const { diagnoseOCLExpression } = await import('../api/client');
-        const diagnostics = await diagnoseOCLExpression(
+        const diags = await diagnoseOCLExpression(
           metamodelId,
-          formExpression,
-          formContext,
+          form.expression,
+          form.context,
           metamodel.content,
         );
-
-        const monaco = monacoRef.current;
-        const model = editorRef.current?.getModel();
-        if (!monaco || !model) return;
-
-        const markers = diagnostics.map((d: any) => {
-          // Convert offset to line/column
-          const startPos = model.getPositionAt(d.offset);
-          const endPos = model.getPositionAt(d.offset + (d.length || 1));
+        const targetId = isNew ? '__new__' : selectedId;
+        if (!targetId) return;
+        const list: OCLDiagnostic[] = (diags as any[]).map((d) => {
+          const lc = offsetToLineColumn(form.expression, d.offset);
           return {
-            severity: d.severity === 'error'
-              ? monaco.MarkerSeverity.Error
-              : d.severity === 'warning'
-                ? monaco.MarkerSeverity.Warning
-                : monaco.MarkerSeverity.Info,
+            offset: d.offset,
+            length: d.length || 1,
             message: d.message,
-            startLineNumber: startPos.lineNumber,
-            startColumn: startPos.column,
-            endLineNumber: endPos.lineNumber,
-            endColumn: endPos.column,
+            severity: d.severity,
+            line: lc.line,
+            column: lc.column,
           };
         });
-
-        monaco.editor.setModelMarkers(model, 'ocl-diagnostics', markers);
+        setDiagnosticsMap((prev) => ({ ...prev, [targetId]: list }));
       } catch {
-        // Silently ignore diagnostic errors (network, etc.)
+        /* network error — silent */
       }
-    }, 600);
+    }, 400);
 
     return () => {
-      if (diagnosticTimerRef.current) clearTimeout(diagnosticTimerRef.current);
+      if (diagnoseTimerRef.current) clearTimeout(diagnoseTimerRef.current);
     };
-  }, [formExpression, formContext, metamodel?.content, metamodelId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.expression, form.context, metamodel?.content, metamodelId, selectedId, isNew]);
 
-  // ── Save ──────────────────────────────────────────────────────────
+  // ── Editor API for jump-to-offset ────────────────────────
+  const editorAPIRef = useRef<{ revealOffset: (offset: number) => void } | null>(null);
+  const registerEditorAPI = useCallback((api: { revealOffset: (offset: number) => void }) => {
+    editorAPIRef.current = api;
+  }, []);
 
+  // ── Selection handlers ───────────────────────────────────
+  const selectConstraint = useCallback(
+    (id: string) => {
+      const c = constraints.find((x) => x.id === id);
+      if (!c) return;
+      setSelectedId(id);
+      setIsNew(false);
+      setForm({
+        name: c.name,
+        context: c.context,
+        expression: c.expression,
+        severity: c.severity,
+      });
+      try {
+        localStorage.setItem(`ocl-ide.last:${metamodelId}`, id);
+      } catch {
+        /* noop */
+      }
+    },
+    [constraints, metamodelId],
+  );
+
+  const handleNew = useCallback(
+    (contextClass?: string) => {
+      setIsNew(true);
+      setSelectedId(null);
+      setForm({
+        ...EMPTY_FORM,
+        context: contextClass || eclassNames[0] || '',
+      });
+    },
+    [eclassNames],
+  );
+
+  // ── Save / delete ────────────────────────────────────────
   const handleSave = useCallback(async () => {
-    if (!metamodelId || !formName || !formContext || !formExpression) return;
+    if (!metamodelId || !form.name || !form.context || !form.expression) return;
     setSaving(true);
     try {
-      if (editingId) {
-        await updateOCLConstraint(metamodelId, editingId, {
-          name: formName,
-          context: formContext,
-          expression: formExpression,
-          severity: formSeverity,
+      if (isNew) {
+        const created = await createOCLConstraint(metamodelId, {
+          name: form.name,
+          context: form.context,
+          expression: form.expression,
+          severity: form.severity,
         });
-      } else {
-        await createOCLConstraint(metamodelId, {
-          name: formName,
-          context: formContext,
-          expression: formExpression,
-          severity: formSeverity,
+        const list = await getOCLConstraints(metamodelId);
+        setConstraints(list);
+        setIsNew(false);
+        setSelectedId(created.id);
+        setLastSaved(new Date().toISOString());
+        try {
+          localStorage.setItem(`ocl-ide.last:${metamodelId}`, created.id);
+        } catch {
+          /* noop */
+        }
+      } else if (selectedId) {
+        await updateOCLConstraint(metamodelId, selectedId, {
+          name: form.name,
+          context: form.context,
+          expression: form.expression,
+          severity: form.severity,
         });
+        const list = await getOCLConstraints(metamodelId);
+        setConstraints(list);
+        setLastSaved(new Date().toISOString());
       }
-      resetForm();
-      await load();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to save');
     } finally {
       setSaving(false);
     }
-  }, [metamodelId, editingId, formName, formContext, formExpression, formSeverity, load]);
+  }, [metamodelId, isNew, selectedId, form]);
 
-  // ── Validate ──────────────────────────────────────────────────────
+  const handleDelete = useCallback(
+    async (id: string) => {
+      if (!metamodelId) return;
+      if (!window.confirm('Delete this constraint?')) return;
+      try {
+        await deleteOCLConstraint(metamodelId, id);
+        const list = constraints.filter((c) => c.id !== id);
+        setConstraints(list);
+        setDiagnosticsMap((prev) => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+        setRunSummaries((prev) => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+        if (selectedId === id) {
+          const next = list[0];
+          if (next) selectConstraint(next.id);
+          else {
+            setSelectedId(null);
+            setForm(EMPTY_FORM);
+          }
+        }
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : 'Failed to delete');
+      }
+    },
+    [constraints, metamodelId, selectedId, selectConstraint],
+  );
 
-  const handleValidate = useCallback(async () => {
+  const handleRename = useCallback(
+    (c: OCLConstraint) => {
+      // For now, focus the constraint in the inspector (Properties tab)
+      selectConstraint(c.id);
+    },
+    [selectConstraint],
+  );
+
+  // ── Validation ───────────────────────────────────────────
+  const handleValidateAll = useCallback(async () => {
     if (!metamodelId) return;
     setValidating(true);
-    setResults(null);
+    setValidationResults(null);
     try {
-      // Use selected model content or metamodel structure as fallback
-      const selectedModel = models.find((m) => m.id === selectedModelId);
-      const modelContent = selectedModel?.content
-        ? JSON.stringify(selectedModel.content)
+      const sel = models.find((m) => m.id === selectedModelId);
+      const modelContent = sel?.content
+        ? JSON.stringify(sel.content)
         : JSON.stringify(metamodel?.content || {});
       const res = await validateOCLConstraints(metamodelId, modelContent);
-      setResults(res);
+      setValidationResults(res);
+      const summaries: RunSummaries = {};
+      for (const r of res) summaries[r.constraintId] = runStatusFromResult(r);
+      setRunSummaries(summaries);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Validation failed');
     } finally {
@@ -243,253 +395,364 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
     }
   }, [metamodelId, models, selectedModelId, metamodel]);
 
-  // ── Edit / Delete ─────────────────────────────────────────────────
-
-  const startEdit = (c: OCLConstraint) => {
-    setEditingId(c.id);
-    setFormName(c.name);
-    setFormContext(c.context);
-    setFormExpression(c.expression);
-    setFormSeverity(c.severity);
-  };
-
-  const handleDelete = async (id: string) => {
-    if (!metamodelId) return;
-    if (!window.confirm('Delete this constraint?')) return;
+  const handleValidateExpression = useCallback(async () => {
+    // Force a synchronous diagnose right now
+    if (!metamodel?.content || !form.expression || !form.context) return;
     try {
-      await deleteOCLConstraint(metamodelId, id);
-      setConstraints((s) => s.filter((x) => x.id !== id));
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to delete');
+      const diags = await diagnoseOCLExpression(
+        metamodelId,
+        form.expression,
+        form.context,
+        metamodel.content,
+      );
+      const targetId = isNew ? '__new__' : selectedId || '__new__';
+      const list: OCLDiagnostic[] = (diags as any[]).map((d) => {
+        const lc = offsetToLineColumn(form.expression, d.offset);
+        return {
+          offset: d.offset,
+          length: d.length || 1,
+          message: d.message,
+          severity: d.severity,
+          line: lc.line,
+          column: lc.column,
+        };
+      });
+      setDiagnosticsMap((prev) => ({ ...prev, [targetId]: list }));
+      setProblemsVisible(true);
+    } catch {
+      /* noop */
     }
-  };
+  }, [metamodel, form, metamodelId, isNew, selectedId]);
 
-  const resetForm = () => {
-    setEditingId(null);
-    setFormName('');
-    setFormContext('');
-    setFormExpression('');
-    setFormSeverity('error');
-  };
+  // ── Format (placeholder) ─────────────────────────────────
+  const handleFormat = useCallback(() => {
+    // Minimal formatter: trim trailing spaces, normalize whitespace
+    const formatted = form.expression
+      .split('\n')
+      .map((l) => l.replace(/[ \t]+$/, ''))
+      .join('\n');
+    if (formatted !== form.expression) {
+      setForm((f) => ({ ...f, expression: formatted }));
+    }
+  }, [form.expression]);
 
+  // ── Form change ──────────────────────────────────────────
+  const updateForm = useCallback((patch: Partial<ConstraintFormState>) => {
+    setForm((f) => ({ ...f, ...patch }));
+  }, []);
+
+  // ── Jump to problem ──────────────────────────────────────
+  const handleJumpTo = useCallback(
+    (constraintId: string, offset: number) => {
+      if (constraintId === '__new__') {
+        editorAPIRef.current?.revealOffset(offset);
+        return;
+      }
+      if (constraintId !== selectedId) {
+        selectConstraint(constraintId);
+        // Defer jump until after editor swaps content
+        setTimeout(() => editorAPIRef.current?.revealOffset(offset), 80);
+      } else {
+        editorAPIRef.current?.revealOffset(offset);
+      }
+    },
+    [selectedId, selectConstraint],
+  );
+
+  // ── Validation status ────────────────────────────────────
+  const validationStatus: 'valid' | 'invalid' | 'unknown' = useMemo(() => {
+    const targetId = isNew ? '__new__' : selectedId;
+    if (!targetId) return 'unknown';
+    const diags = diagnosticsMap[targetId];
+    if (!diags) return 'unknown';
+    if (diags.some((d) => d.severity === 'error')) return 'invalid';
+    return 'valid';
+  }, [isNew, selectedId, diagnosticsMap]);
+
+  // ── Monaco language registration (one-time per metamodel) ─
+  const monacoLangRegisteredRef = useRef(false);
+  const monacoProvidersRef = useRef<{
+    setContextClass: (cn: string) => void;
+    disposables: any[];
+  } | null>(null);
+  // Register providers once Monaco is loaded. We rely on @monaco-editor/loader to access the global instance.
+  useEffect(() => {
+    if (monacoLangRegisteredRef.current) return;
+    if (!metamodel?.content) return;
+    monacoLangRegisteredRef.current = true;
+    (async () => {
+      const monacoMod = await import('monaco-editor');
+      const monaco = (monacoMod as any).default || monacoMod;
+      const { registerOCLProviders, getOCLMonarchTokens } = await import(
+        '../ocl/oclMonacoAdapter'
+      );
+
+      // Register language if not present
+      const existing = monaco.languages.getLanguages();
+      if (!existing.find((l: any) => l.id === 'emf-ocl')) {
+        monaco.languages.register({ id: 'emf-ocl' });
+      }
+      monaco.languages.setMonarchTokensProvider('emf-ocl', getOCLMonarchTokens());
+      const providers = registerOCLProviders(monaco, metamodel.content, form.context || '');
+      monacoProvidersRef.current = providers;
+    })();
+    return () => {
+      const p = monacoProvidersRef.current;
+      if (p) {
+        for (const d of p.disposables) {
+          try {
+            d.dispose();
+          } catch {
+            /* noop */
+          }
+        }
+        monacoProvidersRef.current = null;
+      }
+      monacoLangRegisteredRef.current = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [metamodel?.content]);
+
+  // Sync context class with providers
+  useEffect(() => {
+    monacoProvidersRef.current?.setContextClass(form.context || '');
+  }, [form.context]);
+
+  // ── Render ───────────────────────────────────────────────
   if (loading) {
     return (
-      <div style={{ padding: 24 }}>
-        <div className="skeleton" style={{ height: 32, width: 240, marginBottom: 24 }} />
-        <div className="skeleton" style={{ height: 400, borderRadius: 'var(--radius)' }} />
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100%',
+          padding: 24,
+          gap: 12,
+        }}
+      >
+        <div className="skeleton" style={{ height: 32, width: 240 }} />
+        <div className="skeleton" style={{ flex: 1, borderRadius: 'var(--radius-sm)' }} />
       </div>
     );
   }
 
+  const showInspectorContextClass = form.context;
+  const selectedModelName = models.find((m) => m.id === selectedModelId)?.name ?? null;
+  const fullDiagnosticsMap = diagnosticsMap;
+  // Effective constraints list passed to problems/browser (filter out the synthetic __new__ key from problems)
+
   return (
-    <div style={{ padding: 24 }}>
-      {/* Header */}
-      <div className="detail-header" style={{ marginBottom: 24 }}>
-        <div className="detail-header-left">
-          {!props.projectId && (
-            <Link to={`/projects/${projectId}`} className="back-link">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
-              </svg>
-              Back
-            </Link>
-          )}
-          <div>
-            <h1 className="page-title" style={{ margin: 0 }}>
-              OCL Constraints — {metamodel?.name}
-            </h1>
-            <p className="page-subtitle" style={{ marginTop: 2 }}>
-              Define and validate OCL invariants on model instances
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {error && <ErrorPanel title="Error" message={error} compact />}
-
-      {/* Form / Editor */}
-      <div className="card" style={{ padding: 16, marginBottom: 20 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
-          {editingId ? 'Edit Constraint' : 'New Constraint'}
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
-          <div className="form-field">
-            <label>Name {!formName && <span style={{ color: 'var(--danger)' }}>*</span>}</label>
-            <input
-              value={formName}
-              onChange={(e) => setFormName(e.target.value)}
-              placeholder="e.g., UniqueName"
-              style={{
-                width: '100%', padding: '8px 12px', borderRadius: 6,
-                border: `1px solid ${!formName ? 'var(--danger)' : 'var(--border)'}`, fontSize: '.8125rem',
-                fontFamily: 'inherit', background: 'var(--surface)',
-              }}
-            />
-          </div>
-          <div className="form-field">
-            <label>Context (EClass) {!formContext && <span style={{ color: 'var(--danger)' }}>*</span>}</label>
-            <select
-              value={formContext}
-              onChange={(e) => setFormContext(e.target.value)}
-              style={{
-                width: '100%', padding: '8px 12px', borderRadius: 6,
-                border: `1px solid ${!formContext ? 'var(--danger)' : 'var(--border)'}`, fontSize: '.8125rem',
-                fontFamily: 'inherit', background: 'var(--surface)',
-              }}
-            >
-              <option value="">— Select EClass —</option>
-              {eclassNames.map((ec) => (
-                <option key={ec} value={ec}>{ec}</option>
-              ))}
-            </select>
-          </div>
-          <div className="form-field">
-            <label>Severity</label>
-            <select
-              value={formSeverity}
-              onChange={(e) => setFormSeverity(e.target.value)}
-              style={{
-                width: '100%', padding: '8px 12px', borderRadius: 6,
-                border: '1px solid var(--border)', fontSize: '.8125rem',
-                fontFamily: 'inherit', background: 'var(--surface)',
-              }}
-            >
-              {SEVERITY_OPTIONS.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <div className="form-field" style={{ marginBottom: 12 }}>
-          <label>OCL Expression {!formExpression && <span style={{ color: 'var(--danger)' }}>*</span>}</label>
-          <div style={{ border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
-            <Editor
-              height="120px"
-              language="emf-ocl"
-              value={formExpression}
-              onChange={(val) => setFormExpression(val || '')}
-              onMount={handleEditorMount}
-              beforeMount={handleBeforeMount}
-              theme={monacoTheme}
-              options={{
-                minimap: { enabled: false },
-                fontSize: 13,
-                lineNumbers: 'on',
-                scrollBeyondLastLine: false,
-                automaticLayout: true,
-              }}
-            />
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving || !formName || !formContext || !formExpression}>
-            {saving ? 'Saving...' : editingId ? <><Save size={14} /> Update</> : <><Plus size={14} /> Create</>}
-          </button>
-          {editingId && (
-            <button className="btn btn-ghost btn-sm" onClick={resetForm}>
-              Cancel
-            </button>
-          )}
-          {(formName || formContext || formExpression) && (!formName || !formContext || !formExpression) && (
-            <span style={{ fontSize: 11, color: 'var(--danger)' }}>All fields are required (name, context, expression)</span>
-          )}
-        </div>
-      </div>
-
-      {/* Validate Button + Model Selector + Results */}
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 16 }}>
-        <button className="btn btn-secondary btn-sm" onClick={handleValidate} disabled={validating || constraints.length === 0}>
-          {validating ? 'Validating...' : 'Validate All'}
-        </button>
-        {models.length > 0 && (
-          <select
-            value={selectedModelId}
-            onChange={(e) => setSelectedModelId(e.target.value)}
-            style={{
-              padding: '6px 10px', borderRadius: 6,
-              border: '1px solid var(--border)', fontSize: '.8125rem',
-              fontFamily: 'inherit', background: 'var(--surface)',
-            }}
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        width: '100%',
+        background: 'var(--bg)',
+        color: 'var(--text)',
+        overflow: 'hidden',
+      }}
+    >
+      {/* Optional back-link header for standalone route */}
+      {!props.projectId && projectId && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            padding: '6px 12px',
+            borderBottom: '1px solid var(--border)',
+            fontSize: 12,
+            background: 'var(--surface)',
+            flexShrink: 0,
+          }}
+        >
+          <Link
+            to={`/projects/${projectId}`}
+            className="back-link"
+            style={{ color: 'var(--text-muted)', textDecoration: 'none' }}
           >
-            <option value="">Metamodel structure</option>
-            {models.map((m) => (
-              <option key={m.id} value={m.id}>{m.name} (M1)</option>
-            ))}
-          </select>
-        )}
-        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-          {constraints.length} constraint{constraints.length !== 1 ? 's' : ''}
-        </span>
-      </div>
-
-      {/* Validation Results */}
-      {results && (
-        <div className="card" style={{ padding: 16, marginBottom: 20 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
-            Validation Results
-            <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 400, color: 'var(--text-muted)' }}>
-              ({results.filter((r) => r.passed).length}/{results.length} passed)
-            </span>
-          </div>
-          {results.map((r) => (
-            <div key={r.constraintId} style={{
-              display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 12px',
-              marginBottom: 4, borderRadius: 6,
-              background: r.passed ? 'var(--success-bg)' : 'var(--danger-bg)',
-              border: `1px solid ${r.passed ? 'var(--success)' : 'var(--danger)'}`,
-            }}>
-              <span style={{ fontSize: 14 }}>{r.passed ? '✓' : '✗'}</span>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 12, fontWeight: 600 }}>{r.name}</div>
-                <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
-                  {r.context}: {r.expression}
-                </div>
-                {r.error && (
-                  <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 4 }}>
-                    {r.error}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
+            ← Back to project
+          </Link>
         </div>
       )}
 
-      {/* Constraint List */}
-      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
-        All Constraints
-      </div>
-      {constraints.length === 0 ? (
-        <div className="empty-state" style={{ padding: '48px 24px' }}>
-          <List size={32} />
-          <p>No OCL constraints yet</p>
-          <p style={{ color: 'var(--text-muted)', marginTop: 4 }}>
-            Define invariants to validate model instances
-          </p>
+      <OCLToolbar
+        metamodelName={metamodel?.name || ''}
+        contextClass={form.context}
+        dirty={dirty}
+        saving={saving}
+        validating={validating}
+        canSave={!!form.name && !!form.context && !!form.expression}
+        onNew={() => handleNew()}
+        onSave={handleSave}
+        onFormat={handleFormat}
+        onValidateExpression={handleValidateExpression}
+        onValidateAll={handleValidateAll}
+      />
+
+      {error && (
+        <div style={{ padding: 8 }}>
+          <ErrorPanel title="Error" message={error} compact />
         </div>
-      ) : (
-        constraints.map((c) => (
-          <div key={c.id} className="card" style={{ padding: 12, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{
-              width: 8, height: 8, borderRadius: '50%',
-              background: SEVERITY_COLORS[c.severity] || 'var(--text-muted)',
-              flexShrink: 0,
-            }} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 500 }}>{c.name}</div>
-              <div style={{ fontSize: 11, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                <code style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--text-muted)' }}>context {c.context} inv:</code> {c.expression}
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-              <button className="btn btn-ghost btn-sm" onClick={() => startEdit(c)}>Edit</button>
-              <button className="btn btn-ghost btn-sm" onClick={() => handleDelete(c.id)} style={{ color: 'var(--danger)' }}>
-                <Trash2 size={14} />
-              </button>
-            </div>
-          </div>
-        ))
       )}
+
+      {/* Body: 3-pane + bottom dock */}
+      <div
+        style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'row',
+          minHeight: 0,
+          overflow: 'hidden',
+        }}
+      >
+        <ResizablePanel
+          direction="right"
+          defaultWidth={240}
+          minWidth={180}
+          maxWidth={400}
+          storageKey="ocl-ide.left.width"
+          style={{ height: '100%' }}
+        >
+          <OCLConstraintBrowser
+            constraints={constraints}
+            eclassNames={eclassNames}
+            selectedId={selectedId}
+            diagnosticsMap={fullDiagnosticsMap}
+            runSummaries={runSummaries}
+            dirtyId={dirty && selectedId ? selectedId : null}
+            onSelect={selectConstraint}
+            onNew={handleNew}
+            onDelete={handleDelete}
+            onRename={handleRename}
+          />
+        </ResizablePanel>
+
+        {/* Center column: editor + problems */}
+        <div
+          style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            minWidth: 0,
+            minHeight: 0,
+          }}
+        >
+          {!selectedId && !isNew ? (
+            <WelcomeState onNew={() => handleNew()} />
+          ) : (
+            <OCLEditorPane
+              value={form.expression}
+              language="emf-ocl"
+              theme={theme}
+              metamodelContent={metamodel?.content}
+              contextClass={form.context}
+              diagnostics={fullDiagnosticsMap[selectedId || '__new__'] || []}
+              onChange={(val) => updateForm({ expression: val })}
+              onCursorChange={setCursor}
+              onSave={handleSave}
+              onValidateAll={handleValidateAll}
+              onFormat={handleFormat}
+              onNew={() => handleNew()}
+              registerEditorAPI={registerEditorAPI}
+            />
+          )}
+
+          {problemsVisible && (
+            <ResizablePanelV
+              direction="top"
+              defaultHeight={200}
+              minHeight={120}
+              maxHeight={500}
+              storageKey="ocl-ide.problems.height"
+              style={{ width: '100%' }}
+            >
+              <OCLProblemsPanel
+                constraints={constraints}
+                diagnosticsMap={fullDiagnosticsMap}
+                validationResults={validationResults}
+                onJumpTo={handleJumpTo}
+                onClose={() => setProblemsVisible(false)}
+              />
+            </ResizablePanelV>
+          )}
+        </div>
+
+        <ResizablePanel
+          direction="left"
+          defaultWidth={320}
+          minWidth={240}
+          maxWidth={440}
+          storageKey="ocl-ide.right.width"
+          style={{ height: '100%' }}
+        >
+          <OCLInspector
+            form={form}
+            eclassNames={eclassNames}
+            metamodelContent={metamodel?.content || {}}
+            contextClass={showInspectorContextClass}
+            models={models}
+            selectedModelId={selectedModelId}
+            onChange={updateForm}
+            onSelectModel={setSelectedModelId}
+          />
+        </ResizablePanel>
+      </div>
+
+      <OCLStatusBar
+        cursor={cursor}
+        contextClass={form.context}
+        diagnosticsMap={
+          selectedId
+            ? { [selectedId]: fullDiagnosticsMap[selectedId] || [] }
+            : isNew
+              ? { __new__: fullDiagnosticsMap['__new__'] || [] }
+              : {}
+        }
+        selectedModelName={selectedModelName}
+        saving={saving}
+        dirty={dirty}
+        lastSaved={lastSaved}
+        validationStatus={validationStatus}
+      />
+    </div>
+  );
+}
+
+function WelcomeState({ onNew }: { onNew: () => void }) {
+  return (
+    <div
+      style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        color: 'var(--text-muted)',
+        background: 'var(--bg)',
+      }}
+    >
+      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)' }}>
+        OCL Editor
+      </div>
+      <div style={{ fontSize: 12 }}>Select a constraint or create a new one to start.</div>
+      <button
+        onClick={onNew}
+        style={{
+          marginTop: 12,
+          padding: '8px 14px',
+          borderRadius: 6,
+          border: '1px solid var(--primary)',
+          background: 'var(--primary-bg)',
+          color: 'var(--primary-light)',
+          fontSize: 13,
+          fontWeight: 500,
+          cursor: 'pointer',
+        }}
+      >
+        + New constraint
+      </button>
     </div>
   );
 }

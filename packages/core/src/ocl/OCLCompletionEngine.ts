@@ -160,7 +160,7 @@ export class OCLCompletionEngine {
 
     // Check if we're right after '->'
     if (trimmed.endsWith('->')) {
-      return { trigger: 'arrow', prefix: '', expressionBefore: trimmed.slice(0, -2) };
+      return { trigger: 'arrow', prefix: '', expressionBefore: this.extractReceiver(trimmed.slice(0, -2)) };
     }
 
     // Check if we're typing after '->' with partial text
@@ -168,20 +168,21 @@ export class OCLCompletionEngine {
     if (arrowMatch) {
       const prefix = arrowMatch[1];
       const exprBefore = before.substring(0, before.lastIndexOf('->'));
-      return { trigger: 'arrow', prefix, expressionBefore: exprBefore };
+      return { trigger: 'arrow', prefix, expressionBefore: this.extractReceiver(exprBefore) };
     }
 
     // Check if we're right after '.'
     if (trimmed.endsWith('.')) {
-      return { trigger: 'dot', prefix: '', expressionBefore: trimmed.slice(0, -1) };
+      return { trigger: 'dot', prefix: '', expressionBefore: this.extractReceiver(trimmed.slice(0, -1)) };
     }
 
     // Check if we're typing after '.' with partial text
     const dotMatch = before.match(/\.\s*([a-zA-Z_]\w*)$/);
     if (dotMatch) {
       const prefix = dotMatch[1];
-      const exprBefore = before.substring(0, before.lastIndexOf('.'));
-      return { trigger: 'dot', prefix, expressionBefore: exprBefore };
+      const dotPos = before.length - dotMatch[0].length;
+      const exprBefore = before.substring(0, dotPos);
+      return { trigger: 'dot', prefix, expressionBefore: this.extractReceiver(exprBefore) };
     }
 
     // Check if we're after '::'
@@ -196,6 +197,84 @@ export class OCLCompletionEngine {
     }
 
     return { trigger: 'empty', prefix: '', expressionBefore: before };
+  }
+
+  /**
+   * Extract the receiver sub-expression from text before a dot/arrow.
+   * For "self.salary <> self", returns "self".
+   * For "self.department", returns "self.department".
+   * For "(x + y)", returns "(x + y)".
+   * Scans backwards to find where the current navigation chain starts.
+   */
+  private extractReceiver(fullExpr: string): string {
+    const text = fullExpr.trimEnd();
+    let i = text.length - 1;
+    let depth = 0;
+
+    while (i >= 0) {
+      const ch = text[i];
+
+      if (ch === ')') {
+        depth++;
+        i--;
+        continue;
+      }
+
+      if (ch === '(') {
+        if (depth > 0) {
+          depth--;
+          i--;
+          continue;
+        }
+        // Unmatched '(' — receiver starts after this
+        return text.substring(i + 1).trim();
+      }
+
+      if (depth > 0) {
+        // Inside parentheses — skip everything
+        i--;
+        continue;
+      }
+
+      // At top level (depth === 0)
+      if (/[a-zA-Z_0-9]/.test(ch)) {
+        i--;
+        continue;
+      }
+
+      if (ch === '.') {
+        // Part of navigation chain (e.g., self.department)
+        i--;
+        continue;
+      }
+
+      if (ch === '>' && i > 0 && text[i - 1] === '-') {
+        // -> arrow navigation
+        i -= 2;
+        continue;
+      }
+
+      if (ch === '@') {
+        // @pre notation
+        i--;
+        continue;
+      }
+
+      if (ch === "'") {
+        // String literal — scan back to opening quote
+        i--;
+        while (i >= 0 && text[i] !== "'") i--;
+        if (i >= 0) i--;
+        continue;
+      }
+
+      // Any other character at top level is a separator
+      // (space, operator, comma, |, etc.)
+      const receiver = text.substring(i + 1).trim();
+      return receiver || text;
+    }
+
+    return text;
   }
 
   /**
