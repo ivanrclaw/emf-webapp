@@ -134,6 +134,9 @@ const HOLLOW_TRIANGLE = (id: string, color: string) => (
 // Common edge logic with spreading
 // ─────────────────────────────────────────────────────────────────
 
+/** Spacing between parallel edges connecting the same node pair (vertical/horizontal offset) */
+const PAIR_EDGE_SPACING = 20;
+
 function useEdgeCoords(
   data: EcoreEdgeData | undefined,
   groupInfo: EdgeGroupInfo,
@@ -193,6 +196,16 @@ function useEdgeCoords(
     targetNode.position.x, targetNode.position.y, tW, tH,
   );
 
+  // Compute pair offset for parallel edges between the same two nodes.
+  // This offsets the intermediate routing channel so edges don't overlap vertically.
+  // Base offset is 20 (getSmoothStepPath default). We spread around it.
+  let pairOffset = 20; // default
+  if (groupInfo.pairGroupSize > 1) {
+    const totalSpan = PAIR_EDGE_SPACING * (groupInfo.pairGroupSize - 1);
+    const centered = -totalSpan / 2 + PAIR_EDGE_SPACING * groupInfo.pairGroupIndex;
+    pairOffset = Math.max(8, 20 + centered); // ensure minimum 8px from handle
+  }
+
   return {
     sourceX: spreadSource.x,
     sourceY: spreadSource.y,
@@ -202,6 +215,7 @@ function useEdgeCoords(
     targetPosition: calcHandlePos(targetNode, bestTargetSide).position,
     bestSourceSide,
     bestTargetSide,
+    pairOffset,
   };
 }
 
@@ -224,6 +238,7 @@ function ReferenceEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
   const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX: effSourceX, sourceY: effSourceY, sourcePosition,
     targetX: effTargetX, targetY: effTargetY, targetPosition,
+    offset: coords?.pairOffset ?? 0,
   });
 
   const ref = data?.reference;
@@ -264,6 +279,7 @@ function ContainmentEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
   const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX: effSourceX, sourceY: effSourceY, sourcePosition,
     targetX: effTargetX, targetY: effTargetY, targetPosition,
+    offset: coords?.pairOffset ?? 0,
   });
 
   const ref = data?.reference;
@@ -308,6 +324,7 @@ function InheritanceEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
   const [edgePath] = getSmoothStepPath({
     sourceX: effSourceX, sourceY: effSourceY, sourcePosition,
     targetX: effTargetX, targetY: effTargetY, targetPosition,
+    offset: coords?.pairOffset ?? 0,
   });
 
   const color = 'var(--text-muted)';

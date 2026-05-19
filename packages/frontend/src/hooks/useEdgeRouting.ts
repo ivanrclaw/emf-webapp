@@ -44,6 +44,8 @@ export function useEdgeRouting(
       sourceGroupIndex: 0,
       targetGroupSize: 1,
       targetGroupIndex: 0,
+      pairGroupSize: 1,
+      pairGroupIndex: 0,
     };
   }, [edges, edgeId]);
 

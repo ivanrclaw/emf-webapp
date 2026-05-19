@@ -23,6 +23,10 @@ export interface EdgeGroupInfo {
   targetGroupSize: number;
   /** This edge's index among edges sharing its target side */
   targetGroupIndex: number;
+  /** How many edges connect the same node pair (bidirectional)? */
+  pairGroupSize: number;
+  /** This edge's index among edges connecting the same node pair */
+  pairGroupIndex: number;
 }
 
 export interface CrossingPoint {
@@ -90,6 +94,24 @@ export function collectEdgeGroups(
   const tgtSize = new Map<string, number>();
   targetGroups.forEach((ids, key) => ids.forEach((id) => tgtSize.set(id, ids.length)));
 
+  // Pair grouping: edges connecting the same two nodes (bidirectional)
+  // Key is sorted pair so A→B and B→A are in the same group
+  const pairGroups = new Map<string, string[]>();
+  edges.forEach((e) => {
+    const pairKey = [e.source, e.target].sort().join('|');
+    if (!pairGroups.has(pairKey)) pairGroups.set(pairKey, []);
+    pairGroups.get(pairKey)!.push(e.id);
+  });
+
+  const pairIdx = new Map<string, number>();
+  const pairSize = new Map<string, number>();
+  pairGroups.forEach((ids) => {
+    ids.forEach((id, i) => {
+      pairIdx.set(id, i);
+      pairSize.set(id, ids.length);
+    });
+  });
+
   const result = new Map<string, EdgeGroupInfo>();
   // Collect all unique edge IDs
   const allIds = new Set(edges.map((e) => e.id));
@@ -99,6 +121,8 @@ export function collectEdgeGroups(
       sourceGroupIndex: srcIdx.get(id) ?? 0,
       targetGroupSize: tgtSize.get(id) ?? 1,
       targetGroupIndex: tgtIdx.get(id) ?? 0,
+      pairGroupSize: pairSize.get(id) ?? 1,
+      pairGroupIndex: pairIdx.get(id) ?? 0,
     });
   });
 
