@@ -203,32 +203,23 @@ export function registerOCLProviders(
   disposables.push(
     monaco.languages.registerHoverProvider('emf-ocl', {
       provideHover(model: any, position: any) {
+        const word = model.getWordAtPosition(position);
+        if (!word) return null;
+
         const lineContent = model.getLineContent(position.lineNumber);
         const offset = position.column - 1;
 
         const info = hoverEngine.hover(lineContent, offset, contextClass);
         if (!info) return null;
 
-        const contents: Array<{ value: string; isTrusted?: boolean }> = [];
-
-        if (info.signature) {
-          contents.push({ value: '```ocl\n' + info.signature + '\n```' });
-        } else if (info.type) {
-          contents.push({ value: '```ocl\n' + info.word + ' : ' + info.type + '\n```' });
-        }
-
-        if (info.documentation) {
-          contents.push({ value: info.documentation });
-        }
-
         return {
-          contents,
           range: {
             startLineNumber: position.lineNumber,
             endLineNumber: position.lineNumber,
-            startColumn: info.range.start + 1, // Convert to 1-based
-            endColumn: info.range.end + 1,
+            startColumn: word.startColumn,
+            endColumn: word.endColumn,
           },
+          contents: [{ value: info.markdown, isTrusted: true }],
         };
       },
     }),
@@ -245,16 +236,16 @@ export function registerOCLProviders(
         const result = definitionEngine.findDefinition(lineContent, offset, contextClass);
         if (!result) return null;
 
-        // For metamodel features, we can't navigate to a file,
-        // but we can highlight the definition location in the same model.
-        // Return the current position as a "peek" definition.
+        const word = model.getWordAtPosition(position);
+        if (!word) return null;
+
         return {
           uri: model.uri,
           range: {
-            startLineNumber: position.lineNumber,
-            startColumn: result.range.start + 1,
-            endLineNumber: position.lineNumber,
-            endColumn: result.range.end + 1,
+            startLineNumber: result.targetLine ?? 1,
+            endLineNumber: result.targetLine ?? 1,
+            startColumn: 1,
+            endColumn: 1,
           },
         };
       },
@@ -270,13 +261,18 @@ export function registerOCLProviders(
       provideSignatureHelp(model: any, position: any) {
         const lineContent = model.getLineContent(position.lineNumber);
         const offset = position.column - 1;
+
+        // Find the operation name before the parenthesis
         const before = lineContent.substring(0, offset);
+        const parenIndex = before.lastIndexOf('(');
+        if (parenIndex < 0) return null;
 
-        // Find the operation name before the opening paren
-        const match = before.match(/(\w+)\s*\([^)]*$/);
-        if (!match) return null;
+        const opPart = before.substring(0, parenIndex).trim();
+        const opMatch = opPart.match(/([a-zA-Z_]\w*)$/);
+        if (!opMatch) return null;
 
-        const opName = match[1];
+        const opName = opMatch[1];
+
         // Count commas to determine active parameter
         const afterParen = before.substring(before.lastIndexOf('(') + 1);
         const activeParameter = (afterParen.match(/,/g) || []).length;
@@ -374,8 +370,8 @@ export function getOCLMonarchTokens(): any {
         [/->/, 'keyword.operator'],
         // Double colon
         [/::/, 'delimiter'],
-        // @pre
-        [/@pre/, 'keyword'],
+        // @ as a prefix (e.g., @pre) — tokenize separately to avoid Monarch attr ref issue
+        [/@/, { token: 'delimiter', next: '@at_pre' }],
 
         // Identifiers and keywords
         [/[a-zA-Z_]\w*/, {
@@ -388,7 +384,7 @@ export function getOCLMonarchTokens(): any {
         }],
 
         // Operators
-        [/[=<>!+\-*/]/, 'delimiter'],
+        [/[=<>!+\-*\/]/, 'delimiter'],
         [/\|/, 'delimiter'],
 
         // Brackets
@@ -397,6 +393,10 @@ export function getOCLMonarchTokens(): any {
 
         // Whitespace
         [/\s+/, 'white'],
+      ],
+      '@at_pre': [
+        [/pre\b/, 'keyword', '@pop'],
+        [/./, { token: '@pop', next: '@root' }],
       ],
     },
   };
