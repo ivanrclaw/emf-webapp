@@ -88,4 +88,22 @@ export class OCLConstraintController {
       throw new BadRequestException(err.message || 'Validation failed');
     }
   }
+
+  @Post('diagnose')
+  diagnose(
+    @Param('mmid') mmid: string,
+    @Body() body: { expression: string; context: string; metamodelContent: any },
+  ) {
+    if (!body || !body.expression || !body.context) {
+      throw new BadRequestException(
+        'Request body must include "expression", "context", and "metamodelContent"',
+      );
+    }
+    try {
+      return this.service.diagnose(body.expression, body.context, body.metamodelContent || {});
+    } catch (err: any) {
+      if (err instanceof HttpException) throw err;
+      throw new BadRequestException(err.message || 'Diagnosis failed');
+    }
+  }
 }

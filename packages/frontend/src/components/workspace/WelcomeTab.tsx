@@ -1,5 +1,6 @@
 import React from 'react';
 import { Plus, Upload, ExternalLink, FolderOpen } from '../icons';
+import { formatDate } from '../../utils/format';
 
 interface Project {
   id: string;
@@ -128,7 +129,7 @@ export const WelcomeTab: React.FC<WelcomeTabProps> = ({
                         fontFamily: 'monospace',
                       }}
                     >
-                      {project.updatedAt}
+                      {formatDate(project.updatedAt)}
                     </div>
                   </div>
                 </button>

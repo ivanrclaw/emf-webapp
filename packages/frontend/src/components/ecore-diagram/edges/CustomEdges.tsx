@@ -70,21 +70,15 @@ function renderCombinedLabel(
   cardinality: string,
   labelX: number,
   labelY: number,
-  sourceX: number,
-  sourceY: number,
-  targetX: number,
-  targetY: number,
   colors: { bg: string; text: string; border: string },
 ) {
   const combined = cardinality ? `${label} ${cardinality}` : label;
-  const px = labelX * 0.6 + sourceX * 0.4;
-  const py = labelY * 0.6 + sourceY * 0.4;
   return (
     <EdgeLabelRenderer>
       <div
         style={{
           position: 'absolute',
-          transform: `translate(-50%, -50%) translate(${px}px,${py}px)`,
+          transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
           background: colors.bg,
           border: `1px solid ${colors.border}`,
           borderRadius: 4,
@@ -250,7 +244,7 @@ function ReferenceEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
         markerEnd={`url(#arrow-${id})`}
       />
       <CrossingBridges edgeId={id} crossings={[]} />
-      {renderCombinedLabel(label, cardinality, labelX, labelY, effSourceX, effSourceY, effTargetX, effTargetY, colors)}
+      {renderCombinedLabel(label, cardinality, labelX, labelY, colors)}
     </>
   );
 }
@@ -294,7 +288,7 @@ function ContainmentEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
         markerEnd={`url(#arrow-${id})`}
       />
       <CrossingBridges edgeId={id} crossings={[]} />
-      {renderCombinedLabel(label, cardinality, labelX, labelY, effSourceX, effSourceY, effTargetX, effTargetY, colors)}
+      {renderCombinedLabel(label, cardinality, labelX, labelY, colors)}
     </>
   );
 }

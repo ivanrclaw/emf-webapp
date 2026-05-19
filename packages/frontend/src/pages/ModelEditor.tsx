@@ -338,7 +338,7 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
     const newObj: SemanticObject = {
       id: uid(),
       eClass: tool.createType,
-      attributes: { name: `New ${tool.createType}` },
+      attributes: { name: `${tool.createType}` },
       references: {},
     };
     // Apply initial attributes from tool

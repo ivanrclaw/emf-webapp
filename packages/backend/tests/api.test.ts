@@ -21,6 +21,7 @@ import { M1Model } from '../src/modules/m1model/m1model.entity.js';
 import { GraphicalSpec } from '../src/modules/graphicalspec/graphicalspec.entity.js';
 import { OCLConstraint } from '../src/modules/oclconstraint/oclconstraint.entity.js';
 import { CodeTemplate } from '../src/modules/codetemplate/codetemplate.entity.js';
+import { TemplateProject } from '../src/modules/codetemplate/template-project.entity.js';
 import { ModelVersion } from '../src/modules/modelversion/modelversion.entity.js';
 import { ProjectService } from '../src/modules/project/project.service.js';
 import { ProjectExportService } from '../src/modules/project/project-export.service.js';
@@ -36,7 +37,7 @@ beforeAll(async () => {
       TypeOrmModule.forRoot({
         type: 'sqlite',
         database: ':memory:',
-        entities: [Project, Metamodel, M1Model, GraphicalSpec, OCLConstraint, CodeTemplate, ModelVersion],
+        entities: [Project, Metamodel, M1Model, GraphicalSpec, OCLConstraint, CodeTemplate, TemplateProject, ModelVersion],
         synchronize: true,
       }),
       ProjectModule,
@@ -55,7 +56,7 @@ beforeAll(async () => {
     .useFactory({
       factory: async (ds: DataSource) => {
         const repo = ds.getRepository(Metamodel);
-        return new MetamodelService(repo, ds.getRepository(Project));
+        return new MetamodelService(repo);
       },
       inject: [getDataSourceToken()],
     })

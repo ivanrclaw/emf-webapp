@@ -15,5 +15,6 @@ import { EcoreTransformer } from '../../common/ecore-transformer.js';
   imports: [TypeOrmModule.forFeature([Metamodel])],
   controllers: [MetamodelController],
   providers: [MetamodelService, EcoreTransformer],
+  exports: [MetamodelService],
 })
 export class MetamodelModule {}

@@ -17,6 +17,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { Metamodel } from '../metamodel/metamodel.entity.js';
+import { TemplateProject } from './template-project.entity.js';
 
 export type TemplateLanguage = 'html' | 'sql' | 'typescript' | 'json-schema' | 'plantuml';
 
@@ -55,4 +56,17 @@ export class CodeTemplate {
   @ManyToOne(() => Metamodel, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'metamodel_id' })
   metamodel!: Metamodel;
+
+  @Column({ name: 'project_id', type: 'text', nullable: true })
+  project_id!: string | null;
+
+  @Column({ type: 'varchar', length: 255, default: 'main.mtl' })
+  filename!: string;
+
+  @Column({ name: 'file_order', type: 'integer', default: 0 })
+  file_order!: number;
+
+  @ManyToOne(() => TemplateProject, (p) => p.files, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'project_id' })
+  templateProject!: TemplateProject | null;
 }

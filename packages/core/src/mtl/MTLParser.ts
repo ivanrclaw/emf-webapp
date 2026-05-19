@@ -539,7 +539,7 @@ export class MTLParser {
 
     // ─── [query visibility name(params) : ReturnType = expr /] ──────────
     const queryMatch = content.match(
-      /^query\s+(public|private|protected)\s+(\w+)\s*\(([^)]*)\)\s*:\s*(\w+(?:\.\w+)*)\s*=\s*(.+)$/,
+      /^query\s+(public|private|protected)\s+(\w+)\s*\(([^)]*)\)\s*:\s*(\w+(?:\.\w+)*)\s*=\s*([\s\S]+)$/,
     );
     if (queryMatch) {
       return {
@@ -549,7 +549,7 @@ export class MTLParser {
         queryName: queryMatch[2],
         params: this.parseParams(queryMatch[3]),
         returnType: queryMatch[4],
-        queryExpression: queryMatch[5].trim(),
+        queryExpression: queryMatch[5].trim().replace(/\s+/g, ' '),
       };
     }
 
@@ -568,13 +568,30 @@ export class MTLParser {
       let post: string | undefined;
 
       // Parse optional clauses from rest
-      const guardMatch = rest.match(/\?\s*\((.+?)\)/);
-      if (guardMatch) guard = guardMatch[1].trim();
+      // Guard: ? (expr) — use balanced paren matching
+      const guardStart = rest.indexOf('?');
+      if (guardStart >= 0) {
+        const afterQ = rest.slice(guardStart + 1).trim();
+        if (afterQ.startsWith('(')) {
+          let depth = 0;
+          let guardEnd = -1;
+          for (let i = 0; i < afterQ.length; i++) {
+            if (afterQ[i] === '(') depth++;
+            else if (afterQ[i] === ')') {
+              depth--;
+              if (depth === 0) { guardEnd = i; break; }
+            }
+          }
+          if (guardEnd > 0) {
+            guard = afterQ.slice(1, guardEnd).trim();
+          }
+        }
+      }
 
       const overridesMatch = rest.match(/overrides\s+(\w+)/);
       if (overridesMatch) overrides = overridesMatch[1];
 
-      const postMatch = rest.match(/post\s*\((.+?)\)/);
+      const postMatch = rest.match(/post\s*\(([^)]*)\)/);
       if (postMatch) post = postMatch[1].trim();
 
       return {
@@ -610,34 +627,9 @@ export class MTLParser {
     }
 
     // ─── [for (iter : Type | collection) separator(...) before(...) after(...)] ─
-    const forMatch = content.match(
-      /^for\s*\(\s*(\w+)\s*(?::\s*(\w+(?:\.\w+)*))?\s*\|\s*(.+?)\s*\)\s*(.*)$/,
-    );
-    if (forMatch) {
-      const rest = forMatch[4].trim();
-      let separator: string | undefined;
-      let before: string | undefined;
-      let after: string | undefined;
-
-      const sepMatch = rest.match(/separator\s*\(\s*(.+?)\s*\)/);
-      if (sepMatch) separator = sepMatch[1].trim();
-
-      const beforeMatch = rest.match(/before\s*\(\s*(.+?)\s*\)/);
-      if (beforeMatch) before = beforeMatch[1].trim();
-
-      const afterMatch = rest.match(/after\s*\(\s*(.+?)\s*\)/);
-      if (afterMatch) after = afterMatch[1].trim();
-
-      return {
-        type: TagType.For,
-        raw: token,
-        iterator: forMatch[1],
-        iteratedType: forMatch[2] ?? '',
-        collection: forMatch[3].trim(),
-        separator,
-        before,
-        after,
-      };
+    if (content.startsWith('for')) {
+      const forParsed = this.parseForTag(content, token);
+      if (forParsed) return forParsed;
     }
 
     // ─── [if (condition)] ───────────────────────────────────────────────
@@ -706,5 +698,76 @@ export class MTLParser {
         type: parts[1]?.trim() ?? 'OclAny',
       };
     });
+  }
+
+  /**
+   * Parse [for (iter : Type | collection) separator(...) before(...) after(...)]
+   * Uses balanced-parentheses matching to correctly handle nested parens in collection expressions.
+   */
+  private parseForTag(content: string, token: string): any | null {
+    // Match "for" then find the outer balanced parens
+    const forPrefix = content.match(/^for\s*\(/);
+    if (!forPrefix) return null;
+
+    // Find the matching closing paren for the outer '(' using balanced counting
+    const startIdx = forPrefix[0].length - 1; // index of '('
+    let depth = 0;
+    let closeIdx = -1;
+    for (let i = startIdx; i < content.length; i++) {
+      if (content[i] === '(') depth++;
+      else if (content[i] === ')') {
+        depth--;
+        if (depth === 0) { closeIdx = i; break; }
+      }
+    }
+    if (closeIdx < 0) return null;
+
+    // Inner content between outer parens
+    const inner = content.slice(startIdx + 1, closeIdx).trim();
+    // Rest after the closing paren (separator, before, after)
+    const rest = content.slice(closeIdx + 1).trim();
+
+    // Parse inner: "iter : Type | collection"
+    // Find the pipe '|' that separates iterator from collection (first pipe outside nested parens)
+    let pipeIdx = -1;
+    let pDepth = 0;
+    for (let i = 0; i < inner.length; i++) {
+      if (inner[i] === '(') pDepth++;
+      else if (inner[i] === ')') pDepth--;
+      else if (inner[i] === '|' && pDepth === 0) { pipeIdx = i; break; }
+    }
+    if (pipeIdx < 0) return null;
+
+    const iterPart = inner.slice(0, pipeIdx).trim();
+    const collection = inner.slice(pipeIdx + 1).trim();
+
+    // Parse iterator: "varName : Type" or just "varName"
+    const iterMatch = iterPart.match(/^(\w+)\s*(?::\s*(\w+(?:\.\w+)*))?$/);
+    if (!iterMatch) return null;
+
+    // Parse optional separator/before/after from rest
+    let separator: string | undefined;
+    let before: string | undefined;
+    let after: string | undefined;
+
+    const sepMatch = rest.match(/separator\s*\(\s*(.+?)\s*\)/);
+    if (sepMatch) separator = sepMatch[1].trim();
+
+    const beforeMatch = rest.match(/before\s*\(\s*(.+?)\s*\)/);
+    if (beforeMatch) before = beforeMatch[1].trim();
+
+    const afterMatch = rest.match(/after\s*\(\s*(.+?)\s*\)/);
+    if (afterMatch) after = afterMatch[1].trim();
+
+    return {
+      type: TagType.For,
+      raw: token,
+      iterator: iterMatch[1],
+      iteratedType: iterMatch[2] ?? '',
+      collection,
+      separator,
+      before,
+      after,
+    };
   }
 }

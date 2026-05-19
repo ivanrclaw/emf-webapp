@@ -22,7 +22,7 @@
  *   iterateOp             → "(" IDENTIFIER (":" type)? ";" IDENTIFIER (":" type)? "=" expression "|" expression ")"
  *   args                  → expression ("," expression)*
  */
-export type ASTNode = LiteralNode | IdentifierNode | SelfNode | UnaryOpNode | BinaryOpNode | MethodCallNode | CollectionOpNode | LetInNode | IfNode | CollectionLiteralNode;
+export type ASTNode = LiteralNode | IdentifierNode | SelfNode | UnaryOpNode | BinaryOpNode | MethodCallNode | CollectionOpNode | LetInNode | IfNode | CollectionLiteralNode | TupleLiteralNode | AtPreNode;
 export interface LiteralNode {
     type: 'literal';
     valueType: 'number' | 'string' | 'boolean' | 'null' | 'invalid';
@@ -82,6 +82,19 @@ export interface CollectionLiteralNode {
     collectionType: 'Set' | 'Bag' | 'Sequence' | 'OrderedSet';
     elements: ASTNode[];
 }
+export interface TupleLiteralNode {
+    type: 'tupleliteral';
+    parts: TupleLiteralPart[];
+}
+export interface TupleLiteralPart {
+    name: string;
+    type?: string;
+    value: ASTNode;
+}
+export interface AtPreNode {
+    type: 'atpre';
+    expression: ASTNode;
+}
 export declare class OCLParser {
     private tokens;
     private pos;
@@ -107,6 +120,8 @@ export declare class OCLParser {
     /** Parse Set{ expr, ... }, Bag{ expr, ... }, etc. */
     private parseCollectionLiteral;
     private parseCallChain;
+    private parseTupleLiteral;
+    private parseTuplePart;
     private parseLambdaOperation;
     /**
      * Parse a "body" that starts with a dot-chain on an implicit iterator variable.
@@ -122,5 +137,10 @@ export declare class OCLParser {
     private match;
     private previous;
     private expect;
+    /**
+     * After '->', accept IDENTIFIER or any keyword token that is also a valid
+     * collection operation name (reject, closure, etc.).
+     */
+    private expectOperationName;
 }
 //# sourceMappingURL=OCLParser.d.ts.map

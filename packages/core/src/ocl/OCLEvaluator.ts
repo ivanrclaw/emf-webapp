@@ -26,9 +26,11 @@ import {
   LetInNode,
   IfNode,
   CollectionLiteralNode,
+  TupleLiteralNode,
+  AtPreNode,
 } from './OCLParser.js';
 
-export type EValue = string | number | boolean | null | undefined | OCLEObject | OCLEObject[] | Map<string, EValue>;
+export type EValue = string | number | boolean | null | undefined | OCLEObject | EValue[] | Map<string, EValue>;
 
 export interface OCLEObject {
   eClass: string;
@@ -96,6 +98,10 @@ export class OCLEvaluator {
         return this.evalIf(node as IfNode, context, scope);
       case 'collectionliteral':
         return this.evalCollectionLiteral(node as CollectionLiteralNode, context, scope);
+      case 'tupleliteral':
+        return this.evalTupleLiteral(node as TupleLiteralNode, context, scope);
+      case 'atpre':
+        return this.evalAtPre(node as AtPreNode, context, scope);
       default:
         throw new Error(`Unknown node type: ${(node as any).type}`);
     }
@@ -267,9 +273,13 @@ export class OCLEvaluator {
         if (Array.isArray(obj)) return obj.length;
         throw new Error(`size() called on non-collection/string`);
       case 'substring':
-        return typeof obj === 'string'
-          ? obj.substring(Number(args[0]), Number(args[1]))
-          : '';
+        // OCL substring(lower, upper) is 1-based inclusive
+        if (typeof obj === 'string') {
+          const lower = this.toNumber(args[0]);
+          const upper = this.toNumber(args[1]);
+          return obj.substring(lower - 1, upper);
+        }
+        return '';
       case 'toUpper':
         return typeof obj === 'string' ? obj.toUpperCase() : String(obj).toUpperCase();
       case 'toLower':
@@ -282,6 +292,61 @@ export class OCLEvaluator {
         return typeof obj === 'string' && typeof args[0] === 'string'
           ? obj.endsWith(args[0])
           : false;
+      case 'indexOf': {
+        // OCL: 1-based index, 0 if not found
+        const s = String(obj);
+        const sub = String(args[0]);
+        const idx = s.indexOf(sub);
+        return idx === -1 ? 0 : idx + 1;
+      }
+      case 'at': {
+        // String.at(i) — 1-based, returns character
+        if (typeof obj === 'string') {
+          const i = this.toNumber(args[0]);
+          if (i < 1 || i > obj.length) throw new Error(`String index out of bounds: ${i}`);
+          return obj.charAt(i - 1);
+        }
+        // Array.at handled in collectionop
+        throw new Error(`at() called on non-string/non-collection`);
+      }
+      case 'characters':
+        return typeof obj === 'string' ? (obj.split('') as EValue[]) : ([] as EValue[]);
+      case 'toInteger':
+        return typeof obj === 'string' ? (parseInt(obj, 10) || 0) : Math.trunc(this.toNumber(obj));
+      case 'toReal':
+        return typeof obj === 'string' ? (parseFloat(obj) || 0.0) : this.toNumber(obj);
+      case 'toBoolean':
+        if (typeof obj === 'string') return obj === 'true';
+        return this.toBoolean(obj);
+      case 'toString':
+        if (obj === null || obj === undefined) return 'null';
+        if (typeof obj === 'string') return obj;
+        return String(obj);
+      case 'trim':
+        return typeof obj === 'string' ? obj.trim() : String(obj).trim();
+      case 'replaceAll':
+        return typeof obj === 'string' && typeof args[0] === 'string' && typeof args[1] === 'string'
+          ? obj.split(args[0]).join(args[1])
+          : String(obj);
+      case 'replaceFirst':
+        return typeof obj === 'string' && typeof args[0] === 'string' && typeof args[1] === 'string'
+          ? obj.replace(args[0], args[1])
+          : String(obj);
+      case 'matches':
+        if (typeof obj === 'string' && typeof args[0] === 'string') {
+          try {
+            return new RegExp(args[0]).test(obj);
+          } catch { return false; }
+        }
+        return false;
+      case 'equalsIgnoreCase':
+        return typeof obj === 'string' && typeof args[0] === 'string'
+          ? obj.toLowerCase() === args[0].toLowerCase()
+          : false;
+      case 'toUpperCase':
+        return typeof obj === 'string' ? obj.toUpperCase() : String(obj).toUpperCase();
+      case 'toLowerCase':
+        return typeof obj === 'string' ? obj.toLowerCase() : String(obj).toLowerCase();
 
       // Numeric
       case 'abs':
@@ -310,25 +375,57 @@ export class OCLEvaluator {
         return obj; // No actual cast in JS runtime
       case 'oclIsUndefined':
         return obj === null || obj === undefined;
+      case 'oclIsInvalid':
+        return obj === null || obj === undefined;
+      case 'oclType': {
+        if (this.isEObject(obj)) return obj.eClass;
+        if (typeof obj === 'string') return 'String';
+        if (typeof obj === 'number') return Number.isInteger(obj) ? 'Integer' : 'Real';
+        if (typeof obj === 'boolean') return 'Boolean';
+        if (Array.isArray(obj)) return 'Collection';
+        if (obj instanceof Map) return 'Tuple';
+        return 'OclVoid';
+      }
+      case 'allInstances':
+        // allInstances requires access to all model elements — return empty by default
+        // Subclasses or integration layer can override
+        return [] as EValue[];
 
-      // Collection as property
+      // Collection as property / Tuple access / implicit collect
       default: {
+        // Tuple property access
+        if (obj instanceof Map) {
+          if (obj.has(method)) return obj.get(method)!;
+          throw new Error(`Tuple has no part '${method}'`);
+        }
         // Treat unknown method as property navigation
         if (this.isEObject(obj)) {
           const eo = obj as OCLEObject;
           if (method in eo.attributes) return eo.attributes[method];
           if (method in eo.references) return eo.references[method];
         }
-        // If obj is array, map the property across
+        // If obj is array, implicit collect (navigate property across all elements)
         if (Array.isArray(obj)) {
-          return (obj as OCLEObject[]).map((item) => {
+          const result: EValue[] = [];
+          for (const item of obj) {
             if (this.isEObject(item)) {
               const eo = item as OCLEObject;
-              if (method in eo.attributes) return eo.attributes[method];
-              if (method in eo.references) return eo.references[method];
+              if (method in eo.attributes) {
+                const val = eo.attributes[method];
+                if (Array.isArray(val)) result.push(...val);
+                else result.push(val);
+              } else if (method in eo.references) {
+                const val = eo.references[method];
+                if (Array.isArray(val)) result.push(...val);
+                else result.push(val);
+              } else {
+                result.push(null);
+              }
+            } else {
+              result.push(null);
             }
-            return null;
-          }).flat() as EValue;
+          }
+          return result as EValue[];
         }
         throw new Error(`Cannot resolve method/property '${method}' on ${typeof obj}`);
       }
@@ -581,9 +678,154 @@ export class OCLEvaluator {
         return acc;
       }
 
+      // ── Set/Bag/Sequence operations ──────────────────────────────
+      case 'excludesAll': {
+        const coll = node.args?.[0]
+          ? this.evalNode(node.args[0], context, scope)
+          : [];
+        const target = Array.isArray(coll) ? coll : [];
+        return target.every((t) => !col.some((c) => this.isEqual(c, t)));
+      }
+      case 'count': {
+        const val = node.args?.[0]
+          ? this.evalNode(node.args[0], context, scope)
+          : undefined;
+        return col.filter((item) => this.isEqual(item, val)).length;
+      }
+      case 'including': {
+        const val = node.args?.[0]
+          ? this.evalNode(node.args[0], context, scope)
+          : null;
+        return [...col, val] as EValue[];
+      }
+      case 'excluding': {
+        const val = node.args?.[0]
+          ? this.evalNode(node.args[0], context, scope)
+          : null;
+        return col.filter((item) => !this.isEqual(item, val)) as EValue[];
+      }
+      case 'union': {
+        const other = node.args?.[0]
+          ? this.evalNode(node.args[0], context, scope)
+          : [];
+        const otherArr = Array.isArray(other) ? other : [];
+        return [...col, ...otherArr] as EValue[];
+      }
+      case 'intersection': {
+        const other = node.args?.[0]
+          ? this.evalNode(node.args[0], context, scope)
+          : [];
+        const otherArr = Array.isArray(other) ? other : [];
+        return col.filter((item) => otherArr.some((o) => this.isEqual(item, o))) as EValue[];
+      }
+      case 'symmetricDifference': {
+        const other = node.args?.[0]
+          ? this.evalNode(node.args[0], context, scope)
+          : [];
+        const otherArr = Array.isArray(other) ? other : [];
+        const onlyInCol = col.filter((item) => !otherArr.some((o) => this.isEqual(item, o)));
+        const onlyInOther = otherArr.filter((item) => !col.some((c) => this.isEqual(c, item)));
+        return [...onlyInCol, ...onlyInOther] as EValue[];
+      }
+      case 'asSet': {
+        const seen = new Set<string>();
+        const unique: EValue[] = [];
+        for (const el of col) {
+          const key = JSON.stringify(el);
+          if (!seen.has(key)) { seen.add(key); unique.push(el); }
+        }
+        return unique;
+      }
+      case 'asOrderedSet': {
+        const seen = new Set<string>();
+        const unique: EValue[] = [];
+        for (const el of col) {
+          const key = JSON.stringify(el);
+          if (!seen.has(key)) { seen.add(key); unique.push(el); }
+        }
+        return unique;
+      }
+      case 'asBag':
+        return [...col] as EValue[];
+      case 'asSequence':
+        return [...col] as EValue[];
+      case 'append': {
+        const val = node.args?.[0]
+          ? this.evalNode(node.args[0], context, scope)
+          : null;
+        return [...col, val] as EValue[];
+      }
+      case 'prepend': {
+        const val = node.args?.[0]
+          ? this.evalNode(node.args[0], context, scope)
+          : null;
+        return [val, ...col] as EValue[];
+      }
+      case 'insertAt': {
+        const pos = node.args?.[0]
+          ? this.toNumber(this.evalNode(node.args[0], context, scope))
+          : 1;
+        const val = node.args?.[1]
+          ? this.evalNode(node.args[1], context, scope)
+          : null;
+        const result = [...col];
+        result.splice(pos - 1, 0, val);
+        return result as EValue[];
+      }
+      case 'subOrderedSet':
+      case 'subSequence': {
+        const lower = node.args?.[0]
+          ? this.toNumber(this.evalNode(node.args[0], context, scope))
+          : 1;
+        const upper = node.args?.[1]
+          ? this.toNumber(this.evalNode(node.args[1], context, scope))
+          : col.length;
+        return col.slice(lower - 1, upper) as EValue[];
+      }
+      case 'indexOf': {
+        const val = node.args?.[0]
+          ? this.evalNode(node.args[0], context, scope)
+          : undefined;
+        for (let i = 0; i < col.length; i++) {
+          if (this.isEqual(col[i], val)) return i + 1;
+        }
+        return 0;
+      }
+      case 'reverse':
+        return [...col].reverse() as EValue[];
+
       default:
         throw new Error(`Unknown collection operation: ${node.operation}`);
     }
+  }
+
+  // ── Tuple & @pre ─────────────────────────────────────────────────
+
+  private evalTupleLiteral(
+    node: TupleLiteralNode,
+    context: OCLEObject,
+    scope: Map<string, EValue>,
+  ): EValue {
+    const map = new Map<string, EValue>();
+    for (const part of node.parts) {
+      map.set(part.name, this.evalNode(part.value, context, scope));
+    }
+    return map;
+  }
+
+  private evalAtPre(
+    node: AtPreNode,
+    context: OCLEObject,
+    scope: Map<string, EValue>,
+  ): EValue {
+    // @pre requires a pre-state context. If not available, evaluate normally.
+    // In a full postcondition evaluator, we'd look up the pre-state.
+    // For now, evaluate the inner expression (best-effort without pre-state).
+    if (scope.has('__preState__')) {
+      const preContext = scope.get('__preState__') as OCLEObject;
+      return this.evalNode(node.expression, preContext, scope);
+    }
+    return this.evalNode(node.expression, context, scope);
   }
 
   // ── Helpers ──────────────────────────────────────────────────────

@@ -17,6 +17,10 @@
     "./serialization": {
       "import": "./dist/serialization/index.js",
       "types": "./dist/serialization/index.d.ts"
+    },
+    "./ocl": {
+      "import": "./dist/ocl/index.js",
+      "types": "./dist/ocl/index.d.ts"
     }
   },
   "scripts": {

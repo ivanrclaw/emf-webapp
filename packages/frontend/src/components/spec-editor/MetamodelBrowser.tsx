@@ -24,6 +24,7 @@ interface EClassInfo {
 interface MetamodelBrowserProps {
   eclasses: EClassInfo[];
   existingMappings: string[];
+  existingEdgeMappings: string[]; // "sourceClass.refName.targetClass" keys already mapped
   onAddNodeMapping: (className: string) => void;
   onAddEdgeMapping: (sourceClass: string, refName: string, targetClass: string) => void;
 }
@@ -31,6 +32,7 @@ interface MetamodelBrowserProps {
 export function MetamodelBrowser({
   eclasses,
   existingMappings,
+  existingEdgeMappings = [],
   onAddNodeMapping,
   onAddEdgeMapping,
 }: MetamodelBrowserProps) {
@@ -215,29 +217,36 @@ export function MetamodelBrowser({
                   <span style={{ color: 'var(--text)' }}>{ref.targetClass}</span>
                 </span>
 
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onAddEdgeMapping(ref.sourceClass, ref.refName, ref.targetClass);
-                  }}
-                  title={`Add edge mapping for ${ref.sourceClass}.${ref.refName}`}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    width: '18px',
-                    height: '18px',
-                    border: '1px solid var(--border)',
-                    borderRadius: '3px',
-                    background: 'var(--surface)',
-                    cursor: 'pointer',
-                    padding: 0,
-                    flexShrink: 0,
-                    color: 'var(--primary)',
-                  }}
-                >
-                  <Plus size={12} />
-                </button>
+                {existingEdgeMappings.includes(key) ? (
+                  <Check
+                    size={13}
+                    style={{ color: 'var(--success)', flexShrink: 0 }}
+                  />
+                ) : (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onAddEdgeMapping(ref.sourceClass, ref.refName, ref.targetClass);
+                    }}
+                    title={`Add edge mapping for ${ref.sourceClass}.${ref.refName}`}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '18px',
+                      height: '18px',
+                      border: '1px solid var(--border)',
+                      borderRadius: '3px',
+                      background: 'var(--surface)',
+                      cursor: 'pointer',
+                      padding: 0,
+                      flexShrink: 0,
+                      color: 'var(--primary)',
+                    }}
+                  >
+                    <Plus size={12} />
+                  </button>
+                )}
               </div>
             );
           })}

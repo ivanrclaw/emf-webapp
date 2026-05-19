@@ -54,7 +54,9 @@ export class MetamodelService {
     },
   ): Promise<Metamodel> {
     const safeName = data.name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-    const finalNsUri = data.nsURI || (data as any).ns_uri || `http://${safeName}.emf-webapp/1.0`;
+    // Accept both nsURI (NestJS DTO convention) and nsUri (JS/TS camelCase)
+    const nsUri = data.nsURI || (data as any).nsUri || (data as any).ns_uri;
+    const finalNsUri = nsUri || `http://${safeName}.emf-webapp/1.0`;
     const finalNsPrefix = data.nsPrefix || (data as any).ns_prefix || safeName;
     const mm = this.repo.create({
       project_id: projectId,

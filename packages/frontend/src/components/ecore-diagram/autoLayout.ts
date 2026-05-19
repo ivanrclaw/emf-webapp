@@ -28,9 +28,9 @@ export interface LayoutOptions {
 const DEFAULTS: Required<LayoutOptions> = {
   direction: 'TB',
   nodeWidth: 200,
-  nodeHeight: 160,
-  rankSep: 100,
-  nodeSep: 60,
+  nodeHeight: 140,
+  rankSep: 55,
+  nodeSep: 35,
 };
 
 /**
@@ -39,7 +39,7 @@ const DEFAULTS: Required<LayoutOptions> = {
  * minlen = minimum number of ranks between connected nodes.
  */
 const EDGE_CONFIG: Record<string, { weight: number; minlen: number }> = {
-  inheritanceEdge: { weight: 10, minlen: 2 },
+  inheritanceEdge: { weight: 10, minlen: 1 },
   containmentEdge: { weight: 5, minlen: 1 },
   referenceEdge: { weight: 1, minlen: 1 },
 };
@@ -63,8 +63,8 @@ export function computeAutoLayout(
     rankdir: opts.direction,
     ranksep: opts.rankSep,
     nodesep: opts.nodeSep,
-    marginx: 40,
-    marginy: 40,
+    marginx: 20,
+    marginy: 20,
     // Use network-simplex for better hierarchy handling
     ranker: 'network-simplex',
   });

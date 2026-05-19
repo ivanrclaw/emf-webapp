@@ -100,167 +100,97 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
 
   // ── Monaco Language Registration ─────────────────────────────────
 
+  // Use a ref to always get current formContext
+  const formContextRef = useRef(formContext);
+  formContextRef.current = formContext;
+
   const handleBeforeMount: BeforeMount = (monaco) => {
     // Register custom OCL language
     monaco.languages.register({ id: 'emf-ocl' });
 
-    // Set Monarch tokens provider
-    monaco.languages.setMonarchTokensProvider('emf-ocl', {
-      keywords: [
-        'self', 'true', 'false', 'and', 'or', 'not', 'xor', 'implies',
-        'let', 'in', 'if', 'then', 'else', 'endif', 'inv', 'pre', 'post',
-        'def', 'init', 'derive', 'body', 'package', 'endpackage',
-        'context', 'result', 'null', 'invalid',
-      ],
-      typeKeywords: [
-        'String', 'Integer', 'Real', 'Boolean', 'OclVoid',
-        'Set', 'Bag', 'Sequence', 'OrderedSet', 'Tuple',
-      ],
-      collectionOperations: [
-        'forAll', 'exists', 'select', 'reject', 'collect', 'collectNested',
-        'closure', 'iterate', 'any', 'one', 'isUnique', 'sortedBy',
-        'size', 'isEmpty', 'notEmpty', 'includes', 'excludes',
-        'first', 'last', 'at', 'sum', 'min', 'max', 'flatten',
-        'including', 'excluding', 'union', 'intersection',
-        'append', 'prepend', 'asSet', 'asBag', 'asSequence',
-        'asOrderedSet', 'allInstances',
-      ],
-      operators: [
-        '=', '<>', '>', '<', '>=', '<=', '+', '-', '*', '/',
-        'div', 'mod', '->', '.', '::',
-      ],
-      brackets: [
-        { open: '(', close: ')', token: 'delimiter.parenthesis' },
-        { open: '{', close: '}', token: 'delimiter.curly' },
-      ],
+    // Import and use the professional tokenizer + providers
+    import('./../ocl/oclMonacoAdapter').then(({ registerOCLProviders, getOCLMonarchTokens }) => {
+      // Set enhanced Monarch tokens provider
+      monaco.languages.setMonarchTokensProvider('emf-ocl', getOCLMonarchTokens() as any);
 
-      tokenizer: {
-        root: [
-          // Line comments
-          [/--.*$/, 'comment'],
+      // Register professional completion, hover, definition, and signature providers
+      const providers = registerOCLProviders(
+        monaco,
+        metamodel?.content || {},
+        formContextRef.current || '',
+      );
 
-          // Strings (double and single quoted)
-          [/"[^"]*"/, 'string'],
-          [/'[^']*'/, 'string'],
+      // Store disposables for cleanup
+      monacoDisposablesRef.current = providers.disposables;
 
-          // Numbers
-          [/\d*\.\d+([eE][+-]?\d+)?/, 'number.float'],
-          [/\d+/, 'number'],
-
-          // Keywords
-          [/@?[a-zA-Z_]\w*/, {
-            cases: {
-              '@keywords': 'keyword',
-              '@typeKeywords': 'type',
-              '@collectionOperations': 'keyword.operator',
-              '@default': 'identifier',
-            },
-          }],
-
-          // Operators
-          [/->/, 'keyword.operator'],
-          [/::/, 'delimiter'],
-          [/[=<>!+\-*/]/, 'delimiter'],
-
-          // Brackets
-          [/[()]/, '@brackets'],
-          [/[{}]/, '@brackets'],
-
-          // Whitespace
-          [/\s+/, 'white'],
-        ],
-      },
-    } as any);
-
-    // Completion Item Provider
-    const eclassNamesSnapshot = eclassNames;
-    const allKeywords = [
-      ...['self', 'true', 'false', 'and', 'or', 'not', 'xor', 'implies',
-         'let', 'in', 'if', 'then', 'else', 'endif', 'inv', 'pre', 'post',
-         'def', 'init', 'derive', 'body', 'package', 'endpackage',
-         'context', 'result', 'null', 'invalid'],
-      ...['forAll', 'exists', 'select', 'reject', 'collect', 'collectNested',
-         'closure', 'iterate', 'any', 'one', 'isUnique', 'sortedBy',
-         'size', 'isEmpty', 'notEmpty', 'includes', 'excludes',
-         'first', 'last', 'at', 'sum', 'min', 'max', 'flatten',
-         'including', 'excluding', 'union', 'intersection',
-         'append', 'prepend', 'asSet', 'asBag', 'asSequence',
-         'asOrderedSet', 'allInstances'],
-      ...['String', 'Integer', 'Real', 'Boolean', 'OclVoid',
-         'Set', 'Bag', 'Sequence', 'OrderedSet', 'Tuple'],
-    ];
-
-    const disposable = monaco.languages.registerCompletionItemProvider('emf-ocl', {
-      provideCompletionItems: (model: any, position: any) => {
-        const word = model.getWordUntilPosition(position);
-        const range = {
-          startLineNumber: position.lineNumber,
-          endLineNumber: position.lineNumber,
-          startColumn: word.startColumn,
-          endColumn: word.endColumn,
-        };
-
-        const suggestions: any[] = [];
-
-        // OCL keywords
-        for (const k of allKeywords) {
-          suggestions.push({
-            label: k,
-            kind: monaco.languages.CompletionItemKind.Keyword,
-            insertText: k,
-            range,
-          });
-        }
-
-        // EClass names
-        for (const name of eclassNamesSnapshot) {
-          suggestions.push({
-            label: name,
-            kind: monaco.languages.CompletionItemKind.Class,
-            insertText: name,
-            range,
-          });
-        }
-
-        // Snippets
-        const snippets: Array<{ label: string; insertText: string; detail: string }> = [
-          { label: 'inv', insertText: 'inv:\n\t${1}', detail: 'Invariant' },
-          { label: 'pre', insertText: 'pre:\n\t${1}', detail: 'Pre-condition' },
-          { label: 'post', insertText: 'post:\n\t${1}', detail: 'Post-condition' },
-          { label: 'def', insertText: 'def: ${1:name}() : ${2:Type} = ${3:expression}', detail: 'Operation definition' },
-          { label: 'let', insertText: 'let ${1:var} : ${2:Type} = ${3:expr} in\n\t${4}', detail: 'Let expression' },
-          { label: 'if-then-else', insertText: 'if ${1:condition} then\n\t${2:thenExpr}\nelse\n\t${3:elseExpr}\nendif', detail: 'If-then-else-endif' },
-          { label: 'forAll', insertText: '${1:collection}->forAll(${2:e} | ${3:condition})', detail: 'forAll iterator' },
-          { label: 'exists', insertText: '${1:collection}->exists(${2:e} | ${3:condition})', detail: 'exists iterator' },
-          { label: 'select', insertText: '${1:collection}->select(${2:e} | ${3:condition})', detail: 'select iterator' },
-          { label: 'collect', insertText: '${1:collection}->collect(${2:e} | ${3:expression})', detail: 'collect iterator' },
-          { label: 'iterate', insertText: '${1:collection}->iterate(${2:e} : ${3:Type}; ${4:acc} : ${5:Type} = ${6:initial} | ${7:expression})', detail: 'iterate accumulator' },
-        ];
-
-        for (const s of snippets) {
-          suggestions.push({
-            label: s.label,
-            kind: monaco.languages.CompletionItemKind.Snippet,
-            insertText: s.insertText,
-            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-            detail: s.detail,
-            range,
-          });
-        }
-
-        return { suggestions };
-      },
+      // Keep context class in sync
+      const interval = setInterval(() => {
+        providers.setContextClass(formContextRef.current || '');
+      }, 500);
+      monacoDisposablesRef.current.push({ dispose: () => clearInterval(interval) });
     });
-
-    // Store disposable for cleanup
-    monacoDisposablesRef.current = [disposable];
   };
 
   // ── Editor mount ──────────────────────────────────────────────────
 
-  const handleEditorMount: OnMount = () => {
-    // noop — language already registered in beforeMount
+  const editorRef = useRef<any>(null);
+  const monacoRef = useRef<any>(null);
+  const diagnosticTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleEditorMount: OnMount = (editor, monaco) => {
+    editorRef.current = editor;
+    monacoRef.current = monaco;
   };
+
+  // ── Real-time diagnostics (debounced) ─────────────────────────────
+
+  useEffect(() => {
+    if (!formExpression || !formContext || !metamodel?.content || !monacoRef.current || !editorRef.current) return;
+
+    if (diagnosticTimerRef.current) clearTimeout(diagnosticTimerRef.current);
+
+    diagnosticTimerRef.current = setTimeout(async () => {
+      try {
+        const { diagnoseOCLExpression } = await import('../api/client');
+        const diagnostics = await diagnoseOCLExpression(
+          metamodelId,
+          formExpression,
+          formContext,
+          metamodel.content,
+        );
+
+        const monaco = monacoRef.current;
+        const model = editorRef.current?.getModel();
+        if (!monaco || !model) return;
+
+        const markers = diagnostics.map((d: any) => {
+          // Convert offset to line/column
+          const startPos = model.getPositionAt(d.offset);
+          const endPos = model.getPositionAt(d.offset + (d.length || 1));
+          return {
+            severity: d.severity === 'error'
+              ? monaco.MarkerSeverity.Error
+              : d.severity === 'warning'
+                ? monaco.MarkerSeverity.Warning
+                : monaco.MarkerSeverity.Info,
+            message: d.message,
+            startLineNumber: startPos.lineNumber,
+            startColumn: startPos.column,
+            endLineNumber: endPos.lineNumber,
+            endColumn: endPos.column,
+          };
+        });
+
+        monaco.editor.setModelMarkers(model, 'ocl-diagnostics', markers);
+      } catch {
+        // Silently ignore diagnostic errors (network, etc.)
+      }
+    }, 600);
+
+    return () => {
+      if (diagnosticTimerRef.current) clearTimeout(diagnosticTimerRef.current);
+    };
+  }, [formExpression, formContext, metamodel?.content, metamodelId]);
 
   // ── Save ──────────────────────────────────────────────────────────
 
