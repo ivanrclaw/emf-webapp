@@ -23,8 +23,11 @@ export type {
   Visibility,
   MTLParam,
   MTLExecutionResult,
+  ExecutionLogEntry,
+  TraceEntry,
 } from './MTLTypes.js';
 
 export { MTLParser } from './MTLParser.js';
 export { MTLExecutor } from './MTLExecutor.js';
 export { MTLFileManager } from './MTLFileManager.js';
+export type { GeneratedFile } from './MTLFileManager.js';

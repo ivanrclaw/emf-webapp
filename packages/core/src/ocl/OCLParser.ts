@@ -35,7 +35,9 @@ export type ASTNode =
   | CollectionOpNode
   | LetInNode
   | IfNode
-  | CollectionLiteralNode;
+  | CollectionLiteralNode
+  | TupleLiteralNode
+  | AtPreNode;
 
 export interface LiteralNode {
   type: 'literal';
@@ -104,6 +106,22 @@ export interface CollectionLiteralNode {
   type: 'collectionliteral';
   collectionType: 'Set' | 'Bag' | 'Sequence' | 'OrderedSet';
   elements: ASTNode[];
+}
+
+export interface TupleLiteralNode {
+  type: 'tupleliteral';
+  parts: TupleLiteralPart[];
+}
+
+export interface TupleLiteralPart {
+  name: string;
+  type?: string;
+  value: ASTNode;
+}
+
+export interface AtPreNode {
+  type: 'atpre';
+  expression: ASTNode;
 }
 
 export class OCLParser {
@@ -272,39 +290,49 @@ export class OCLParser {
   private primary(): ASTNode {
     // Literals
     if (this.match(TokenType.NUMBER)) {
-      return {
+      let node: ASTNode = {
         type: 'literal',
         valueType: 'number',
         value: Number(this.previous().value),
       } as LiteralNode;
+      node = this.parseCallChain(node);
+      return node;
     }
     if (this.match(TokenType.STRING)) {
-      return {
+      let node: ASTNode = {
         type: 'literal',
         valueType: 'string',
         value: this.previous().value,
       } as LiteralNode;
+      node = this.parseCallChain(node);
+      return node;
     }
     if (this.match(TokenType.BOOLEAN)) {
-      return {
+      let node: ASTNode = {
         type: 'literal',
         valueType: 'boolean',
         value: this.previous().value === 'true',
       } as LiteralNode;
+      node = this.parseCallChain(node);
+      return node;
     }
     if (this.match(TokenType.NULL)) {
-      return {
+      let node: ASTNode = {
         type: 'literal',
         valueType: 'null',
         value: null,
       } as LiteralNode;
+      node = this.parseCallChain(node);
+      return node;
     }
     if (this.match(TokenType.INVALID)) {
-      return {
+      let node: ASTNode = {
         type: 'literal',
         valueType: 'invalid',
         value: null,
       } as LiteralNode;
+      node = this.parseCallChain(node);
+      return node;
     }
 
     // self
@@ -344,6 +372,17 @@ export class OCLParser {
     // Set{...}, Bag{...}, Sequence{...}, OrderedSet{...}
     if (this.isCollectionTypeKeyword()) {
       return this.parseCollectionLiteral();
+    }
+
+    // Tuple literal: Tuple{name:String='value', age:Integer=25}
+    if (this.match(TokenType.TUPLE)) {
+      if (this.check(TokenType.LBRACE)) {
+        return this.parseTupleLiteral();
+      }
+      // Tuple used as type name (identifier-like)
+      let node: ASTNode = { type: 'identifier', name: 'Tuple' } as IdentifierNode;
+      node = this.parseCallChain(node);
+      return node;
     }
 
     // Parenthesized expression
@@ -423,9 +462,9 @@ export class OCLParser {
     let node = object;
 
     while (true) {
-      // Dot navigation: .identifier
+      // Dot navigation: .identifier (or keyword used as property/method name)
       if (this.match(TokenType.DOT)) {
-        const name = this.expect(TokenType.IDENTIFIER).value;
+        const name = this.expectOperationName();
         if (this.check(TokenType.LPAREN)) {
           this.advance();
           const args = this.parseArgs();
@@ -440,7 +479,7 @@ export class OCLParser {
 
       // Arrow operation: ->operation
       if (this.match(TokenType.ARROW)) {
-        const opName = this.expect(TokenType.IDENTIFIER).value;
+        const opName = this.expectOperationName();
 
         // Lambda-based operations: ->forAll(x | expr), ->exists(x | expr), ->select(x | expr),
         // ->collect(x | expr), ->one(x | expr), ->isUnique(x | expr), ->sortedBy(x | expr),
@@ -473,10 +512,48 @@ export class OCLParser {
         continue;
       }
 
+      // @pre suffix (postconditions)
+      if (this.match(TokenType.AT_PRE)) {
+        node = { type: 'atpre', expression: node } as AtPreNode;
+        continue;
+      }
+
       break;
     }
 
     return node;
+  }
+
+  private parseTupleLiteral(): ASTNode {
+    this.expect(TokenType.LBRACE);
+    const parts: TupleLiteralPart[] = [];
+
+    if (!this.check(TokenType.RBRACE)) {
+      parts.push(this.parseTuplePart());
+      while (this.match(TokenType.COMMA)) {
+        parts.push(this.parseTuplePart());
+      }
+    }
+
+    this.expect(TokenType.RBRACE);
+    let node: ASTNode = { type: 'tupleliteral', parts } as TupleLiteralNode;
+    node = this.parseCallChain(node);
+    return node;
+  }
+
+  private parseTuplePart(): TupleLiteralPart {
+    const name = this.expect(TokenType.IDENTIFIER).value;
+    let type: string | undefined;
+
+    // Optional type: name : Type = value  OR  name = value
+    if (this.check(TokenType.COLON)) {
+      this.advance();
+      type = this.parseQualifiedType();
+    }
+
+    this.expect(TokenType.EQUALS);
+    const value = this.expression();
+    return { name, type, value };
   }
 
   private parseLambdaOperation(source: ASTNode, opName: string): ASTNode {
@@ -625,5 +702,37 @@ export class OCLParser {
       );
     }
     return this.advance();
+  }
+
+  /**
+   * After '->', accept IDENTIFIER or any keyword token that is also a valid
+   * collection operation name (reject, closure, etc.).
+   */
+  private expectOperationName(): string {
+    const token = this.peek();
+    if (!token) {
+      throw new Error('Expected operation name but found EOF');
+    }
+    // Accept IDENTIFIER directly
+    if (token.type === TokenType.IDENTIFIER) {
+      return this.advance().value;
+    }
+    // Accept keywords that double as operation names
+    const keywordOps = [
+      TokenType.REJECT, TokenType.CLOSURE,
+      TokenType.NOT, TokenType.AND, TokenType.OR,
+      TokenType.IF, TokenType.LET,
+    ];
+    if (keywordOps.includes(token.type)) {
+      return this.advance().value;
+    }
+    // Any other keyword — just take its value as an identifier
+    // This handles future keywords gracefully
+    if (token.value && /^[a-zA-Z_]/.test(token.value)) {
+      return this.advance().value;
+    }
+    throw new Error(
+      `Expected operation name but found '${token.value ?? 'EOF'}' at position ${token.position ?? -1}`,
+    );
   }
 }

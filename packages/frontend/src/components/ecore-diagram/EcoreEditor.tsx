@@ -128,6 +128,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
   }, [leftPanelRef, rightPanelRef]);
 
   // ── Fetch metamodel + project name on mount ─────────────────
+  const firstLoad = useRef(true);
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -217,6 +218,25 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
     violationsMap: violationsMap,
   });
 
+  // ── Auto-layout on first load (e.g. after .ecore import) ──
+  useEffect(() => {
+    if (fetchedPkg && fetchedPkg.eClassifiers.length > 1 && model.nodes.length > 0 && firstLoad.current) {
+      firstLoad.current = false;
+      const allDefault = model.nodes.every((n) =>
+        n.position.x === 100 || n.position.x === 250 || n.position.y === 100 || n.position.y === 150
+      );
+      if (allDefault) {
+        const raf = requestAnimationFrame(() => {
+          model.autoLayout('TB');
+          requestAnimationFrame(() => {
+            reactFlowInstance?.fitView({ padding: 0.15, duration: 300 });
+          });
+        });
+        return () => cancelAnimationFrame(raf);
+      }
+    }
+  }, [fetchedPkg, model.nodes.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Colaboración en tiempo real ────────────────────────────
   const [collabUsers, setCollabUsers] = useState<RoomUser[]>([]);
   const [remoteContent, setRemoteContent] = useState<Record<string, any> | null>(null);
@@ -281,7 +301,14 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
   useEffect(() => {
     register(
       {
-        save: () => model.save(),
+        save: async () => {
+          try {
+            await model.save();
+            addToast('Saved successfully', 'success');
+          } catch (err: any) {
+            addToast('Save failed: ' + (err.message || 'Unknown error'), 'error');
+          }
+        },
         exportEcore: () => exportEcore(projectId, metamodelId),
         exportZip: () => exportXmiZip(projectId, metamodelId),
         exportGenmodel: () => exportGenmodel(projectId, metamodelId),
@@ -421,7 +448,11 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
-        model.save();
+        model.save().then(() => {
+          addToast('Saved successfully', 'success');
+        }).catch((err: any) => {
+          addToast('Save failed: ' + (err.message || 'Unknown error'), 'error');
+        });
       }
       // Undo (Ctrl+Z)
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'z') {
@@ -444,8 +475,17 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
   const onNodeClick: NodeMouseHandler = useCallback(
     (_: any, node: Node) => {
       const data = node.data as EcoreNodeData;
-      const typeMap: Record<string, string> = { eClassNode: 'class', eEnumNode: 'enum', eDataTypeNode: 'dataType' };
-      model.setSelected(node.id, (node.type ? typeMap[node.type] : undefined) ?? 'class');
+      // Derive selection type from node data's ecore type, falling back to node.type mapping
+      const ecoreType = data?.type;
+      let selType: string;
+      if (ecoreType === 'ecoreClass') selType = 'class';
+      else if (ecoreType === 'ecoreEnum') selType = 'enum';
+      else if (ecoreType === 'ecoreDataType') selType = 'dataType';
+      else {
+        const typeMap: Record<string, string> = { eClassNode: 'class', eEnumNode: 'enum', eDataTypeNode: 'dataType' };
+        selType = typeMap[node.type as string] ?? 'class';
+      }
+      model.setSelected(node.id, selType);
     },
     [model],
   );
@@ -653,7 +693,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
         <Panel position="top-right">
           <div style={{ display: 'flex', gap: 4 }}>
             <button
-              onClick={() => { model.autoLayout('LR'); setTimeout(() => reactFlowInstance.fitView({ padding: 0.15, duration: 300 }), 50); }}
+              onClick={() => { model.autoLayout('LR'); requestAnimationFrame(() => reactFlowInstance.fitView({ padding: 0.15, duration: 300 })); }}
               title="Auto Layout (Left → Right)"
               style={{
                 padding: '6px 10px', fontSize: 12, fontWeight: 600,
@@ -665,7 +705,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
               ↔ Layout
             </button>
             <button
-              onClick={() => { model.autoLayout('TB'); setTimeout(() => reactFlowInstance.fitView({ padding: 0.15, duration: 300 }), 50); }}
+              onClick={() => { model.autoLayout('TB'); requestAnimationFrame(() => reactFlowInstance.fitView({ padding: 0.15, duration: 300 })); }}
               title="Auto Layout (Top → Bottom)"
               style={{
                 padding: '6px 10px', fontSize: 12, fontWeight: 600,

@@ -61,7 +61,7 @@ export function ProjectInfoTab({ projectId, onOpenTab }: ProjectInfoTabProps) {
     try {
       await createMetamodel(projectId, {
         name: trimmed,
-        nsUri: newNsUri.trim() || 'http://example.org/default',
+        nsURI: newNsUri.trim() || 'http://example.org/default',
         nsPrefix: newNsPrefix.trim() || 'default',
       });
       setNewName('');
@@ -285,21 +285,83 @@ export function ProjectInfoTab({ projectId, onOpenTab }: ProjectInfoTabProps) {
                 </div>
               </div>
               {onOpenTab && (
-                <button
-                  onClick={() => onOpenTab({ type: 'diagram', title: `${mm.name} — Diagram`, projectId, metamodelId: mm.id })}
-                  style={{
-                    padding: '6px 12px',
-                    fontSize: 12,
-                    fontWeight: 500,
-                    background: 'var(--primary)',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: 6,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Open Diagram
-                </button>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => onOpenTab({ type: 'diagram', title: `${mm.name} — Diagram`, projectId, metamodelId: mm.id })}
+                    style={{
+                      padding: '6px 12px',
+                      fontSize: 12,
+                      fontWeight: 500,
+                      background: 'var(--primary)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: 6,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Diagram
+                  </button>
+                  <button
+                    onClick={() => onOpenTab({ type: 'ocl', title: 'OCL Constraints', projectId, metamodelId: mm.id })}
+                    style={{
+                      padding: '6px 12px',
+                      fontSize: 12,
+                      fontWeight: 500,
+                      background: 'transparent',
+                      color: 'var(--text)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 6,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    OCL
+                  </button>
+                  <button
+                    onClick={() => onOpenTab({ type: 'codegen', title: 'Code Generation', projectId, metamodelId: mm.id })}
+                    style={{
+                      padding: '6px 12px',
+                      fontSize: 12,
+                      fontWeight: 500,
+                      background: 'transparent',
+                      color: 'var(--text)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 6,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Code Gen
+                  </button>
+                  <button
+                    onClick={() => onOpenTab({ type: 'models', title: 'Models', projectId, metamodelId: mm.id })}
+                    style={{
+                      padding: '6px 12px',
+                      fontSize: 12,
+                      fontWeight: 500,
+                      background: 'transparent',
+                      color: 'var(--text)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 6,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Models
+                  </button>
+                  <button
+                    onClick={() => onOpenTab({ type: 'spec', title: 'Graphical Spec', projectId, metamodelId: mm.id })}
+                    style={{
+                      padding: '6px 12px',
+                      fontSize: 12,
+                      fontWeight: 500,
+                      background: 'transparent',
+                      color: 'var(--text)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 6,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Spec
+                  </button>
+                </div>
               )}
             </div>
           ))}

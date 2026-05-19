@@ -72,7 +72,10 @@ export declare enum TokenType {
     SET = "SET",
     BAG = "BAG",
     SEQUENCE = "SEQUENCE",
-    ORDERED_SET = "ORDERED_SET"
+    ORDERED_SET = "ORDERED_SET",
+    TUPLE = "TUPLE",
+    CARET = "CARET",// ^
+    DOUBLE_CARET = "DOUBLE_CARET"
 }
 export interface Token {
     type: TokenType;

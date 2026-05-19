@@ -491,14 +491,22 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg, violationsMa
         const count = prev.eClassifiers.length;
         const pos = { x: 100 + (count % 4) * 240, y: 100 + Math.floor(count / 4) * 220 };
 
+        // Generate a unique name with dedup counter
+        const baseName = type === 'class' ? 'NewClass' : type === 'enum' ? 'NewEnum' : 'NewType';
+        let suffix = count + 1;
+        const existingNames = new Set(prev.eClassifiers.map((c) => c.name));
+        while (existingNames.has(`${baseName}${suffix}`)) {
+          suffix++;
+        }
+
         let newClassifier: any;
         const id = genId('ec');
         if (type === 'class') {
-          newClassifier = { id, name: `NewClass${count + 1}`, abstract: false, interface: false, eSuperTypes: [], eAttributes: [], eReferences: [], position: pos };
+          newClassifier = { id, name: `${baseName}${suffix}`, abstract: false, interface: false, eSuperTypes: [], eAttributes: [], eReferences: [], position: pos };
         } else if (type === 'enum') {
-          newClassifier = { id, name: `NewEnum${count + 1}`, eLiterals: [{ id: genId('lit'), name: 'LITERAL1', value: 0 }] };
+          newClassifier = { id, name: `${baseName}${suffix}`, eLiterals: [{ id: genId('lit'), name: 'LITERAL1', value: 0 }] };
         } else {
-          newClassifier = { id, name: `NewType${count + 1}`, instanceClassName: 'java.lang.String' };
+          newClassifier = { id, name: `${baseName}${suffix}`, instanceClassName: 'java.lang.String' };
         }
 
         return { ...prev, eClassifiers: [...prev.eClassifiers, newClassifier] };
@@ -552,16 +560,22 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg, violationsMa
   }, []);
 
   const addReference = useCallback((classId: string) => {
+    const refId = genId('ref');
     setPkgWithUndo((prev) => ({
       ...prev,
       eClassifiers: prev.eClassifiers.map((c) => {
         if (c.id !== classId || !isClass(c)) return c;
         return {
           ...c,
-          eReferences: [...c.eReferences, { id: genId('ref'), name: 'newRef', targetId: '', containment: false, lowerBound: 0, upperBound: -1, eOpposite: null, changeable: true, derived: false }],
+          eReferences: [...c.eReferences, { id: refId, name: 'newRef', targetId: '', containment: false, lowerBound: 0, upperBound: -1, eOpposite: null, changeable: true, derived: false }],
         };
       }),
     }));
+    // Auto-select the new reference so user can set targetId in PropertyInspector
+    setTimeout(() => {
+      setSelectedId(refId);
+      setSelectedType('reference');
+    }, 0);
     setIsDirty(true);
   }, []);
 

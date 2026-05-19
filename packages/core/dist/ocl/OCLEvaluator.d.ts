@@ -14,7 +14,7 @@
  * - div / mod
  */
 import { ASTNode } from './OCLParser.js';
-export type EValue = string | number | boolean | null | undefined | OCLEObject | OCLEObject[] | Map<string, EValue>;
+export type EValue = string | number | boolean | null | undefined | OCLEObject | EValue[] | Map<string, EValue>;
 export interface OCLEObject {
     eClass: string;
     attributes: Record<string, EValue>;
@@ -56,6 +56,8 @@ export declare class OCLEvaluator {
     private evalBinary;
     private evalMethodCall;
     private evalCollectionOp;
+    private evalTupleLiteral;
+    private evalAtPre;
     private toBoolean;
     private toNumber;
     private isEqual;

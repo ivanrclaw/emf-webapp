@@ -69,16 +69,24 @@ export function OnboardingTour() {
   const [spotlightRect, setSpotlightRect] = useState<DOMRect | null>(null);
 
   useEffect(() => {
-    const done = localStorage.getItem(STORAGE_KEY);
-    if (!done) {
-      // Small delay to let the layout render
-      const timer = setTimeout(() => setVisible(true), 800);
-      return () => clearTimeout(timer);
+    try {
+      const done = localStorage.getItem(STORAGE_KEY);
+      if (!done) {
+        // Small delay to let the layout render
+        const timer = setTimeout(() => setVisible(true), 800);
+        return () => clearTimeout(timer);
+      }
+    } catch {
+      // localStorage unavailable — skip tour
     }
   }, []);
 
   const finish = useCallback(() => {
-    localStorage.setItem(STORAGE_KEY, 'true');
+    try {
+      localStorage.setItem(STORAGE_KEY, 'true');
+    } catch {
+      // localStorage unavailable — ok to skip
+    }
     setVisible(false);
   }, []);
 
@@ -110,17 +118,49 @@ export function OnboardingTour() {
   const currentStep = STEPS[step];
   const isLast = step === STEPS.length - 1;
 
-  // Position card next to spotlight or centered
-  const cardPosition: React.CSSProperties = spotlightRect
-    ? {
-        top: spotlightRect.top + spotlightRect.height / 2 - 60,
-        left: spotlightRect.right + 16,
-      }
-    : {
-        top: '50%',
-        left: '50%',
-        transform: 'translate(-50%, -50%)',
+  // ── Smart card positioning (stays within viewport) ─────
+  const computeCardPosition = (rect: DOMRect, cardWidth = 320, cardHeight = 160): React.CSSProperties => {
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const gap = 20;
+
+    // Special case: sidebar step — anchor card to the right edge of the viewport
+    if (currentStep.selector === 'sidebar') {
+      return {
+        right: gap,
+        top: `${Math.round((vh * 0.2))}px`,
       };
+    }
+
+    // Try right
+    const rightX = rect.right + gap;
+    const rightY = Math.max(gap, Math.min(rect.top + rect.height / 2 - cardHeight / 2, vh - cardHeight - gap));
+    if (rightX + cardWidth <= vw) {
+      return { top: rightY, left: rightX };
+    }
+
+    // Try left
+    const leftX = Math.max(gap, rect.left - cardWidth - gap);
+    const leftY = rightY;
+    if (leftX >= gap) {
+      return { top: leftY, left: leftX };
+    }
+
+    // Try below
+    const belowY = Math.min(rect.bottom + gap, vh - cardHeight - gap);
+    const belowX = Math.max(gap, Math.min(rect.left + rect.width / 2 - cardWidth / 2, vw - cardWidth - gap));
+    if (belowY >= gap && belowX >= gap) {
+      return { top: belowY, left: belowX };
+    }
+
+    // Fallback: centered
+    return {
+      top: '50%',
+      left: '50%',
+      transform: 'translate(-50%, -50%)',
+    };
+  };
+
 
   return ReactDOM.createPortal(
     <>
@@ -141,7 +181,7 @@ export function OnboardingTour() {
       )}
 
       {/* Card */}
-      <div style={{ ...cardStyle, ...cardPosition }}>
+      <div style={{ ...cardStyle, ...(spotlightRect ? computeCardPosition(spotlightRect) : { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }) }}>
         <div style={{ marginBottom: 12 }}>
           <div
             style={{

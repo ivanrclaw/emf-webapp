@@ -13,6 +13,7 @@ import {
   serializeToXMI,
   EPackageImpl,
 } from '@emf-webapp/core';
+import { serializableToXmiCompatible } from '@emf-webapp/core/serialization';
 
 @Injectable()
 export class EcoreTransformer {
@@ -57,13 +58,26 @@ export class EcoreTransformer {
     }
 
     if (format === 'xmi') {
-      // Si el contenido está vacío, devolver XMI mínimo
+      // If content is empty, return minimal XMI
       if (!content || Object.keys(content).length === 0) {
         return `<?xml version="1.0" encoding="UTF-8"?>
 <ecore:EPackage xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" name="unnamed" nsURI="${nsURI}" nsPrefix="${nsPrefix}"/>`;
       }
-      const ePackage = this.deserializeToEPackage(content);
-      return serializeToXMI(ePackage, { nsURI, nsPrefix });
+
+      // Build a serializable object from stored JSON content.
+      // The DB stores plain serializable format ({ name, nsURI, nsPrefix, eClassifiers }),
+      // not the emfjson format ({ eClass: "..." }) that deserializeEObject expects.
+      // Use serializableToXmiCompatible (same approach as XmiService.exportToXmi).
+      const serializable = {
+        name: content.name || 'model',
+        nsURI: content.nsURI || nsURI,
+        nsPrefix: content.nsPrefix || nsPrefix,
+        eClassifiers: Array.isArray(content.eClassifiers) ? content.eClassifiers : [],
+        annotations: content.annotations,
+      };
+
+      const ePackage = serializableToXmiCompatible(serializable);
+      return serializeToXMI(ePackage, { nsURI: serializable.nsURI, nsPrefix: serializable.nsPrefix });
     }
 
     throw new Error(`Formato no soportado: ${String(format)}`);

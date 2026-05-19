@@ -1,5 +1,5 @@
 import React from 'react';
-import CodeTemplatePage from '../../../pages/CodeTemplatePage';
+import { CodeGenIDE } from '../../ide/CodeGenIDE';
 
 interface CodeGenTabProps {
   projectId: string;
@@ -8,8 +8,8 @@ interface CodeGenTabProps {
 
 export function CodeGenTab({ projectId, metamodelId }: CodeGenTabProps) {
   return (
-    <div style={{ height: '100%', overflow: 'auto', padding: '24px 32px' }}>
-      <CodeTemplatePage projectId={projectId} metamodelId={metamodelId} />
+    <div style={{ height: '100%', overflow: 'hidden' }}>
+      <CodeGenIDE projectId={projectId} metamodelId={metamodelId} />
     </div>
   );
 }

@@ -1071,3 +1071,64 @@ html, body, #root {
 .workspace-tab.active .tab-close {
   opacity: 1;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   IDE Accessibility — Focus & High Contrast
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Visible focus indicators for keyboard navigation */
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: var(--radius-sm, 4px);
+}
+
+[role="treeitem"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+[role="tab"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* High contrast mode support */
+@media (forced-colors: active) {
+  :root {
+    --accent: Highlight;
+    --text: CanvasText;
+    --text-muted: GrayText;
+    --bg: Canvas;
+    --surface: Canvas;
+    --border: ButtonBorder;
+    --danger: LinkText;
+  }
+
+  button {
+    border: 1px solid ButtonBorder;
+  }
+
+  [role="treeitem"][aria-selected="true"] {
+    border-left-color: Highlight;
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  [role="tab"][aria-selected="true"] {
+    border-bottom-color: Highlight;
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  *:focus-visible {
+    outline: 2px solid Highlight;
+  }
+}
+

@@ -225,9 +225,15 @@ export function getMetamodels(projectId: string): Promise<Metamodel[]> {
   return request<Metamodel[]>(`/projects/${projectId}/metamodels`);
 }
 
+export interface CreateMetamodelInput {
+  name: string;
+  nsURI?: string;
+  nsPrefix?: string;
+}
+
 export function createMetamodel(
   projectId: string,
-  data: Partial<Metamodel>,
+  data: CreateMetamodelInput,
 ): Promise<Metamodel> {
   return request<Metamodel>(`/projects/${projectId}/metamodels`, {
     method: 'POST',
@@ -462,6 +468,27 @@ export function validateOCLConstraints(
   });
 }
 
+// ── OCL Diagnostics (real-time semantic validation) ─────────────────
+
+export interface OCLDiagnosticResult {
+  message: string;
+  severity: 'error' | 'warning' | 'info';
+  offset: number;
+  length: number;
+}
+
+export function diagnoseOCLExpression(
+  mmid: string,
+  expression: string,
+  context: string,
+  metamodelContent: any,
+): Promise<OCLDiagnosticResult[]> {
+  return request<OCLDiagnosticResult[]>(`/metamodels/${mmid}/constraints/diagnose`, {
+    method: 'POST',
+    body: JSON.stringify({ expression, context, metamodelContent }),
+  });
+}
+
 // ── Code Templates ─────────────────────────────────────────────────
 
 export interface CodeTemplate {
@@ -483,6 +510,29 @@ export interface GenerationFile {
 
 export interface GenerationResult {
   files: GenerationFile[];
+  log?: Array<{
+    type: 'template-start' | 'template-end' | 'query-call' | 'file-write' | 'error' | 'warning' | 'info';
+    timestamp: number;
+    templateName?: string;
+    moduleName?: string;
+    sourceLine?: number;
+    args?: string;
+    duration?: number;
+    outputLength?: number;
+    fileName?: string;
+    message?: string;
+  }>;
+  traces?: Array<{
+    outputStart: number;
+    outputEnd: number;
+    templateName: string;
+    moduleName: string;
+    sourceLine: number;
+    modelElementType?: string;
+    modelElementName?: string;
+  }>;
+  executionTime?: number;
+  stats?: { generated: number; skipped: number; lost: number };
 }
 
 export interface PredefinedGenerator {
@@ -536,6 +586,100 @@ export function getPredefinedGenerators(mmid: string): Promise<PredefinedGenerat
 
 export function runPredefinedGenerator(mmid: string, type: string): Promise<GenerationResult> {
   return request<GenerationResult>(`/metamodels/${mmid}/templates/generate/${type}`, {
+    method: 'POST',
+  });
+}
+
+// ── Template Projects ─────────────────────────────────────────────
+
+export interface TemplateProject {
+  id: string;
+  name: string;
+  description: string | null;
+  metamodelId: string;
+  fileCount?: number;
+  files?: CodeTemplate[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function getTemplateProjects(mmid: string): Promise<TemplateProject[]> {
+  return request<TemplateProject[]>(`/metamodels/${mmid}/template-projects`);
+}
+
+export function getTemplateProject(mmid: string, projectId: string): Promise<TemplateProject> {
+  return request<TemplateProject>(`/metamodels/${mmid}/template-projects/${projectId}`);
+}
+
+export function createTemplateProject(
+  mmid: string,
+  data: { name: string; description?: string },
+): Promise<TemplateProject> {
+  return request<TemplateProject>(`/metamodels/${mmid}/template-projects`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateTemplateProject(
+  mmid: string,
+  projectId: string,
+  data: { name?: string; description?: string },
+): Promise<TemplateProject> {
+  return request<TemplateProject>(`/metamodels/${mmid}/template-projects/${projectId}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteTemplateProject(mmid: string, projectId: string): Promise<void> {
+  return request<void>(`/metamodels/${mmid}/template-projects/${projectId}`, {
+    method: 'DELETE',
+  });
+}
+
+export function addProjectFile(
+  mmid: string,
+  projectId: string,
+  data: { filename: string; template: string; language?: string },
+): Promise<CodeTemplate> {
+  return request<CodeTemplate>(`/metamodels/${mmid}/template-projects/${projectId}/files`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateProjectFile(
+  mmid: string,
+  projectId: string,
+  fileId: string,
+  data: { filename?: string; template?: string; language?: string },
+): Promise<CodeTemplate> {
+  return request<CodeTemplate>(`/metamodels/${mmid}/template-projects/${projectId}/files/${fileId}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteProjectFile(mmid: string, projectId: string, fileId: string): Promise<void> {
+  return request<void>(`/metamodels/${mmid}/template-projects/${projectId}/files/${fileId}`, {
+    method: 'DELETE',
+  });
+}
+
+export function reorderProjectFiles(
+  mmid: string,
+  projectId: string,
+  fileIds: string[],
+): Promise<void> {
+  return request<void>(`/metamodels/${mmid}/template-projects/${projectId}/files/reorder`, {
+    method: 'PUT',
+    body: JSON.stringify({ fileIds }),
+  });
+}
+
+export function generateFromProject(mmid: string, projectId: string): Promise<GenerationResult> {
+  return request<GenerationResult>(`/metamodels/${mmid}/template-projects/${projectId}/generate`, {
     method: 'POST',
   });
 }

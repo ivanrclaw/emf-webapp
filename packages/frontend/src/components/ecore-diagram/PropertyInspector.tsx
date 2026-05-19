@@ -731,11 +731,38 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
           Properties
         </h2>
         {classifier && (
-          <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {classifier.name}
-            {selectedType !== 'class' && selectedType !== 'enum' && selectedType !== 'dataType' && (
-              <> · {selectedType}</>
-            )}
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{classifier.name}</span>
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              padding: '1px 6px',
+              fontSize: 10,
+              fontWeight: 600,
+              borderRadius: 9999,
+              background: selectedType === 'class' ? 'var(--primary-bg)' : selectedType === 'enum' ? 'rgba(249,115,22,0.15)' : selectedType === 'attribute' ? 'rgba(34,197,94,0.15)' : selectedType === 'reference' ? 'rgba(59,130,246,0.15)' : 'rgba(107,114,128,0.15)',
+              color: selectedType === 'class' ? 'var(--primary)' : selectedType === 'enum' ? '#f97316' : selectedType === 'attribute' ? '#22c55e' : selectedType === 'reference' ? '#3b82f6' : '#6b7280',
+              flexShrink: 0,
+            }}>
+              {selectedType}
+            </span>
+          </p>
+        )}
+        {!classifier && selectedId && selectedType && (
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontFamily: 'monospace', fontSize: 10 }}>{selectedId.slice(0, 20)}…</span>
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              padding: '1px 6px',
+              fontSize: 10,
+              fontWeight: 600,
+              borderRadius: 9999,
+              background: 'rgba(107,114,128,0.15)',
+              color: '#6b7280',
+            }}>
+              {selectedType}
+            </span>
           </p>
         )}
       </div>

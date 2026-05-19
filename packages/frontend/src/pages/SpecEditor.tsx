@@ -189,6 +189,20 @@ function SpecEditorInner({ projectId: propPid, metamodelId: propMmid }: { projec
     ];
   }, [activeLayer]);
 
+  const existingEdgeMappings = useMemo(() => {
+    if (!activeLayer) return [];
+    return activeLayer.edgeMappings.map((em) => {
+      const srcClasses = em.sourceMappingIds
+        .map((id) => activeLayer.nodeMappings.find((n) => n.id === id)?.domainClass)
+        .filter(Boolean);
+      const tgtClasses = em.targetMappingIds
+        .map((id) => activeLayer.nodeMappings.find((n) => n.id === id)?.domainClass)
+        .filter(Boolean);
+      const refName = em.sourceReference || '';
+      return srcClasses.flatMap((s) => tgtClasses.map((t) => `${s}.${refName}.${t}`));
+    }).flat();
+  }, [activeLayer]);
+
   const allLayers = useMemo(() => {
     if (!spec) return [];
     return [spec.defaultLayer, ...spec.additionalLayers];
@@ -544,6 +558,7 @@ function SpecEditorInner({ projectId: propPid, metamodelId: propMmid }: { projec
             <MetamodelBrowser
               eclasses={eclasses}
               existingMappings={existingMappings}
+              existingEdgeMappings={existingEdgeMappings}
               onAddNodeMapping={handleAddNodeMapping}
               onAddEdgeMapping={handleAddEdgeMapping}
             />

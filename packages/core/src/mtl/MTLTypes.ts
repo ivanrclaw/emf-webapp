@@ -33,6 +33,7 @@ export interface MTLParam {
 export interface MTLModule {
   type: 'module';
   name: string;
+  extends?: string;
   nsURIs: string[];
   imports: string[];
   templates: MTLTemplate[];
@@ -136,8 +137,50 @@ export interface MTLTrace {
 
 // ─── Execution result ─────────────────────────────────────────────────────────
 
+export interface ExecutionLogEntry {
+  type: 'template-start' | 'template-end' | 'query-call' | 'file-write' | 'error' | 'warning' | 'info';
+  timestamp: number; // ms since execution start
+  templateName?: string;
+  moduleName?: string;
+  /** Line in the source template file */
+  sourceLine?: number;
+  /** Arguments passed (serialized) */
+  args?: string;
+  /** Duration in ms (for template-end) */
+  duration?: number;
+  /** Output produced by this template call */
+  outputLength?: number;
+  /** File name (for file-write) */
+  fileName?: string;
+  /** Message (for error/warning/info) */
+  message?: string;
+}
+
+export interface TraceEntry {
+  /** Range in the generated output: [startOffset, endOffset) */
+  outputStart: number;
+  outputEnd: number;
+  /** Source template info */
+  templateName: string;
+  moduleName: string;
+  sourceLine: number;
+  /** Model element that produced this output */
+  modelElementType?: string;
+  modelElementName?: string;
+}
+
 export interface MTLExecutionResult {
   output: string;
-  files: Array<{ name: string; content: string }>;
+  files: Array<{ name: string; content: string; encoding?: string; skipped?: boolean }>;
+  /** Files that existed in previous output but are no longer generated */
+  lostFiles?: string[];
+  /** Generation statistics */
+  stats?: { generated: number; skipped: number; lost: number };
   error?: string;
+  /** Execution log for the console panel */
+  log?: ExecutionLogEntry[];
+  /** Traceability: maps output regions to source templates */
+  traces?: TraceEntry[];
+  /** Total execution time in ms */
+  executionTime?: number;
 }

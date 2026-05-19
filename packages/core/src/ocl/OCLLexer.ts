@@ -93,6 +93,11 @@ export enum TokenType {
   BAG = 'BAG',
   SEQUENCE = 'SEQUENCE',
   ORDERED_SET = 'ORDERED_SET',
+  TUPLE = 'TUPLE',
+
+  // OclMessage
+  CARET = 'CARET',             // ^
+  DOUBLE_CARET = 'DOUBLE_CARET', // ^^
 }
 
 export interface Token {
@@ -145,6 +150,7 @@ const KEYWORDS: Record<string, TokenType> = {
   Bag: TokenType.BAG,
   Sequence: TokenType.SEQUENCE,
   OrderedSet: TokenType.ORDERED_SET,
+  Tuple: TokenType.TUPLE,
 };
 
 export class OCLLexer {
@@ -220,8 +226,18 @@ export class OCLLexer {
           id += this.input[this.pos];
           this.pos++;
         }
-        // Check for @pre suffix
-        if (id === 'oclIsTypeOf' || id === 'oclIsKindOf' || id === 'oclAsType' || id === 'oclIsUndefined') {
+        // Check for @pre suffix (e.g., someAttr@pre)
+        if (this.input[this.pos] === '@' && this.input.substring(this.pos, this.pos + 4) === '@pre') {
+          // Emit the identifier first, then @pre as separate token
+          if (id === 'oclIsTypeOf' || id === 'oclIsKindOf' || id === 'oclAsType' || id === 'oclIsUndefined') {
+            this.addToken(TokenType.IDENTIFIER, id);
+          } else {
+            const kw = KEYWORDS[id];
+            this.addToken(kw ?? TokenType.IDENTIFIER, id);
+          }
+          this.addToken(TokenType.AT_PRE, '@pre');
+          this.pos += 4;
+        } else if (id === 'oclIsTypeOf' || id === 'oclIsKindOf' || id === 'oclAsType' || id === 'oclIsUndefined') {
           this.addToken(TokenType.IDENTIFIER, id);
         } else {
           const kw = KEYWORDS[id];
@@ -250,6 +266,18 @@ export class OCLLexer {
       if (ch === ':' && this.input[this.pos + 1] === ':') {
         this.addToken(TokenType.COLON_COLON, '::');
         this.pos += 2;
+        continue;
+      }
+      // ^^ (double caret) for OclMessage
+      if (ch === '^' && this.input[this.pos + 1] === '^') {
+        this.addToken(TokenType.DOUBLE_CARET, '^^');
+        this.pos += 2;
+        continue;
+      }
+      // ^ (single caret) for OclMessage
+      if (ch === '^') {
+        this.addToken(TokenType.CARET, '^');
+        this.pos++;
         continue;
       }
 

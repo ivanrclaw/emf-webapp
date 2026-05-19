@@ -10,7 +10,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { OCLConstraint } from './oclconstraint.entity.js';
 import type { OCLEObject } from '@emf-webapp/core';
-import { OCLParser, OCLEvaluator } from '@emf-webapp/core';
+import { OCLParser, OCLEvaluator, OCLSemanticValidator } from '@emf-webapp/core';
+import type { OCLDiagnostic } from '@emf-webapp/core';
 
 @Injectable()
 export class OCLConstraintService {
@@ -207,6 +208,59 @@ export class OCLConstraintService {
     }
 
     return results;
+  }
+
+  /**
+   * Diagnose OCL expression(s) — returns semantic diagnostics (errors, warnings)
+   * without executing against a model. Used for real-time editor feedback.
+   *
+   * @param expression - The OCL expression to diagnose
+   * @param contextClass - The context EClass name
+   * @param metamodelContent - The metamodel JSON content
+   * @returns Array of diagnostics with position, severity, and message
+   */
+  diagnose(
+    expression: string,
+    contextClass: string,
+    metamodelContent: any,
+  ): OCLDiagnostic[] {
+    const classifiers = metamodelContent?.eClassifiers || [];
+
+    // Build MetamodelInfo for the semantic validator
+    const idToName: Record<string, string> = {};
+    for (const cls of classifiers) {
+      if (cls.id) idToName[cls.id] = cls.name;
+      idToName[cls.name] = cls.name;
+    }
+
+    const classes = classifiers.map((cls: any) => ({
+      name: cls.name,
+      abstract: cls.abstract,
+      attributes: (cls.eAttributes || []).map((a: any) => ({
+        name: a.name,
+        type: a.eType || 'EString',
+        many: a.upperBound === -1 || (a.upperBound != null && a.upperBound > 1),
+      })),
+      references: (cls.eReferences || []).map((r: any) => ({
+        name: r.name,
+        targetClass: idToName[r.targetId || ''] || r.targetId || 'EObject',
+        many: r.upperBound === -1 || (r.upperBound != null && r.upperBound > 1),
+        containment: !!r.containment,
+      })),
+      operations: (cls.eOperations || []).map((op: any) => ({
+        name: op.name,
+        returnType: op.eType || 'EString',
+        params: (op.eParameters || []).map((p: any) => ({
+          name: p.name,
+          type: p.eType || 'EString',
+        })),
+      })),
+    }));
+
+    const metamodelInfo = { classes };
+    const validator = new OCLSemanticValidator(metamodelInfo);
+    const result = validator.validate(expression, contextClass);
+    return result.diagnostics;
   }
 
   /**

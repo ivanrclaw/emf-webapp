@@ -42,5 +42,10 @@ export declare class MTLParser {
     private isTag;
     private parseTag;
     private parseParams;
+    /**
+     * Parse [for (iter : Type | collection) separator(...) before(...) after(...)]
+     * Uses balanced-parentheses matching to correctly handle nested parens in collection expressions.
+     */
+    private parseForTag;
 }
 //# sourceMappingURL=MTLParser.d.ts.map
