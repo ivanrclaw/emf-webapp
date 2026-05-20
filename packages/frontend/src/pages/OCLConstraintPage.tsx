@@ -475,14 +475,14 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
     setContextClass: (cn: string) => void;
     disposables: any[];
   } | null>(null);
-  // Register providers once Monaco is loaded. We rely on @monaco-editor/loader to access the global instance.
+  // Register providers once Monaco is loaded. Use @monaco-editor/loader to get the SAME instance as <Editor>.
   useEffect(() => {
     if (monacoLangRegisteredRef.current) return;
     if (!metamodel?.content) return;
     monacoLangRegisteredRef.current = true;
     (async () => {
-      const monacoMod = await import('monaco-editor');
-      const monaco = (monacoMod as any).default || monacoMod;
+      const loader = await import('@monaco-editor/loader');
+      const monaco = await loader.default.init();
       const { registerOCLProviders, getOCLMonarchTokens } = await import(
         '../ocl/oclMonacoAdapter'
       );
