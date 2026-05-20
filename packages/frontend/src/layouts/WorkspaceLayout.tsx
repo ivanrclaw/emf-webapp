@@ -585,6 +585,10 @@ function WorkspaceInner() {
           editor.actions.redo();
           break;
         default:
+          // Dispatch OCL commands as CustomEvents for OCLConstraintPage to handle
+          if (action.startsWith('ocl-')) {
+            window.dispatchEvent(new CustomEvent('ocl-command', { detail: action }));
+          }
           break;
       }
     },

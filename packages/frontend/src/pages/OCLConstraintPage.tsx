@@ -95,6 +95,7 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
   const [validating, setValidating] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [problemsVisible, setProblemsVisible] = useState(true);
+  const [inspectorVisible, setInspectorVisible] = useState(true);
 
   const eclassNames = useMemo(() => {
     const content = metamodel?.content || {};
@@ -518,6 +519,50 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
     monacoProvidersRef.current?.setContextClass(form.context || '');
   }, [form.context]);
 
+  // ── Listen for global OCL commands from CommandPalette ────
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const cmd = (e as CustomEvent).detail as string;
+      switch (cmd) {
+        case 'ocl-new-constraint':
+          handleNew();
+          break;
+        case 'ocl-validate-all':
+          handleValidateAll();
+          break;
+        case 'ocl-format':
+          handleFormat();
+          break;
+        case 'ocl-toggle-problems':
+          setProblemsVisible((v) => !v);
+          break;
+        case 'ocl-toggle-inspector':
+          setInspectorVisible((v) => !v);
+          break;
+        case 'ocl-next-problem': {
+          // Jump to the first problem in the diagnostics map
+          const allDiags = Object.entries(diagnosticsMap);
+          for (const [cId, diags] of allDiags) {
+            const err = diags.find((d) => d.severity === 'error') || diags[0];
+            if (err) {
+              if (cId !== selectedId) {
+                setSelectedId(cId);
+              }
+              setProblemsVisible(true);
+              break;
+            }
+          }
+          break;
+        }
+        case 'ocl-run-m1':
+          handleValidateAll();
+          break;
+      }
+    };
+    window.addEventListener('ocl-command', handler);
+    return () => window.removeEventListener('ocl-command', handler);
+  }, [handleNew, handleValidateAll, handleFormat, diagnosticsMap, selectedId]);
+
   // ── Render ───────────────────────────────────────────────
   if (loading) {
     return (
@@ -678,6 +723,7 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
           )}
         </div>
 
+        {inspectorVisible && (
         <ResizablePanel
           direction="left"
           defaultWidth={270}
@@ -697,6 +743,7 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
             onSelectModel={setSelectedModelId}
           />
         </ResizablePanel>
+        )}
       </div>
 
       <OCLStatusBar

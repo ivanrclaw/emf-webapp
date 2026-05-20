@@ -10,6 +10,12 @@ import {
   Layers,
   X,
   Folder,
+  Plus,
+  Code,
+  AlertTriangle,
+  Play,
+  Eye,
+  Filter,
 } from '../icons';
 import { getProjects, getMetamodels } from '../../api/client';
 import { useWorkspace } from '../../hooks/useWorkspace';
@@ -85,6 +91,49 @@ const PREDEFINED_ACTIONS: Omit<CommandItem, 'id'>[] = [
     category: 'Actions',
     icon: <X size={16} />,
     action: { type: 'action', payload: 'close-all-tabs' },
+  },
+  // OCL IDE commands
+  {
+    label: 'OCL: New Constraint',
+    category: 'Actions',
+    icon: <Plus size={16} />,
+    action: { type: 'action', payload: 'ocl-new-constraint' },
+  },
+  {
+    label: 'OCL: Validate All',
+    category: 'Actions',
+    icon: <CircleCheck size={16} />,
+    action: { type: 'action', payload: 'ocl-validate-all' },
+  },
+  {
+    label: 'OCL: Format',
+    category: 'Actions',
+    icon: <Code size={16} />,
+    action: { type: 'action', payload: 'ocl-format' },
+  },
+  {
+    label: 'OCL: Toggle Problems Panel',
+    category: 'Actions',
+    icon: <AlertTriangle size={16} />,
+    action: { type: 'action', payload: 'ocl-toggle-problems' },
+  },
+  {
+    label: 'OCL: Toggle Inspector',
+    category: 'Actions',
+    icon: <Eye size={16} />,
+    action: { type: 'action', payload: 'ocl-toggle-inspector' },
+  },
+  {
+    label: 'OCL: Go to Next Problem',
+    category: 'Actions',
+    icon: <Filter size={16} />,
+    action: { type: 'action', payload: 'ocl-next-problem' },
+  },
+  {
+    label: 'OCL: Run on Selected M1 Model',
+    category: 'Actions',
+    icon: <Play size={16} />,
+    action: { type: 'action', payload: 'ocl-run-m1' },
   },
 ];
 
