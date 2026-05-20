@@ -247,7 +247,7 @@ export function OCLEditorPane({
           },
           bracketPairColorization: { enabled: true },
           stickyScroll: { enabled: true },
-          wordWrap: 'on',
+          wordWrap: 'off',
           tabSize: 2,
           insertSpaces: true,
           formatOnPaste: true,

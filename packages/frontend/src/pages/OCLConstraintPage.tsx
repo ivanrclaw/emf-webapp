@@ -608,8 +608,8 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
       >
         <ResizablePanel
           direction="right"
-          defaultWidth={240}
-          minWidth={180}
+          defaultWidth={210}
+          minWidth={170}
           maxWidth={400}
           storageKey="ocl-ide.left.width"
           style={{ height: '100%' }}
@@ -680,8 +680,8 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
 
         <ResizablePanel
           direction="left"
-          defaultWidth={320}
-          minWidth={240}
+          defaultWidth={270}
+          minWidth={220}
           maxWidth={440}
           storageKey="ocl-ide.right.width"
           style={{ height: '100%' }}
