@@ -397,7 +397,8 @@ function extractAttrArray(xml: string, attrName: string): string[] {
  */
 function extractBlocks(xml: string, tagName: string): string[] {
   const results: string[] = [];
-  const regex = new RegExp(`<${tagName}[^>]*\\/?>`, 'gi');
+  // Match opening tags while skipping '>' inside quoted attribute values
+  const regex = new RegExp(`<${tagName}(?:[^>"']|"[^"]*"|'[^']*')*\\/?>`, 'gi');
 
   let match: RegExpExecArray | null;
   while ((match = regex.exec(xml)) !== null) {

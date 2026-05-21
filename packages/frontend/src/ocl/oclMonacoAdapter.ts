@@ -212,6 +212,18 @@ export function registerOCLProviders(
         const info = hoverEngine.hover(lineContent, offset, contextClass);
         if (!info) return null;
 
+        // Build markdown from available hover info fields
+        const parts: string[] = [];
+        if (info.signature) {
+          parts.push(`\`\`\`ocl\n${info.signature}\n\`\`\``);
+        } else if (info.type) {
+          parts.push(`**${info.word}**: \`${info.type}\``);
+        }
+        if (info.documentation) {
+          parts.push(info.documentation);
+        }
+        const markdown = parts.join('\n\n') || `\`${info.word}\``;
+
         return {
           range: {
             startLineNumber: position.lineNumber,
@@ -219,7 +231,7 @@ export function registerOCLProviders(
             startColumn: word.startColumn,
             endColumn: word.endColumn,
           },
-          contents: [{ value: info.markdown, isTrusted: true }],
+          contents: [{ value: markdown, isTrusted: true }],
         };
       },
     }),
@@ -242,8 +254,8 @@ export function registerOCLProviders(
         return {
           uri: model.uri,
           range: {
-            startLineNumber: result.targetLine ?? 1,
-            endLineNumber: result.targetLine ?? 1,
+            startLineNumber: 1,
+            endLineNumber: 1,
             startColumn: 1,
             endColumn: 1,
           },

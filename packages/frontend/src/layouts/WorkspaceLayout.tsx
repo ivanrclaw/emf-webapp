@@ -93,12 +93,13 @@ interface TabContentProps {
   onOpenTab: (tab: { type: string; title: string; projectId: string; metamodelId?: string }) => void;
   onShowCreateProject: () => void;
   onShowImportEcore: () => void;
+  projectRefreshKey?: number;
 }
 
-function TabContent({ tab, onOpenTab, onShowCreateProject, onShowImportEcore }: TabContentProps) {
+function TabContent({ tab, onOpenTab, onShowCreateProject, onShowImportEcore, projectRefreshKey }: TabContentProps) {
   switch (tab.type) {
     case 'welcome':
-      return <WelcomeTabWrapper onShowCreateProject={onShowCreateProject} onShowImportEcore={onShowImportEcore} />;
+      return <WelcomeTabWrapper onShowCreateProject={onShowCreateProject} onShowImportEcore={onShowImportEcore} projectRefreshKey={projectRefreshKey} />;
     case 'diagram':
       return (
         <DiagramTab
@@ -164,9 +165,10 @@ function TabContent({ tab, onOpenTab, onShowCreateProject, onShowImportEcore }: 
 interface WelcomeTabWrapperProps {
   onShowCreateProject: () => void;
   onShowImportEcore: () => void;
+  projectRefreshKey?: number;
 }
 
-function WelcomeTabWrapper({ onShowCreateProject, onShowImportEcore }: WelcomeTabWrapperProps) {
+function WelcomeTabWrapper({ onShowCreateProject, onShowImportEcore, projectRefreshKey }: WelcomeTabWrapperProps) {
   const { openTab, setContext } = useWorkspace();
   const [projects, setProjects] = useState<Project[]>([]);
 
@@ -174,7 +176,7 @@ function WelcomeTabWrapper({ onShowCreateProject, onShowImportEcore }: WelcomeTa
     getProjects()
       .then((res) => setProjects(res.items))
       .catch(() => {});
-  }, []);
+  }, [projectRefreshKey]);
 
   const handleOpenProject = useCallback(
     (projectId: string) => {
@@ -696,6 +698,7 @@ function WorkspaceInner() {
               currentProjectId={workspace.currentProjectId || undefined}
               currentMetamodelId={workspace.currentMetamodelId || undefined}
               projectRefreshKey={projectRefreshKey}
+              onProjectDeleted={() => setProjectRefreshKey((k) => k + 1)}
             />
             {/* Portal target for editor panels (Toolbox + TreeView) */}
             <div ref={panels.leftPanelRef} style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', borderTop: '1px solid var(--border)' }} />
@@ -720,7 +723,7 @@ function WorkspaceInner() {
           {activeTab ? (
             <div style={styles.tabContent} role="tabpanel" aria-label={activeTab.title}>
               <Suspense fallback={<div style={styles.emptyContent}><span>Loading...</span></div>}>
-                <TabContent tab={activeTab} onOpenTab={handleOpenTab} onShowCreateProject={() => setShowCreateProject(true)} onShowImportEcore={() => setShowImportEcore(true)} />
+                <TabContent tab={activeTab} onOpenTab={handleOpenTab} onShowCreateProject={() => setShowCreateProject(true)} onShowImportEcore={() => setShowImportEcore(true)} projectRefreshKey={projectRefreshKey} />
               </Suspense>
             </div>
           ) : (
