@@ -105,13 +105,19 @@ describe('OCL Validation Consistency — Metamodel vs OCL Editor', () => {
       expect(result.diagnostics.some((d) => d.severity === 'error')).toBe(true);
     });
 
-    it('self.name > 0 (type mismatch: String > Integer — no error, just valid syntax)', () => {
-      // OCL's > operator is loosely typed in the semantic validator;
-      // the important thing is it doesn't crash or produce false errors.
-      // Runtime evaluation would catch the actual type mismatch.
+    it('self.name > 0 (type mismatch: String > Integer — warns about incompatible types)', () => {
       const result = validator.validate('self.name > 0', 'Employee');
-      // At minimum, it should parse without crashing
-      expect(result.diagnostics.filter((d) => d.severity === 'error')).toHaveLength(0);
+      // Should produce a warning about comparing String to Integer
+      const warnings = result.diagnostics.filter((d) => d.severity === 'warning');
+      expect(warnings.length).toBeGreaterThan(0);
+      expect(warnings[0].message).toContain('incompatible types');
+    });
+
+    it('self.name <> 1 (type mismatch: String <> Integer — warns about equality)', () => {
+      const result = validator.validate('self.name <> 1', 'Employee');
+      const warnings = result.diagnostics.filter((d) => d.severity === 'warning');
+      expect(warnings.length).toBeGreaterThan(0);
+      expect(warnings[0].message).toContain('incompatible types');
     });
 
     it('self.salary.size() (Integer has no size())', () => {

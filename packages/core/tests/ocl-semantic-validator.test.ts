@@ -215,8 +215,8 @@ describe('OCLSemanticValidator — Warnings', () => {
     expect(w.some((d) => d.code === 'OCL_BOOLEAN_EXPECTED')).toBe(true);
   });
 
-  it('warns about comparison between non-numeric types', () => {
-    const result = validate("name > 'hello'");
+  it('warns about comparison between incompatible types', () => {
+    const result = validate("name > 42");
     const w = warnings(result);
     expect(w.some((d) => d.code === 'OCL_COMPARISON_TYPE')).toBe(true);
   });
