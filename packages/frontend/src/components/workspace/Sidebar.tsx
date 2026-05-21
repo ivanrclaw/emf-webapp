@@ -16,10 +16,12 @@ import {
   Package,
   Pencil,
   Link2,
+  Trash2,
 } from '../icons';
 import {
   getProjects,
   getMetamodels,
+  deleteProject,
   type Project,
   type Metamodel,
 } from '../../api/client';
@@ -64,6 +66,7 @@ export default function Sidebar({
   const [projects, setProjects] = useState<ProjectNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
   const { addToast } = useToast();
 
   const fetchProjects = useCallback(async () => {
@@ -128,6 +131,19 @@ export default function Sidebar({
           return next;
         });
       }
+    }
+  };
+
+  const handleDeleteProject = async (id: string) => {
+    try {
+      await deleteProject(id);
+      setProjects((prev) => prev.filter((n) => n.project.id !== id));
+      addToast('Project deleted successfully', 'success');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete project';
+      addToast(msg, 'error');
+    } finally {
+      setDeleteConfirm(null);
     }
   };
 
@@ -378,9 +394,13 @@ export default function Sidebar({
             }}
             onMouseEnter={(e) => {
               if (!isActive) (e.currentTarget as HTMLElement).style.background = 'var(--bg)';
+              const delBtn = e.currentTarget.querySelector('.project-delete-btn') as HTMLElement;
+              if (delBtn) delBtn.style.opacity = '1';
             }}
             onMouseLeave={(e) => {
               if (!isActive) (e.currentTarget as HTMLElement).style.background = 'transparent';
+              const delBtn = e.currentTarget.querySelector('.project-delete-btn') as HTMLElement;
+              if (delBtn) delBtn.style.opacity = '0';
             }}
           >
             {!collapsed && (
@@ -404,6 +424,40 @@ export default function Sidebar({
               >
                 {node.project.name}
               </span>
+            )}
+            {!collapsed && (
+              <button
+                className="project-delete-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDeleteConfirm({ id: node.project.id, name: node.project.name });
+                }}
+                title="Delete project"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: 3,
+                  borderRadius: 'var(--radius-sm)',
+                  color: 'var(--text-muted)',
+                  opacity: 0,
+                  transition: 'opacity 0.15s ease, color 0.15s ease, background 0.12s ease',
+                  flexShrink: 0,
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLElement).style.color = 'var(--error, #e53e3e)';
+                  (e.currentTarget as HTMLElement).style.background = 'var(--bg)';
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)';
+                  (e.currentTarget as HTMLElement).style.background = 'none';
+                }}
+              >
+                <Trash2 size={13} />
+              </button>
             )}
           </div>
 
@@ -620,6 +674,74 @@ export default function Sidebar({
           onOpenTab({ type: 'import-ecore', title: 'Import .ecore', projectId: '' }),
         )}
       </div>
+
+      {/* Delete confirmation dialog */}
+      {deleteConfirm && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+          }}
+          onClick={() => setDeleteConfirm(null)}
+        >
+          <div
+            style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-md, 8px)',
+              padding: '20px 24px',
+              maxWidth: 360,
+              width: '90%',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ margin: '0 0 8px', fontSize: 15, fontWeight: 600, color: 'var(--text)' }}>
+              Delete Project
+            </h3>
+            <p style={{ margin: '0 0 16px', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+              Are you sure you want to delete <strong>{deleteConfirm.name}</strong>? This will permanently remove the project and all its metamodels, constraints, and generated files.
+            </p>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                style={{
+                  padding: '6px 14px',
+                  fontSize: 12,
+                  fontWeight: 500,
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg)',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDeleteProject(deleteConfirm.id)}
+                style={{
+                  padding: '6px 14px',
+                  fontSize: 12,
+                  fontWeight: 500,
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--error, #e53e3e)',
+                  background: 'var(--error, #e53e3e)',
+                  color: '#fff',
+                  cursor: 'pointer',
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </aside>
   );
 }
