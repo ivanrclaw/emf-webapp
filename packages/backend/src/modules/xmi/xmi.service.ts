@@ -319,6 +319,8 @@ bin.includes = META-INF/,\\
 
   /**
    * Importa un archivo .ecore (XMI 2.0) y actualiza el contenido del metamodelo.
+   * También extrae restricciones OCLinEcore de las EAnnotations y las crea como
+   * registros OCLConstraint en la BD.
    */
   async importFromXmi(projectId: string, metamodelId: string, xml: string): Promise<boolean> {
     try {
@@ -331,11 +333,120 @@ bin.includes = META-INF/,\\
       (mm as any).content = parsed;
       await this.metamodelRepo.save(mm as any);
       this.logger.log(`Metamodel ${metamodelId} imported successfully`);
+
+      // ── Extract OCLinEcore constraints from annotations ──
+      const oclConstraints = this.extractOCLConstraintsFromPackage(parsed);
+      if (oclConstraints.length > 0) {
+        // Remove existing constraints for this metamodel (clean import)
+        await this.oclConstraintRepo.delete({ metamodel_id: metamodelId } as any);
+
+        // Create new constraints from annotations
+        const entities = oclConstraints.map((c) =>
+          this.oclConstraintRepo.create({
+            metamodel_id: metamodelId,
+            name: c.name,
+            context: c.context,
+            expression: c.expression,
+            severity: c.severity || 'error',
+          }),
+        );
+        await this.oclConstraintRepo.save(entities);
+        this.logger.log(
+          `Imported ${oclConstraints.length} OCL constraint(s) for metamodel ${metamodelId}`,
+        );
+      }
+
       return true;
     } catch (err: any) {
       this.logger.error(`Import failed for ${metamodelId}: ${err.message}`);
       return false;
     }
+  }
+
+  /**
+   * Extrae restricciones OCL de las EAnnotations de un SerializableEPackage.
+   *
+   * Formato OCLinEcore en .ecore:
+   *   <eAnnotations source="http://www.eclipse.org/emf/2002/Ecore">
+   *     <details key="constraints" value="SalaryPositive NameNotEmpty"/>
+   *   </eAnnotations>
+   *   <eAnnotations source="http://www.eclipse.org/emf/2002/Ecore/OCL/Pivot">
+   *     <details key="SalaryPositive" value="self.salary > 0"/>
+   *     <details key="NameNotEmpty" value="self.name <> ''"/>
+   *   </eAnnotations>
+   */
+  private extractOCLConstraintsFromPackage(
+    pkg: any,
+  ): Array<{ name: string; context: string; expression: string; severity: 'error' | 'warning' | 'info' }> {
+    const results: Array<{ name: string; context: string; expression: string; severity: 'error' | 'warning' | 'info' }> = [];
+
+    const OCL_SOURCES = [
+      'http://www.eclipse.org/emf/2002/Ecore/OCL/Pivot',
+      'http://www.eclipse.org/emf/2002/Ecore/OCL',
+    ];
+
+    for (const classifier of pkg.eClassifiers || []) {
+      // Only EClasses have OCL invariants
+      if (!classifier.eAttributes && !classifier.eReferences) continue;
+      if (!classifier.annotations || classifier.annotations.length === 0) continue;
+
+      const className = classifier.name;
+
+      // Step 1: Find declared constraint names from Ecore annotation
+      const ecoreAnnotation = classifier.annotations.find(
+        (a: any) => a.source === 'http://www.eclipse.org/emf/2002/Ecore',
+      );
+      const declaredNames = ecoreAnnotation?.details?.constraints
+        ? ecoreAnnotation.details.constraints.split(/\s+/).filter(Boolean)
+        : [];
+
+      // Step 2: Find OCL expressions from OCL/Pivot or OCL annotation
+      const oclAnnotation = classifier.annotations.find((a: any) =>
+        OCL_SOURCES.includes(a.source),
+      );
+
+      if (!oclAnnotation?.details) continue;
+
+      // Each key in the OCL annotation details is a constraint name,
+      // and the value is the OCL expression
+      for (const [key, value] of Object.entries(oclAnnotation.details)) {
+        if (!key || !value) continue;
+        // Skip non-constraint keys (like 'body' for derived attributes)
+        if (key === 'body' || key === 'derivation' || key === 'init') continue;
+
+        results.push({
+          name: key,
+          context: className,
+          expression: value as string,
+          severity: 'error',
+        });
+      }
+
+      // Also handle case where constraint names are declared but expressions
+      // are in separate annotations (less common but valid)
+      if (declaredNames.length > 0 && !oclAnnotation) {
+        // Look for expressions in other annotation patterns
+        for (const ann of classifier.annotations) {
+          if (ann.source === 'http://www.eclipse.org/emf/2002/Ecore') continue;
+          if (!ann.details) continue;
+          for (const name of declaredNames) {
+            if (ann.details[name]) {
+              // Avoid duplicates
+              if (!results.some((r) => r.name === name && r.context === className)) {
+                results.push({
+                  name,
+                  context: className,
+                  expression: ann.details[name],
+                  severity: 'error',
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return results;
   }
 
   /**
