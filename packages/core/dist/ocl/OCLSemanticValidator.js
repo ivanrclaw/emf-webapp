@@ -167,20 +167,41 @@ export class OCLSemanticValidator {
         this.walkAST(node.left, ctx, classMap, diagnostics);
         this.walkAST(node.right, ctx, classMap, diagnostics);
         // Check comparison operators with incompatible types
-        const compOps = ['>', '<', '>=', '<='];
-        if (compOps.includes(node.operator)) {
+        const orderingOps = ['>', '<', '>=', '<='];
+        const equalityOps = ['=', '<>'];
+        if (orderingOps.includes(node.operator) || equalityOps.includes(node.operator)) {
             const leftType = this.inferenceEngine.infer(node.left, ctx).type;
             const rightType = this.inferenceEngine.infer(node.right, ctx).type;
             const numericKinds = ['Integer', 'Real'];
-            if (leftType.kind === 'primitive' && !numericKinds.includes(leftType.name) &&
-                rightType.kind === 'primitive' && !numericKinds.includes(rightType.name)) {
-                diagnostics.push({
-                    severity: 'warning',
-                    message: `Comparison '${node.operator}' between non-numeric types: ${typeToString(leftType)} and ${typeToString(rightType)}`,
-                    offset: 0,
-                    length: 0,
-                    code: 'OCL_COMPARISON_TYPE',
-                });
+            if (leftType.kind === 'primitive' && rightType.kind === 'primitive') {
+                const leftNumeric = numericKinds.includes(leftType.name);
+                const rightNumeric = numericKinds.includes(rightType.name);
+                if (orderingOps.includes(node.operator)) {
+                    // Ordering ops require both operands to be of compatible types:
+                    // both numeric, or both the same type (e.g., String <=> String)
+                    if (leftNumeric !== rightNumeric || (!leftNumeric && !rightNumeric && leftType.name !== rightType.name)) {
+                        diagnostics.push({
+                            severity: 'warning',
+                            message: `Comparison '${node.operator}' between incompatible types: ${typeToString(leftType)} and ${typeToString(rightType)}`,
+                            offset: 0,
+                            length: 0,
+                            code: 'OCL_COMPARISON_TYPE',
+                        });
+                    }
+                }
+                else {
+                    // Equality/inequality: warn when comparing different primitive families
+                    // (e.g., String <> Integer, Boolean = Integer)
+                    if (leftType.name !== rightType.name && !(leftNumeric && rightNumeric)) {
+                        diagnostics.push({
+                            severity: 'warning',
+                            message: `Equality '${node.operator}' between incompatible types: ${typeToString(leftType)} and ${typeToString(rightType)} — will always be ${node.operator === '<>' ? 'true' : 'false'}`,
+                            offset: 0,
+                            length: 0,
+                            code: 'OCL_EQUALITY_TYPE',
+                        });
+                    }
+                }
             }
         }
         // Check 'implies' operands should be Boolean

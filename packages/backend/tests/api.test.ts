@@ -60,6 +60,20 @@ beforeAll(async () => {
       },
       inject: [getDataSourceToken()],
     })
+    .overrideProvider(ProjectExportService)
+    .useFactory({
+      factory: async (ds: DataSource) => {
+        return new ProjectExportService(
+          ds.getRepository(Project),
+          ds.getRepository(Metamodel),
+          ds.getRepository(M1Model),
+          ds.getRepository(GraphicalSpec),
+          ds.getRepository(OCLConstraint),
+          ds.getRepository(CodeTemplate),
+        );
+      },
+      inject: [getDataSourceToken()],
+    })
     .compile();
 
   app = moduleFixture.createNestApplication();
