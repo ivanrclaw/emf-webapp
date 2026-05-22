@@ -19,14 +19,24 @@ import { EdgeStyleEditor } from './editors/EdgeStyleEditor';
 import { NodeConditionalStylesEditor, EdgeConditionalStylesEditor } from './editors/ConditionalStylesEditor';
 import { ToolMappingEditor } from './editors/ToolMappingEditor';
 import { FormField, TextInput, Select, SectionDivider, MultiSelect, Slider, Toggle, NumberInput } from './shared/FormControls';
+import { ExpressionInput } from './shared/ExpressionInput';
 import { Box, Link2, Wrench, Layers } from '../icons';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
+
+interface EClassInfo {
+  name: string;
+  abstract?: boolean;
+  interface?: boolean;
+  eAttributes?: { name: string; eType?: string }[];
+  eReferences?: { name: string; eType?: string; containment?: boolean; upperBound?: number }[];
+}
 
 interface MappingDetailPanelProps {
   selection: MappingSelection | null;
   layer: Layer;
   allLayers: Layer[];
+  eclasses?: EClassInfo[];
   onUpdateNodeMapping: (id: string, patch: Partial<NodeMapping>) => void;
   onUpdateContainerMapping: (id: string, patch: Partial<ContainerMapping>) => void;
   onUpdateEdgeMapping: (id: string, patch: Partial<EdgeMapping>) => void;
@@ -39,6 +49,7 @@ export function MappingDetailPanel({
   selection,
   layer,
   allLayers,
+  eclasses,
   onUpdateNodeMapping,
   onUpdateContainerMapping,
   onUpdateEdgeMapping,
@@ -67,6 +78,7 @@ export function MappingDetailPanel({
           onUpdate={(patch) => onUpdateNodeMapping(selection.id, patch)}
           toolSections={layer.toolSections}
           onUpdateToolSections={onUpdateToolSections}
+          eclasses={eclasses}
         />
       );
     }
@@ -82,6 +94,7 @@ export function MappingDetailPanel({
           toolSections={layer.toolSections}
           onUpdateToolSections={onUpdateToolSections}
           layer={layer}
+          eclasses={eclasses}
         />
       );
     }
@@ -97,6 +110,7 @@ export function MappingDetailPanel({
           toolSections={layer.toolSections}
           onUpdateToolSections={onUpdateToolSections}
           layer={layer}
+          eclasses={eclasses}
         />
       );
     }
@@ -124,6 +138,7 @@ function NodeMappingDetail({
   onUpdate,
   toolSections,
   onUpdateToolSections,
+  eclasses,
 }: {
   mapping: NodeMapping;
   activeTab: string;
@@ -131,6 +146,7 @@ function NodeMappingDetail({
   onUpdate: (patch: Partial<NodeMapping>) => void;
   toolSections: ToolSection[];
   onUpdateToolSections: (sections: ToolSection[]) => void;
+  eclasses?: EClassInfo[];
 }) {
   const tabs = ['general', 'style', 'conditional', 'tools'];
 
@@ -146,27 +162,30 @@ function NodeMappingDetail({
               <TextInput value={mapping.domainClass} readOnly />
             </FormField>
             <FormField label="Label Expression">
-              <TextInput
+              <ExpressionInput
                 value={mapping.labelExpression}
                 onChange={(v) => onUpdate({ labelExpression: v })}
                 placeholder="self.name"
-                monospace
+                domainClass={mapping.domainClass}
+                eclasses={eclasses}
               />
             </FormField>
             <FormField label="Semantic Candidates">
-              <TextInput
+              <ExpressionInput
                 value={mapping.semanticCandidatesExpression}
                 onChange={(v) => onUpdate({ semanticCandidatesExpression: v })}
                 placeholder="self"
-                monospace
+                domainClass={mapping.domainClass}
+                eclasses={eclasses}
               />
             </FormField>
             <FormField label="Precondition">
-              <TextInput
+              <ExpressionInput
                 value={mapping.preconditionExpression || ''}
                 onChange={(v) => onUpdate({ preconditionExpression: v || undefined })}
                 placeholder="(optional)"
-                monospace
+                domainClass={mapping.domainClass}
+                eclasses={eclasses}
               />
             </FormField>
           </>
@@ -176,9 +195,10 @@ function NodeMappingDetail({
           <NodeStyleEditor
             style={mapping.defaultStyle}
             onChange={(patch) => onUpdate({ defaultStyle: { ...mapping.defaultStyle, ...patch } })}
+            domainClass={mapping.domainClass}
+            eclasses={eclasses}
           />
         )}
-
         {activeTab === 'conditional' && (
           <NodeConditionalStylesEditor
             conditionalStyles={mapping.conditionalStyles}
@@ -210,6 +230,7 @@ function ContainerMappingDetail({
   toolSections,
   onUpdateToolSections,
   layer,
+  eclasses,
 }: {
   mapping: ContainerMapping;
   activeTab: string;
@@ -218,6 +239,7 @@ function ContainerMappingDetail({
   toolSections: ToolSection[];
   onUpdateToolSections: (sections: ToolSection[]) => void;
   layer: Layer;
+  eclasses?: EClassInfo[];
 }) {
   const tabs = ['general', 'style', 'children', 'conditional', 'tools'];
 
@@ -241,27 +263,30 @@ function ContainerMappingDetail({
               <TextInput value={mapping.domainClass} readOnly />
             </FormField>
             <FormField label="Label Expression">
-              <TextInput
+              <ExpressionInput
                 value={mapping.labelExpression}
                 onChange={(v) => onUpdate({ labelExpression: v })}
                 placeholder="self.name"
-                monospace
+                domainClass={mapping.domainClass}
+                eclasses={eclasses}
               />
             </FormField>
             <FormField label="Semantic Candidates">
-              <TextInput
+              <ExpressionInput
                 value={mapping.semanticCandidatesExpression}
                 onChange={(v) => onUpdate({ semanticCandidatesExpression: v })}
                 placeholder="self"
-                monospace
+                domainClass={mapping.domainClass}
+                eclasses={eclasses}
               />
             </FormField>
             <FormField label="Precondition">
-              <TextInput
+              <ExpressionInput
                 value={mapping.preconditionExpression || ''}
                 onChange={(v) => onUpdate({ preconditionExpression: v || undefined })}
                 placeholder="(optional)"
-                monospace
+                domainClass={mapping.domainClass}
+                eclasses={eclasses}
               />
             </FormField>
           </>
@@ -271,9 +296,10 @@ function ContainerMappingDetail({
           <NodeStyleEditor
             style={mapping.defaultStyle}
             onChange={(patch) => onUpdate({ defaultStyle: { ...mapping.defaultStyle, ...patch } })}
+            domainClass={mapping.domainClass}
+            eclasses={eclasses}
           />
         )}
-
         {activeTab === 'children' && (
           <>
             <FormField label="Children Presentation">
@@ -365,6 +391,7 @@ function EdgeMappingDetail({
   toolSections,
   onUpdateToolSections,
   layer,
+  eclasses,
 }: {
   mapping: EdgeMapping;
   activeTab: string;
@@ -373,6 +400,7 @@ function EdgeMappingDetail({
   toolSections: ToolSection[];
   onUpdateToolSections: (sections: ToolSection[]) => void;
   layer: Layer;
+  eclasses?: EClassInfo[];
 }) {
   const tabs = ['general', 'style', 'conditional', 'tools'];
 
@@ -406,11 +434,12 @@ function EdgeMappingDetail({
             </FormField>
             {mapping.type === 'relation-based' && (
               <FormField label="Source Reference">
-                <TextInput
+                <ExpressionInput
                   value={mapping.sourceReference || ''}
                   onChange={(v) => onUpdate({ sourceReference: v })}
                   placeholder="referenceName"
-                  monospace
+                  domainClass={mapping.domainClass}
+                  eclasses={eclasses}
                 />
               </FormField>
             )}
@@ -424,29 +453,32 @@ function EdgeMappingDetail({
                   />
                 </FormField>
                 <FormField label="Semantic Candidates">
-                  <TextInput
+                  <ExpressionInput
                     value={mapping.semanticCandidatesExpression || ''}
                     onChange={(v) => onUpdate({ semanticCandidatesExpression: v })}
                     placeholder="self.edges"
-                    monospace
+                    domainClass={mapping.domainClass}
+                    eclasses={eclasses}
                   />
                 </FormField>
                 <FormField label="Source Finder">
-                  <TextInput
+                  <ExpressionInput
                     value={mapping.sourceFinderExpression || ''}
                     onChange={(v) => onUpdate({ sourceFinderExpression: v || undefined })}
                     placeholder="self.source"
-                    monospace
+                    domainClass={mapping.domainClass}
+                    eclasses={eclasses}
                   />
                 </FormField>
               </>
             )}
             <FormField label="Target Finder Expression">
-              <TextInput
+              <ExpressionInput
                 value={mapping.targetFinderExpression}
                 onChange={(v) => onUpdate({ targetFinderExpression: v })}
                 placeholder="self.refName"
-                monospace
+                domainClass={mapping.domainClass}
+                eclasses={eclasses}
               />
             </FormField>
             <SectionDivider label="Mapping Connections" />
@@ -467,11 +499,12 @@ function EdgeMappingDetail({
               />
             </FormField>
             <FormField label="Precondition">
-              <TextInput
+              <ExpressionInput
                 value={mapping.preconditionExpression || ''}
                 onChange={(v) => onUpdate({ preconditionExpression: v || undefined })}
                 placeholder="(optional)"
-                monospace
+                domainClass={mapping.domainClass}
+                eclasses={eclasses}
               />
             </FormField>
           </>

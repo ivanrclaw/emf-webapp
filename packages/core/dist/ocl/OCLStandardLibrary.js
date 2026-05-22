@@ -34,6 +34,8 @@ export const OclAnyOperations = [
     { name: 'oclIsUndefined', params: [], returnType: OCL.Boolean, description: 'True if self is null' },
     { name: 'oclIsInvalid', params: [], returnType: OCL.Boolean, description: 'True if self is invalid' },
     { name: 'oclAsSet', params: [], returnType: OCL.SetOf(OCL.Any), description: 'Wraps self in a singleton Set' },
+    { name: 'oclContainer', params: [], returnType: OCL.Any, description: 'Returns the containing object (parent in containment hierarchy)' },
+    { name: 'oclContents', params: [], returnType: OCL.SetOf(OCL.Any), description: 'Returns the direct contents (children in containment hierarchy)' },
     { name: 'oclType', params: [], returnType: OCL.Any, description: 'Returns the type of self' },
     { name: 'toString', params: [], returnType: OCL.String, description: 'String representation' },
 ];

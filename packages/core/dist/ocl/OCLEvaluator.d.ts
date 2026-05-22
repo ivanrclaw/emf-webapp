@@ -19,6 +19,8 @@ export interface OCLEObject {
     eClass: string;
     attributes: Record<string, EValue>;
     references: Record<string, EValue>;
+    eContainer?: OCLEObject | null;
+    eContents?: () => EValue[];
 }
 export interface OCLEClassInfo {
     name: string;
@@ -58,7 +60,10 @@ export declare class OCLEvaluator {
     private evalCollectionOp;
     private evalTupleLiteral;
     private evalAtPre;
+    private evalMultiIterator;
     private toBoolean;
+    private toBooleanOrNull;
+    private compareValues;
     private toNumber;
     private isEqual;
     private isEObject;

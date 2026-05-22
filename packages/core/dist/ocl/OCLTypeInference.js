@@ -222,6 +222,15 @@ export class OCLTypeInferenceEngine {
             errors.push({ message: `Unknown tuple part '${method}'`, node });
             return OCL.Any;
         }
+        // For 'any' type (e.g. result of oclContainer), handle oclAsType for type narrowing
+        if (objectType.kind === 'any') {
+            if (method === 'oclAsType' && node.args.length > 0) {
+                const argNode = node.args[0];
+                if (argNode.type === 'identifier' && this.classMap.has(argNode.name)) {
+                    return OCL.Class(argNode.name);
+                }
+            }
+        }
         return OCL.Any;
     }
     // ── Collection Operation (arrow navigation) ─────────────────────────
@@ -382,6 +391,11 @@ export class OCLTypeInferenceEngine {
      * Resolve the type of a feature (attribute or reference) on a class.
      */
     resolveFeatureType(className, featureName, errors, node) {
+        // OCL pseudo-properties available on all objects (OclAny)
+        if (featureName === 'oclContainer')
+            return OCL.Any;
+        if (featureName === 'oclContents')
+            return OCL.SetOf(OCL.Any);
         const cls = this.classMap.get(className);
         if (!cls) {
             errors.push({ message: `Unknown class '${className}'`, node });
@@ -422,6 +436,11 @@ export class OCLTypeInferenceEngine {
      * Same as resolveFeatureType but without error reporting (for supertype traversal).
      */
     resolveFeatureTypeSilent(className, featureName) {
+        // OCL pseudo-properties available on all objects (OclAny)
+        if (featureName === 'oclContainer')
+            return OCL.Any;
+        if (featureName === 'oclContents')
+            return OCL.SetOf(OCL.Any);
         const cls = this.classMap.get(className);
         if (!cls)
             return null;

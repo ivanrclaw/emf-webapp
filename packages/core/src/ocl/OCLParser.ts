@@ -37,7 +37,8 @@ export type ASTNode =
   | IfNode
   | CollectionLiteralNode
   | TupleLiteralNode
-  | AtPreNode;
+  | AtPreNode
+  | RangeNode;
 
 export interface LiteralNode {
   type: 'literal';
@@ -79,6 +80,7 @@ export interface CollectionOpNode {
   source: ASTNode;
   operation: string;
   iterator?: string;
+  iterators?: string[];
   body?: ASTNode;
   args?: ASTNode[];
   /** For iterate: name of the accumulator variable */
@@ -100,6 +102,12 @@ export interface IfNode {
   condition: ASTNode;
   thenExpr: ASTNode;
   elseExpr: ASTNode;
+}
+
+export interface RangeNode {
+  type: 'range';
+  start: ASTNode;
+  end: ASTNode;
 }
 
 export interface CollectionLiteralNode {
@@ -440,13 +448,13 @@ export class OCLParser {
     }
   }
 
-  /** Parse Set{ expr, ... }, Bag{ expr, ... }, etc. */
+  /** Parse Set{ expr, ... }, Bag{ expr, ... }, Sequence{1..10}, etc. */
   private parseCollectionLiteral(): ASTNode {
     const ct = this.getCollectionTypeKeyword();
     if (!ct) throw new Error('Expected collection type keyword');
     this.advance(); // consume the keyword
     this.expect(TokenType.LBRACE);
-    const elements = this.parseArgs();
+    const elements = this.parseCollectionElements();
     this.expect(TokenType.RBRACE);
     let node: ASTNode = {
       type: 'collectionliteral',
@@ -456,6 +464,25 @@ export class OCLParser {
     // Allow call chain on the literal (e.g., Set{1,2}->size())
     node = this.parseCallChain(node);
     return node;
+  }
+
+  /** Parse collection elements, supporting range syntax (1..10) */
+  private parseCollectionElements(): ASTNode[] {
+    const elements: ASTNode[] = [];
+    if (this.check(TokenType.RBRACE)) return elements;
+
+    do {
+      const expr = this.expression();
+      // Check for range: expr..expr
+      if (this.match(TokenType.DOT_DOT)) {
+        const endExpr = this.expression();
+        elements.push({ type: 'range', start: expr, end: endExpr } as RangeNode);
+      } else {
+        elements.push(expr);
+      }
+    } while (this.match(TokenType.COMMA));
+
+    return elements;
   }
 
   private parseCallChain(object: ASTNode): ASTNode {
@@ -565,15 +592,35 @@ export class OCLParser {
       this.parseQualifiedType(); // consume but ignore type for now
     }
 
+    // Multi-iterator syntax: forAll(x, y | expr)
+    const iterators: string[] = [iterator];
+    while (this.match(TokenType.COMMA)) {
+      // Check if this is actually another iterator (identifier followed by pipe or comma or colon)
+      // vs. a body expression. We peek: if next is IDENTIFIER and after that is PIPE/COMMA/COLON, it's an iterator.
+      if (this.check(TokenType.IDENTIFIER)) {
+        const nextIter = this.advance().value;
+        if (this.match(TokenType.COLON)) {
+          this.parseQualifiedType(); // consume type annotation
+        }
+        iterators.push(nextIter);
+      } else {
+        // Not an iterator — backtrack: this comma was part of the body expression
+        // Actually in OCL, commas in lambda args always precede identifiers
+        // If we get here, it's a parse error or unusual syntax
+        break;
+      }
+    }
+
     if (this.match(TokenType.PIPE)) {
-      // explicit iterator: forAll(x | expr)
+      // explicit iterator(s): forAll(x | expr) or forAll(x, y | expr)
       const body = this.expression();
       this.expect(TokenType.RPAREN);
       return {
         type: 'collectionop',
         source,
         operation: opName,
-        iterator,
+        iterator: iterators[0],
+        iterators: iterators.length > 1 ? iterators : undefined,
         body,
       } as CollectionOpNode;
     } else {

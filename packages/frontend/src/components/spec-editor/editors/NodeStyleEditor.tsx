@@ -21,10 +21,21 @@ import {
   TextInput,
   SectionDivider,
 } from '../shared/FormControls';
+import { ExpressionInput } from '../shared/ExpressionInput';
+
+interface EClassInfo {
+  name: string;
+  abstract?: boolean;
+  interface?: boolean;
+  eAttributes?: { name: string; eType?: string }[];
+  eReferences?: { name: string; eType?: string; containment?: boolean; upperBound?: number }[];
+}
 
 interface NodeStyleEditorProps {
   style: NodeStyle;
   onChange: (patch: Partial<NodeStyle>) => void;
+  domainClass?: string;
+  eclasses?: EClassInfo[];
 }
 
 const SHAPES: { value: ShapeType; label: string; icon: string }[] = [
@@ -50,7 +61,7 @@ const LABEL_POSITIONS: { value: LabelPosition; label: string }[] = [
   { value: 'border', label: 'Border' },
 ];
 
-export function NodeStyleEditor({ style, onChange }: NodeStyleEditorProps) {
+export function NodeStyleEditor({ style, onChange, domainClass, eclasses }: NodeStyleEditorProps) {
   return (
     <div style={styles.container}>
       {/* ─── Shape ─────────────────────────────────────────── */}
@@ -112,11 +123,12 @@ export function NodeStyleEditor({ style, onChange }: NodeStyleEditorProps) {
       {/* ─── Label ─────────────────────────────────────────── */}
       <SectionDivider label="Label" />
       <FormField label="Expression">
-        <TextInput
+        <ExpressionInput
           value={style.labelExpression}
           onChange={(v) => onChange({ labelExpression: v })}
           placeholder="self.name"
-          monospace
+          domainClass={domainClass}
+          eclasses={eclasses}
         />
       </FormField>
       <FormField label="Position">
@@ -150,11 +162,12 @@ export function NodeStyleEditor({ style, onChange }: NodeStyleEditorProps) {
       {/* ─── Tooltip ───────────────────────────────────────── */}
       <SectionDivider label="Tooltip" />
       <FormField label="Expression">
-        <TextInput
+        <ExpressionInput
           value={style.tooltipExpression || ''}
           onChange={(v) => onChange({ tooltipExpression: v || undefined })}
           placeholder="self.name + ' : ' + self.eClass().name"
-          monospace
+          domainClass={domainClass}
+          eclasses={eclasses}
         />
       </FormField>
     </div>

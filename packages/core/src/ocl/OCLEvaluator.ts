@@ -36,6 +36,8 @@ export interface OCLEObject {
   eClass: string;
   attributes: Record<string, EValue>;
   references: Record<string, EValue>;
+  eContainer?: OCLEObject | null;
+  eContents?: () => EValue[];
 }
 
 export interface OCLEClassInfo {
@@ -102,6 +104,16 @@ export class OCLEvaluator {
         return this.evalTupleLiteral(node as TupleLiteralNode, context, scope);
       case 'atpre':
         return this.evalAtPre(node as AtPreNode, context, scope);
+      case 'range':
+        // Range nodes are normally handled inside collection literals
+        // If encountered standalone, evaluate as a sequence
+        const rangeN = node as import('./OCLParser.js').RangeNode;
+        const s = this.toNumber(this.evalNode(rangeN.start, context, scope));
+        const e = this.toNumber(this.evalNode(rangeN.end, context, scope));
+        const result: EValue[] = [];
+        if (s <= e) { for (let i = s; i <= e; i++) result.push(i); }
+        else { for (let i = s; i >= e; i--) result.push(i); }
+        return result;
       default:
         throw new Error(`Unknown node type: ${(node as any).type}`);
     }
@@ -160,7 +172,22 @@ export class OCLEvaluator {
     context: OCLEObject,
     scope: Map<string, EValue>,
   ): EValue {
-    const elements = node.elements.map((el) => this.evalNode(el, context, scope));
+    const elements: EValue[] = [];
+    for (const el of node.elements) {
+      if (el.type === 'range') {
+        // Range expression: expand start..end into individual integers
+        const rangeNode = el as import('./OCLParser.js').RangeNode;
+        const start = this.toNumber(this.evalNode(rangeNode.start, context, scope));
+        const end = this.toNumber(this.evalNode(rangeNode.end, context, scope));
+        if (start <= end) {
+          for (let i = start; i <= end; i++) elements.push(i);
+        } else {
+          for (let i = start; i >= end; i--) elements.push(i);
+        }
+      } else {
+        elements.push(this.evalNode(el, context, scope));
+      }
+    }
 
     switch (node.collectionType) {
       case 'Set':
@@ -218,7 +245,13 @@ export class OCLEvaluator {
         }
         return this.toNumber(left) + this.toNumber(right);
       }
-      case '-': return this.toNumber(left) - this.toNumber(right);
+      case '-': {
+        // Set difference: Set - Set
+        if (Array.isArray(left) && Array.isArray(right)) {
+          return left.filter((item) => !right.some((r) => this.isEqual(item, r))) as EValue[];
+        }
+        return this.toNumber(left) - this.toNumber(right);
+      }
       case '*': return this.toNumber(left) * this.toNumber(right);
       case '/': {
         const r = this.toNumber(right);
@@ -239,16 +272,40 @@ export class OCLEvaluator {
       // Comparison
       case '=': return this.isEqual(left, right);
       case '<>': return !this.isEqual(left, right);
-      case '>': return this.toNumber(left) > this.toNumber(right);
-      case '<': return this.toNumber(left) < this.toNumber(right);
-      case '>=': return this.toNumber(left) >= this.toNumber(right);
-      case '<=': return this.toNumber(left) <= this.toNumber(right);
+      case '>': return this.compareValues(left, right) > 0;
+      case '<': return this.compareValues(left, right) < 0;
+      case '>=': return this.compareValues(left, right) >= 0;
+      case '<=': return this.compareValues(left, right) <= 0;
 
-      // Logical
-      case 'and': return this.toBoolean(left) && this.toBoolean(right);
-      case 'or': return this.toBoolean(left) || this.toBoolean(right);
-      case 'xor': return this.toBoolean(left) !== this.toBoolean(right);
-      case 'implies': return !this.toBoolean(left) || this.toBoolean(right);
+      // Logical (three-valued: null propagation per OCL 2.4)
+      case 'and': {
+        const lb = this.toBooleanOrNull(left);
+        const rb = this.toBooleanOrNull(right);
+        if (lb === false || rb === false) return false; // false AND x = false
+        if (lb === null || rb === null) return null;    // null AND true = null
+        return true;
+      }
+      case 'or': {
+        const lb = this.toBooleanOrNull(left);
+        const rb = this.toBooleanOrNull(right);
+        if (lb === true || rb === true) return true;    // true OR x = true
+        if (lb === null || rb === null) return null;    // null OR false = null
+        return false;
+      }
+      case 'xor': {
+        const lb = this.toBooleanOrNull(left);
+        const rb = this.toBooleanOrNull(right);
+        if (lb === null || rb === null) return null;
+        return lb !== rb;
+      }
+      case 'implies': {
+        const lb = this.toBooleanOrNull(left);
+        const rb = this.toBooleanOrNull(right);
+        if (lb === false) return true;                  // false IMPLIES x = true
+        if (rb === true) return true;                   // x IMPLIES true = true
+        if (lb === null || rb === null) return null;
+        return !lb || rb;
+      }
 
       default:
         throw new Error(`Unknown binary operator: ${node.operator}`);
@@ -343,6 +400,28 @@ export class OCLEvaluator {
         return typeof obj === 'string' && typeof args[0] === 'string'
           ? obj.toLowerCase() === args[0].toLowerCase()
           : false;
+      case 'lastIndexOf': {
+        // OCL: 1-based index, 0 if not found
+        const str = String(obj);
+        const substr = String(args[0]);
+        const lastIdx = str.lastIndexOf(substr);
+        return lastIdx === -1 ? 0 : lastIdx + 1;
+      }
+      case 'substituteAll':
+        // Literal string replacement (not regex)
+        return typeof obj === 'string' && typeof args[0] === 'string' && typeof args[1] === 'string'
+          ? obj.split(args[0]).join(args[1])
+          : String(obj);
+      case 'substituteFirst':
+        // Literal first occurrence replacement (not regex)
+        return typeof obj === 'string' && typeof args[0] === 'string' && typeof args[1] === 'string'
+          ? obj.replace(args[0], args[1])
+          : String(obj);
+      case 'tokenize':
+        // Split by whitespace
+        return typeof obj === 'string'
+          ? (obj.trim().split(/\s+/).filter(s => s.length > 0) as EValue[])
+          : ([] as EValue[]);
       case 'toUpperCase':
         return typeof obj === 'string' ? obj.toUpperCase() : String(obj).toUpperCase();
       case 'toLowerCase':
@@ -377,6 +456,14 @@ export class OCLEvaluator {
         return obj === null || obj === undefined;
       case 'oclIsInvalid':
         return obj === null || obj === undefined;
+      case 'oclContainer':
+        // Navigate to the containing object (parent in containment hierarchy)
+        if (this.isEObject(obj) && (obj as OCLEObject).eContainer) return (obj as OCLEObject).eContainer!;
+        return null;
+      case 'oclContents':
+        // Navigate to direct contained children
+        if (this.isEObject(obj) && (obj as OCLEObject).eContents) return (obj as OCLEObject).eContents!();
+        return [] as EValue[];
       case 'oclType': {
         if (this.isEObject(obj)) return obj.eClass;
         if (typeof obj === 'string') return 'String';
@@ -516,6 +603,10 @@ export class OCLEvaluator {
         if (!node.body || !node.iterator) {
           return col.every(() => true);
         }
+        // Multi-iterator: forAll(x, y | body) — nested loops over all combinations
+        if (node.iterators && node.iterators.length > 1) {
+          return this.evalMultiIterator(col, node.iterators, node.body, context, scope, 'forAll');
+        }
         for (const item of col) {
           const newScope = new Map(scope);
           newScope.set(node.iterator, item);
@@ -526,6 +617,10 @@ export class OCLEvaluator {
       }
       case 'exists': {
         if (!node.body) return col.length > 0;
+        // Multi-iterator: exists(x, y | body) — nested loops
+        if (node.iterators && node.iterators.length > 1) {
+          return this.evalMultiIterator(col, node.iterators, node.body, context, scope, 'exists');
+        }
         for (const item of col) {
           const newScope = new Map(scope);
           newScope.set(node.iterator!, item);
@@ -793,6 +888,48 @@ export class OCLEvaluator {
       }
       case 'reverse':
         return [...col].reverse() as EValue[];
+      case 'includingAll': {
+        const other = node.args?.[0]
+          ? this.evalNode(node.args[0], context, scope)
+          : [];
+        const otherArr = Array.isArray(other) ? other : [];
+        return [...col, ...otherArr] as EValue[];
+      }
+      case 'excludingAll': {
+        const other = node.args?.[0]
+          ? this.evalNode(node.args[0], context, scope)
+          : [];
+        const otherArr = Array.isArray(other) ? other : [];
+        return col.filter((item) => !otherArr.some((o) => this.isEqual(item, o))) as EValue[];
+      }
+      case 'product': {
+        const other = node.args?.[0]
+          ? this.evalNode(node.args[0], context, scope)
+          : [];
+        const otherArr = Array.isArray(other) ? other : [];
+        const result: EValue[] = [];
+        for (const a of col) {
+          for (const b of otherArr) {
+            const tuple = new Map<string, EValue>();
+            tuple.set('first', a);
+            tuple.set('second', b);
+            result.push(tuple as unknown as EValue);
+          }
+        }
+        return result;
+      }
+      case 'selectByKind': {
+        const typeName = node.args?.[0]
+          ? String(this.evalNode(node.args[0], context, scope))
+          : '';
+        return col.filter((item) => this.isEObject(item) && this.isKindOf(item, typeName)) as EValue[];
+      }
+      case 'selectByType': {
+        const typeName = node.args?.[0]
+          ? String(this.evalNode(node.args[0], context, scope))
+          : '';
+        return col.filter((item) => this.isEObject(item) && this.isTypeOf(item, typeName)) as EValue[];
+      }
 
       default:
         throw new Error(`Unknown collection operation: ${node.operation}`);
@@ -828,6 +965,34 @@ export class OCLEvaluator {
     return this.evalNode(node.expression, context, scope);
   }
 
+  // ── Multi-iterator helper ────────────────────────────────────────
+
+  private evalMultiIterator(
+    col: EValue[],
+    iterators: string[],
+    body: ASTNode,
+    context: OCLEObject,
+    scope: Map<string, EValue>,
+    mode: 'forAll' | 'exists',
+  ): boolean {
+    // Generate all combinations via recursive nested loops
+    const evalCombination = (depth: number, currentScope: Map<string, EValue>): boolean => {
+      if (depth >= iterators.length) {
+        const result = this.toBoolean(this.evalNode(body, context, currentScope));
+        return mode === 'forAll' ? result : result;
+      }
+      for (const item of col) {
+        const newScope = new Map(currentScope);
+        newScope.set(iterators[depth], item);
+        const result = evalCombination(depth + 1, newScope);
+        if (mode === 'forAll' && !result) return false;
+        if (mode === 'exists' && result) return true;
+      }
+      return mode === 'forAll'; // forAll: true if all pass; exists: false if none found
+    };
+    return evalCombination(0, scope);
+  }
+
   // ── Helpers ──────────────────────────────────────────────────────
 
   private toBoolean(val: EValue): boolean {
@@ -837,6 +1002,20 @@ export class OCLEvaluator {
     if (val === null || val === undefined) return false;
     if (Array.isArray(val)) return val.length > 0;
     return true;
+  }
+
+  private toBooleanOrNull(val: EValue): boolean | null {
+    if (val === null || val === undefined) return null;
+    return this.toBoolean(val);
+  }
+
+  private compareValues(left: EValue, right: EValue): number {
+    // String lexicographic comparison
+    if (typeof left === 'string' && typeof right === 'string') {
+      return left.localeCompare(right);
+    }
+    // Numeric comparison
+    return this.toNumber(left) - this.toNumber(right);
   }
 
   private toNumber(val: EValue): number {

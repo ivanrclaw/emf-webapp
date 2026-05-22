@@ -692,6 +692,7 @@ function SpecEditorInner({ projectId: propPid, metamodelId: propMmid }: { projec
               selection={selection}
               layer={activeLayer}
               allLayers={allLayers}
+              eclasses={eclasses}
               onUpdateNodeMapping={handleUpdateNodeMapping}
               onUpdateContainerMapping={handleUpdateContainerMapping}
               onUpdateEdgeMapping={handleUpdateEdgeMapping}

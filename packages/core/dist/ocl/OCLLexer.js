@@ -85,6 +85,8 @@ export var TokenType;
     TokenType["SEQUENCE"] = "SEQUENCE";
     TokenType["ORDERED_SET"] = "ORDERED_SET";
     TokenType["TUPLE"] = "TUPLE";
+    // Range
+    TokenType["DOT_DOT"] = "DOT_DOT";
     // OclMessage
     TokenType["CARET"] = "CARET";
     TokenType["DOUBLE_CARET"] = "DOUBLE_CARET";
@@ -191,9 +193,18 @@ export class OCLLexer {
             // Numbers
             if (/[0-9]/.test(ch)) {
                 let num = '';
-                while (this.pos < len && /[0-9.]/.test(this.input[this.pos])) {
+                while (this.pos < len && /[0-9]/.test(this.input[this.pos])) {
                     num += this.input[this.pos];
                     this.pos++;
+                }
+                // Allow decimal point only if NOT followed by another dot (range operator '..')
+                if (this.pos < len && this.input[this.pos] === '.' && this.input[this.pos + 1] !== '.') {
+                    num += this.input[this.pos];
+                    this.pos++;
+                    while (this.pos < len && /[0-9]/.test(this.input[this.pos])) {
+                        num += this.input[this.pos];
+                        this.pos++;
+                    }
                 }
                 this.addToken(TokenType.NUMBER, num);
                 continue;
@@ -208,7 +219,7 @@ export class OCLLexer {
                 // Check for @pre suffix (e.g., someAttr@pre)
                 if (this.input[this.pos] === '@' && this.input.substring(this.pos, this.pos + 4) === '@pre') {
                     // Emit the identifier first, then @pre as separate token
-                    if (id === 'oclIsTypeOf' || id === 'oclIsKindOf' || id === 'oclAsType' || id === 'oclIsUndefined') {
+                    if (id === 'oclIsTypeOf' || id === 'oclIsKindOf' || id === 'oclAsType' || id === 'oclIsUndefined' || id === 'oclContainer' || id === 'oclContents') {
                         this.addToken(TokenType.IDENTIFIER, id);
                     }
                     else {
@@ -218,7 +229,7 @@ export class OCLLexer {
                     this.addToken(TokenType.AT_PRE, '@pre');
                     this.pos += 4;
                 }
-                else if (id === 'oclIsTypeOf' || id === 'oclIsKindOf' || id === 'oclAsType' || id === 'oclIsUndefined') {
+                else if (id === 'oclIsTypeOf' || id === 'oclIsKindOf' || id === 'oclAsType' || id === 'oclIsUndefined' || id === 'oclContainer' || id === 'oclContents') {
                     this.addToken(TokenType.IDENTIFIER, id);
                 }
                 else {
@@ -261,6 +272,12 @@ export class OCLLexer {
                 this.pos++;
                 continue;
             }
+            // @pre after non-identifier tokens (e.g., after ')' in ->size()@pre)
+            if (ch === '@' && this.input.substring(this.pos, this.pos + 4) === '@pre') {
+                this.addToken(TokenType.AT_PRE, '@pre');
+                this.pos += 4;
+                continue;
+            }
             // Single-char tokens
             const singleCharMap = {
                 '+': TokenType.PLUS,
@@ -274,12 +291,22 @@ export class OCLLexer {
                 ')': TokenType.RPAREN,
                 '{': TokenType.LBRACE,
                 '}': TokenType.RBRACE,
-                '.': TokenType.DOT,
                 ',': TokenType.COMMA,
                 ';': TokenType.SEMI,
                 ':': TokenType.COLON,
                 '|': TokenType.PIPE,
             };
+            // Dot: check for '..' (DOT_DOT) before single '.'
+            if (ch === '.') {
+                if (this.input[this.pos + 1] === '.') {
+                    this.addToken(TokenType.DOT_DOT, '..');
+                    this.pos += 2;
+                    continue;
+                }
+                this.addToken(TokenType.DOT, '.');
+                this.pos++;
+                continue;
+            }
             const tt = singleCharMap[ch];
             if (tt !== undefined) {
                 this.addToken(tt, ch);

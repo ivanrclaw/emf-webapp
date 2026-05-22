@@ -22,7 +22,7 @@
  *   iterateOp             → "(" IDENTIFIER (":" type)? ";" IDENTIFIER (":" type)? "=" expression "|" expression ")"
  *   args                  → expression ("," expression)*
  */
-export type ASTNode = LiteralNode | IdentifierNode | SelfNode | UnaryOpNode | BinaryOpNode | MethodCallNode | CollectionOpNode | LetInNode | IfNode | CollectionLiteralNode | TupleLiteralNode | AtPreNode;
+export type ASTNode = LiteralNode | IdentifierNode | SelfNode | UnaryOpNode | BinaryOpNode | MethodCallNode | CollectionOpNode | LetInNode | IfNode | CollectionLiteralNode | TupleLiteralNode | AtPreNode | RangeNode;
 export interface LiteralNode {
     type: 'literal';
     valueType: 'number' | 'string' | 'boolean' | 'null' | 'invalid';
@@ -57,6 +57,7 @@ export interface CollectionOpNode {
     source: ASTNode;
     operation: string;
     iterator?: string;
+    iterators?: string[];
     body?: ASTNode;
     args?: ASTNode[];
     /** For iterate: name of the accumulator variable */
@@ -76,6 +77,11 @@ export interface IfNode {
     condition: ASTNode;
     thenExpr: ASTNode;
     elseExpr: ASTNode;
+}
+export interface RangeNode {
+    type: 'range';
+    start: ASTNode;
+    end: ASTNode;
 }
 export interface CollectionLiteralNode {
     type: 'collectionliteral';
@@ -117,8 +123,10 @@ export declare class OCLParser {
     private parseQualifiedType;
     private isCollectionTypeKeyword;
     private getCollectionTypeKeyword;
-    /** Parse Set{ expr, ... }, Bag{ expr, ... }, etc. */
+    /** Parse Set{ expr, ... }, Bag{ expr, ... }, Sequence{1..10}, etc. */
     private parseCollectionLiteral;
+    /** Parse collection elements, supporting range syntax (1..10) */
+    private parseCollectionElements;
     private parseCallChain;
     private parseTupleLiteral;
     private parseTuplePart;

@@ -74,6 +74,7 @@ export declare enum TokenType {
     SEQUENCE = "SEQUENCE",
     ORDERED_SET = "ORDERED_SET",
     TUPLE = "TUPLE",
+    DOT_DOT = "DOT_DOT",// ..
     CARET = "CARET",// ^
     DOUBLE_CARET = "DOUBLE_CARET"
 }
