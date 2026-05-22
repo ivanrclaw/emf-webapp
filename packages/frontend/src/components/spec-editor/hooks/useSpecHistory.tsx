@@ -39,7 +39,10 @@ export function useSpecHistory(initial: ViewpointSpec | null) {
       }
 
       lastPushRef.current = now;
-      const newPast = [...prev.past, prev.present].slice(-MAX_HISTORY);
+      // Don't push empty initial state to past
+      const newPast = prev.present
+        ? [...prev.past, prev.present].slice(-MAX_HISTORY)
+        : prev.past;
       return {
         past: newPast,
         present: serialized,
@@ -54,11 +57,12 @@ export function useSpecHistory(initial: ViewpointSpec | null) {
       if (prev.past.length === 0) return prev;
       const newPast = [...prev.past];
       const previous = newPast.pop()!;
+      if (!previous) return prev;
       result = JSON.parse(previous);
       return {
         past: newPast,
         present: previous,
-        future: [prev.present, ...prev.future].slice(0, MAX_HISTORY),
+        future: [prev.present, ...prev.future].filter(Boolean).slice(0, MAX_HISTORY),
       };
     });
     return result;
@@ -70,9 +74,10 @@ export function useSpecHistory(initial: ViewpointSpec | null) {
       if (prev.future.length === 0) return prev;
       const newFuture = [...prev.future];
       const next = newFuture.shift()!;
+      if (!next) return prev;
       result = JSON.parse(next);
       return {
-        past: [...prev.past, prev.present].slice(-MAX_HISTORY),
+        past: [...prev.past, prev.present].filter(Boolean).slice(-MAX_HISTORY),
         present: next,
         future: newFuture,
       };
