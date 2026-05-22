@@ -81,6 +81,12 @@ export interface ContainerMapping extends NodeMapping {
   childrenPresentation: ChildrenPresentation;
   subNodeMappingIds: string[];
   subContainerMappingIds: string[];
+  /** Spacing between children in px */
+  childrenSpacing?: number;
+  /** Padding inside the container in px */
+  padding?: number;
+  /** Whether to show bordered compartments for children groups */
+  borderedCompartments?: boolean;
 }
 
 export interface EdgeMapping {

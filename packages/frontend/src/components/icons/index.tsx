@@ -90,6 +90,7 @@ export {
   RefreshCw,
   Lock,
   Wand2,
+  Wrench,
 } from 'lucide-react';
 
 // Re-export type for consistent prop typing

@@ -1,46 +1,26 @@
 /**
- * @emf-webapp/frontend — SpecEditor (Rewritten for Sirius VSM)
+ * @emf-webapp/frontend — SpecEditor v2 (Master-Detail Layout)
  *
- * Full Viewpoint Specification editor with:
- * - Left: MetamodelBrowser + LayerPanel + ToolBuilder
- * - Center: ReactFlow canvas with mapping previews
- * - Right: SpecStylePanel (node/edge style + conditional styles)
+ * Graphical Syntax Editor with:
+ * - Left: MappingNavigator (hierarchical tree of all mappings)
+ * - Center: MappingDetailPanel (form-based editor for selected mapping)
+ * - Right: MappingPreview (live mini-canvas preview)
  */
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
-import {
-  ReactFlow,
-  ReactFlowProvider,
-  Background,
-  BackgroundVariant,
-  Controls,
-  MiniMap,
-  ConnectionMode,
-  useNodesState,
-  useEdgesState,
-  type Node,
-  type Edge,
-  type Connection,
-  type NodeMouseHandler,
-  type EdgeMouseHandler,
-} from '@xyflow/react';
+import { ReactFlowProvider } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import {
   getMetamodel,
-  getGraphicalSpec,
   getGraphicalSpecs,
   createGraphicalSpec,
   updateGraphicalSpec,
   type Metamodel,
   type GraphicalSpec,
 } from '../api/client';
-import SpecNode, { type SpecNodeData } from '../components/spec-diagram/SpecNode';
-import SpecEdge, { type SpecEdgeData } from '../components/spec-diagram/SpecEdge';
-import SpecContainerNode, { type SpecContainerNodeData } from '../components/spec-diagram/SpecContainerNode';
-import SpecStylePanel from '../components/spec-diagram/SpecStylePanel';
-import { MetamodelBrowser } from '../components/spec-editor/MetamodelBrowser';
-import { LayerPanel } from '../components/spec-editor/LayerPanel';
-import { ToolBuilder } from '../components/spec-editor/ToolBuilder';
+import { MappingNavigator, type MappingSelection } from '../components/spec-editor/MappingNavigator';
+import { MappingDetailPanel } from '../components/spec-editor/MappingDetailPanel';
+import { MappingPreview } from '../components/spec-editor/MappingPreview';
 import type {
   ViewpointSpec,
   Layer,
@@ -48,8 +28,6 @@ import type {
   ContainerMapping,
   EdgeMapping,
   ToolSection,
-  NodeStyle,
-  EdgeStyleSpec,
 } from '../components/spec-diagram/types';
 import {
   createDefaultViewpointSpec,
@@ -58,18 +36,11 @@ import {
   createDefaultLayer,
 } from '../components/spec-diagram/types';
 import { generateViewpointSpec, type MetamodelInput } from '../lib/spec-generator';
-import { Save, Trash2, AlertTriangle, Wand2 } from '../components/icons';
+import { useSpecHistory } from '../components/spec-editor/hooks/useSpecHistory';
+import { validateSpec, type ValidationIssue } from '../components/spec-editor/hooks/useSpecValidation';
+import { STYLE_TEMPLATES, applyTemplate } from '../components/spec-editor/hooks/styleTemplates';
+import { Save, Wand2, Undo2, Redo2, Download, Upload, Copy, Palette, AlertTriangle, ChevronRight } from '../components/icons';
 import ErrorPanel from '../components/feedback/ErrorPanel';
-
-/* ------------------------------------------------------------------ */
-/*  Node/Edge type registries                                          */
-/* ------------------------------------------------------------------ */
-
-const nodeTypes = {
-  specNode: SpecNode,
-  specContainerNode: SpecContainerNode,
-} as any;
-const edgeTypes = { specEdge: SpecEdge } as any;
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -77,59 +48,6 @@ const edgeTypes = { specEdge: SpecEdge } as any;
 
 function uid(): string {
   return Math.random().toString(36).slice(2, 10);
-}
-
-/** Convert ViewpointSpec layer mappings to ReactFlow nodes */
-function buildNodes(
-  layer: Layer,
-  posMap: Map<string, { x: number; y: number }>,
-  selectedId: string | null,
-): Node[] {
-  const nodes: Node[] = [];
-  let idx = 0;
-
-  for (const nm of layer.nodeMappings) {
-    const pos = posMap.get(nm.id) ?? { x: 80 + (idx % 4) * 240, y: 80 + Math.floor(idx / 4) * 180 };
-    nodes.push({
-      id: nm.id,
-      type: 'specNode',
-      position: pos,
-      data: { mapping: nm, selected: nm.id === selectedId } as SpecNodeData,
-    });
-    idx++;
-  }
-
-  for (const cm of layer.containerMappings) {
-    const pos = posMap.get(cm.id) ?? { x: 80 + (idx % 4) * 240, y: 80 + Math.floor(idx / 4) * 180 };
-    nodes.push({
-      id: cm.id,
-      type: 'specContainerNode',
-      position: pos,
-      data: { mapping: cm, selected: cm.id === selectedId } as SpecContainerNodeData,
-    });
-    idx++;
-  }
-
-  return nodes;
-}
-
-/** Convert EdgeMappings to ReactFlow edges */
-function buildEdges(layer: Layer, selectedId: string | null): Edge[] {
-  const edges: Edge[] = [];
-  for (const em of layer.edgeMappings) {
-    // Draw one edge per source→target mapping pair for preview
-    const sourceId = em.sourceMappingIds[0];
-    const targetId = em.targetMappingIds[0];
-    if (!sourceId || !targetId) continue;
-    edges.push({
-      id: em.id,
-      source: sourceId,
-      target: targetId,
-      type: 'specEdge',
-      data: { edgeMapping: em, selected: em.id === selectedId } as SpecEdgeData,
-    });
-  }
-  return edges;
 }
 
 /* ------------------------------------------------------------------ */
@@ -152,16 +70,24 @@ function SpecEditorInner({ projectId: propPid, metamodelId: propMmid }: { projec
   const [saveStatus, setSaveStatus] = useState<'saved' | 'unsaved' | ''>('');
 
   // Selection
-  const [selectedType, setSelectedType] = useState<'node' | 'container' | 'edge' | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selection, setSelection] = useState<MappingSelection | null>(null);
 
-  // Position map for nodes
-  const posMapRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  // History (undo/redo)
+  const history = useSpecHistory(null);
+
+  // Validation
+  const validationIssues = useMemo(() => {
+    if (!spec) return [];
+    return validateSpec(spec);
+  }, [spec]);
+
+  // Template menu
+  const [templateMenuOpen, setTemplateMenuOpen] = useState(false);
+
+  // Clipboard for copy style
+  const copiedStyleRef = useRef<{ type: 'node' | 'edge'; style: any } | null>(null);
+
   const lastSavedRef = useRef('');
-
-  // ReactFlow state
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
   // ─── Derived data ────────────────────────────────────────────────
   const eclasses = useMemo(() => {
@@ -181,44 +107,10 @@ function SpecEditorInner({ projectId: propPid, metamodelId: propMmid }: { projec
     return spec.additionalLayers.find((l) => l.id === activeLayerId) || spec.defaultLayer;
   }, [spec, activeLayerId]);
 
-  const existingMappings = useMemo(() => {
-    if (!activeLayer) return [];
-    return [
-      ...activeLayer.nodeMappings.map((m) => m.domainClass),
-      ...activeLayer.containerMappings.map((m) => m.domainClass),
-    ];
-  }, [activeLayer]);
-
-  const existingEdgeMappings = useMemo(() => {
-    if (!activeLayer) return [];
-    return activeLayer.edgeMappings.map((em) => {
-      const srcClasses = em.sourceMappingIds
-        .map((id) => activeLayer.nodeMappings.find((n) => n.id === id)?.domainClass)
-        .filter(Boolean);
-      const tgtClasses = em.targetMappingIds
-        .map((id) => activeLayer.nodeMappings.find((n) => n.id === id)?.domainClass)
-        .filter(Boolean);
-      const refName = em.sourceReference || '';
-      return srcClasses.flatMap((s) => tgtClasses.map((t) => `${s}.${refName}.${t}`));
-    }).flat();
-  }, [activeLayer]);
-
   const allLayers = useMemo(() => {
     if (!spec) return [];
     return [spec.defaultLayer, ...spec.additionalLayers];
   }, [spec]);
-
-  // Selected mapping for style panel
-  const selectedNodeMapping = useMemo(() => {
-    if (!selectedId || !activeLayer || selectedType !== 'node') return undefined;
-    return activeLayer.nodeMappings.find((m) => m.id === selectedId)
-      || activeLayer.containerMappings.find((m) => m.id === selectedId);
-  }, [selectedId, selectedType, activeLayer]);
-
-  const selectedEdgeMapping = useMemo(() => {
-    if (!selectedId || !activeLayer || selectedType !== 'edge') return undefined;
-    return activeLayer.edgeMappings.find((m) => m.id === selectedId);
-  }, [selectedId, selectedType, activeLayer]);
 
   // ─── Load ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -242,7 +134,6 @@ function SpecEditorInner({ projectId: propPid, metamodelId: propMmid }: { projec
           const parsed = JSON.parse(specs[0].spec || '{}') as ViewpointSpec;
           setSpec(parsed);
         } else {
-          // No spec exists — create empty
           const empty = createDefaultViewpointSpec(metamodelId);
           setSpec(empty);
         }
@@ -254,23 +145,6 @@ function SpecEditorInner({ projectId: propPid, metamodelId: propMmid }: { projec
     }
     load();
   }, [metamodelId, specId, projectId]);
-
-  // ─── Sync ReactFlow when spec/layer/selection changes ────────────
-  useEffect(() => {
-    if (!activeLayer) return;
-    setNodes(buildNodes(activeLayer, posMapRef.current, selectedId) as any);
-    setEdges(buildEdges(activeLayer, selectedId) as any);
-  }, [activeLayer, selectedId, setNodes, setEdges]);
-
-  // ─── Track node positions ────────────────────────────────────────
-  const handleNodesChange = useCallback((changes: any[]) => {
-    for (const ch of changes) {
-      if (ch.type === 'position' && ch.position) {
-        posMapRef.current.set(ch.id, ch.position);
-      }
-    }
-    onNodesChange(changes);
-  }, [onNodesChange]);
 
   // ─── Save ────────────────────────────────────────────────────────
   const handleSave = useCallback(async () => {
@@ -297,7 +171,7 @@ function SpecEditorInner({ projectId: propPid, metamodelId: propMmid }: { projec
     }
   }, [metamodelId, activeSpec, spec]);
 
-  // Auto-save
+  // Auto-save every 30s
   useEffect(() => {
     const interval = setInterval(() => {
       if (!spec) return;
@@ -321,6 +195,7 @@ function SpecEditorInner({ projectId: propPid, metamodelId: propMmid }: { projec
     setSpec(generated);
     setActiveLayerId(generated.defaultLayer.id);
     setSaveStatus('unsaved');
+    setSelection(null);
   }, [metamodel, metamodelId]);
 
   // ─── Spec mutation helpers ───────────────────────────────────────
@@ -329,9 +204,10 @@ function SpecEditorInner({ projectId: propPid, metamodelId: propMmid }: { projec
       if (!prev) return prev;
       const next = updater(prev);
       setSaveStatus('unsaved');
+      history.push(next);
       return next;
     });
-  }, []);
+  }, [history]);
 
   const updateActiveLayer = useCallback((updater: (layer: Layer) => Layer) => {
     updateSpec((prev) => {
@@ -361,17 +237,41 @@ function SpecEditorInner({ projectId: propPid, metamodelId: propMmid }: { projec
       ...layer,
       nodeMappings: [...layer.nodeMappings, newMapping],
     }));
+    // Auto-select the new mapping
+    setSelection({ type: 'node', id: newMapping.id });
+  }, [updateActiveLayer]);
+
+  // ─── Add container mapping ──────────────────────────────────────
+  const handleAddContainerMapping = useCallback((className: string) => {
+    const newMapping: ContainerMapping = {
+      id: `cm_${uid()}`,
+      domainClass: className,
+      semanticCandidatesExpression: 'self',
+      labelExpression: 'self.name',
+      defaultStyle: createDefaultNodeStyle(),
+      conditionalStyles: [],
+      childrenPresentation: 'FreeForm',
+      subNodeMappingIds: [],
+      subContainerMappingIds: [],
+    };
+    updateActiveLayer((layer) => ({
+      ...layer,
+      containerMappings: [...layer.containerMappings, newMapping],
+    }));
+    setSelection({ type: 'container', id: newMapping.id });
   }, [updateActiveLayer]);
 
   // ─── Add edge mapping ────────────────────────────────────────────
   const handleAddEdgeMapping = useCallback((sourceClass: string, refName: string, targetClass: string) => {
     if (!activeLayer) return;
-    const sourceMappingIds = activeLayer.nodeMappings
-      .filter((m) => m.domainClass === sourceClass)
-      .map((m) => m.id);
-    const targetMappingIds = activeLayer.nodeMappings
-      .filter((m) => m.domainClass === targetClass)
-      .map((m) => m.id);
+    const sourceMappingIds = [
+      ...activeLayer.nodeMappings.filter((m) => m.domainClass === sourceClass).map((m) => m.id),
+      ...activeLayer.containerMappings.filter((m) => m.domainClass === sourceClass).map((m) => m.id),
+    ];
+    const targetMappingIds = [
+      ...activeLayer.nodeMappings.filter((m) => m.domainClass === targetClass).map((m) => m.id),
+      ...activeLayer.containerMappings.filter((m) => m.domainClass === targetClass).map((m) => m.id),
+    ];
 
     const newEdge: EdgeMapping = {
       id: `em_${uid()}`,
@@ -387,120 +287,248 @@ function SpecEditorInner({ projectId: propPid, metamodelId: propMmid }: { projec
       ...layer,
       edgeMappings: [...layer.edgeMappings, newEdge],
     }));
+    setSelection({ type: 'edge', id: newEdge.id });
   }, [activeLayer, updateActiveLayer]);
 
-  // ─── Connect on canvas → create edge mapping ────────────────────
-  const onConnect = useCallback((conn: Connection) => {
-    if (!conn.source || !conn.target || !activeLayer) return;
-    // Check if edge already exists
-    const exists = activeLayer.edgeMappings.some(
-      (em) => em.sourceMappingIds.includes(conn.source!) && em.targetMappingIds.includes(conn.target!),
-    );
-    if (exists) return;
+  // ─── Delete mapping ──────────────────────────────────────────────
+  const handleDeleteMapping = useCallback((type: string, id: string) => {
+    updateActiveLayer((layer) => {
+      switch (type) {
+        case 'node':
+          return { ...layer, nodeMappings: layer.nodeMappings.filter((m) => m.id !== id) };
+        case 'container':
+          return { ...layer, containerMappings: layer.containerMappings.filter((m) => m.id !== id) };
+        case 'edge':
+          return { ...layer, edgeMappings: layer.edgeMappings.filter((m) => m.id !== id) };
+        default:
+          return layer;
+      }
+    });
+    if (selection?.id === id) setSelection(null);
+  }, [updateActiveLayer, selection]);
 
-    const newEdge: EdgeMapping = {
-      id: `em_${uid()}`,
-      type: 'relation-based',
-      sourceMappingIds: [conn.source],
-      targetMappingIds: [conn.target],
-      targetFinderExpression: 'self',
-      defaultStyle: createDefaultEdgeStyle(),
-      conditionalStyles: [],
-    };
+  // ─── Duplicate mapping ───────────────────────────────────────────
+  const handleDuplicateMapping = useCallback((type: string, id: string) => {
+    updateActiveLayer((layer) => {
+      switch (type) {
+        case 'node': {
+          const orig = layer.nodeMappings.find((m) => m.id === id);
+          if (!orig) return layer;
+          const dup = { ...orig, id: `nm_${uid()}`, domainClass: `${orig.domainClass}_copy` };
+          return { ...layer, nodeMappings: [...layer.nodeMappings, dup] };
+        }
+        case 'container': {
+          const orig = layer.containerMappings.find((m) => m.id === id);
+          if (!orig) return layer;
+          const dup = { ...orig, id: `cm_${uid()}`, domainClass: `${orig.domainClass}_copy` };
+          return { ...layer, containerMappings: [...layer.containerMappings, dup] };
+        }
+        case 'edge': {
+          const orig = layer.edgeMappings.find((m) => m.id === id);
+          if (!orig) return layer;
+          const dup = { ...orig, id: `em_${uid()}` };
+          return { ...layer, edgeMappings: [...layer.edgeMappings, dup] };
+        }
+        default:
+          return layer;
+      }
+    });
+  }, [updateActiveLayer]);
+
+  // ─── Update mappings from detail panel ───────────────────────────
+  const handleUpdateNodeMapping = useCallback((id: string, patch: Partial<NodeMapping>) => {
     updateActiveLayer((layer) => ({
       ...layer,
-      edgeMappings: [...layer.edgeMappings, newEdge],
-    }));
-  }, [activeLayer, updateActiveLayer]);
-
-  // ─── Layer management ────────────────────────────────────────────
-  const handleAddLayer = useCallback(() => {
-    const newLayer = createDefaultLayer(`layer_${uid()}`);
-    newLayer.name = `Layer ${(spec?.additionalLayers.length || 0) + 2}`;
-    newLayer.isDefault = false;
-    newLayer.activeByDefault = true;
-    updateSpec((prev) => ({
-      ...prev,
-      additionalLayers: [...prev.additionalLayers, newLayer],
-    }));
-  }, [spec, updateSpec]);
-
-  const handleRemoveLayer = useCallback((layerId: string) => {
-    updateSpec((prev) => ({
-      ...prev,
-      additionalLayers: prev.additionalLayers.filter((l) => l.id !== layerId),
-    }));
-    if (activeLayerId === layerId) setActiveLayerId(spec?.defaultLayer.id || 'layer_default');
-  }, [activeLayerId, spec, updateSpec]);
-
-  const handleRenameLayer = useCallback((layerId: string, newName: string) => {
-    updateSpec((prev) => {
-      if (prev.defaultLayer.id === layerId) {
-        return { ...prev, defaultLayer: { ...prev.defaultLayer, name: newName } };
-      }
-      return {
-        ...prev,
-        additionalLayers: prev.additionalLayers.map((l) =>
-          l.id === layerId ? { ...l, name: newName } : l,
-        ),
-      };
-    });
-  }, [updateSpec]);
-
-  const handleToggleLayerActive = useCallback((layerId: string) => {
-    updateSpec((prev) => ({
-      ...prev,
-      additionalLayers: prev.additionalLayers.map((l) =>
-        l.id === layerId ? { ...l, activeByDefault: !l.activeByDefault } : l,
+      nodeMappings: layer.nodeMappings.map((m) =>
+        m.id === id ? { ...m, ...patch } : m,
       ),
     }));
-  }, [updateSpec]);
+  }, [updateActiveLayer]);
 
-  // ─── Tool sections update ────────────────────────────────────────
+  const handleUpdateContainerMapping = useCallback((id: string, patch: Partial<ContainerMapping>) => {
+    updateActiveLayer((layer) => ({
+      ...layer,
+      containerMappings: layer.containerMappings.map((m) =>
+        m.id === id ? { ...m, ...patch } : m,
+      ),
+    }));
+  }, [updateActiveLayer]);
+
+  const handleUpdateEdgeMapping = useCallback((id: string, patch: Partial<EdgeMapping>) => {
+    updateActiveLayer((layer) => ({
+      ...layer,
+      edgeMappings: layer.edgeMappings.map((m) =>
+        m.id === id ? { ...m, ...patch } : m,
+      ),
+    }));
+  }, [updateActiveLayer]);
+
   const handleUpdateToolSections = useCallback((sections: ToolSection[]) => {
     updateActiveLayer((layer) => ({ ...layer, toolSections: sections }));
   }, [updateActiveLayer]);
 
-  // ─── Style updates ───────────────────────────────────────────────
-  const handleUpdateNodeMapping = useCallback((patch: Partial<NodeMapping>) => {
-    if (!selectedId) return;
+  // ─── Undo/Redo ──────────────────────────────────────────────────
+  const handleUndo = useCallback(() => {
+    const prev = history.undo();
+    if (prev) {
+      setSpec(prev);
+      setSaveStatus('unsaved');
+    }
+  }, [history]);
+
+  const handleRedo = useCallback(() => {
+    const next = history.redo();
+    if (next) {
+      setSpec(next);
+      setSaveStatus('unsaved');
+    }
+  }, [history]);
+
+  // ─── Import/Export ──────────────────────────────────────────────
+  const handleExport = useCallback(() => {
+    if (!spec) return;
+    const json = JSON.stringify(spec, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${spec.name || 'viewpoint-spec'}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [spec]);
+
+  const handleImport = useCallback(() => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const imported = JSON.parse(reader.result as string) as ViewpointSpec;
+          if (imported.defaultLayer && imported.diagram) {
+            setSpec(imported);
+            history.reset(imported);
+            setActiveLayerId(imported.defaultLayer.id);
+            setSaveStatus('unsaved');
+            setSelection(null);
+          } else {
+            setError('Invalid spec file: missing required fields');
+          }
+        } catch {
+          setError('Failed to parse JSON file');
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  }, [history]);
+
+  // ─── Copy/Paste Style ───────────────────────────────────────────
+  const handleCopyStyle = useCallback(() => {
+    if (!selection || !activeLayer) return;
+    if (selection.type === 'node' || selection.type === 'container') {
+      const mapping = activeLayer.nodeMappings.find((m) => m.id === selection.id)
+        || activeLayer.containerMappings.find((m) => m.id === selection.id);
+      if (mapping) {
+        copiedStyleRef.current = { type: 'node', style: { ...mapping.defaultStyle } };
+      }
+    } else if (selection.type === 'edge') {
+      const mapping = activeLayer.edgeMappings.find((m) => m.id === selection.id);
+      if (mapping) {
+        copiedStyleRef.current = { type: 'edge', style: { ...mapping.defaultStyle } };
+      }
+    }
+  }, [selection, activeLayer]);
+
+  const handlePasteStyle = useCallback(() => {
+    if (!selection || !copiedStyleRef.current) return;
+    const copied = copiedStyleRef.current;
+
+    if ((selection.type === 'node' || selection.type === 'container') && copied.type === 'node') {
+      updateActiveLayer((layer) => ({
+        ...layer,
+        nodeMappings: layer.nodeMappings.map((m) =>
+          m.id === selection.id ? { ...m, defaultStyle: { ...copied.style } } : m
+        ),
+        containerMappings: layer.containerMappings.map((m) =>
+          m.id === selection.id ? { ...m, defaultStyle: { ...copied.style } } : m
+        ),
+      }));
+    } else if (selection.type === 'edge' && copied.type === 'edge') {
+      updateActiveLayer((layer) => ({
+        ...layer,
+        edgeMappings: layer.edgeMappings.map((m) =>
+          m.id === selection.id ? { ...m, defaultStyle: { ...copied.style } } : m
+        ),
+      }));
+    }
+  }, [selection, updateActiveLayer]);
+
+  // ─── Apply Template ─────────────────────────────────────────────
+  const handleApplyTemplate = useCallback((templateId: string) => {
+    if (!activeLayer) return;
+    const template = STYLE_TEMPLATES.find((t) => t.id === templateId);
+    if (!template) return;
+
+    const { nodePatches, edgePatches } = applyTemplate(
+      template,
+      [...activeLayer.nodeMappings, ...activeLayer.containerMappings],
+      activeLayer.edgeMappings,
+    );
+
     updateActiveLayer((layer) => ({
       ...layer,
-      nodeMappings: layer.nodeMappings.map((m) =>
-        m.id === selectedId ? { ...m, ...patch } : m,
-      ),
-      containerMappings: layer.containerMappings.map((m) =>
-        m.id === selectedId ? { ...m, ...patch } : m,
-      ),
+      nodeMappings: layer.nodeMappings.map((nm) => {
+        const patch = nodePatches.find((p) => p.id === nm.id);
+        return patch ? { ...nm, defaultStyle: patch.style } : nm;
+      }),
+      containerMappings: layer.containerMappings.map((cm) => {
+        const patch = nodePatches.find((p) => p.id === cm.id);
+        return patch ? { ...cm, defaultStyle: patch.style } : cm;
+      }),
+      edgeMappings: layer.edgeMappings.map((em) => {
+        const patch = edgePatches.find((p) => p.id === em.id);
+        return patch ? { ...em, defaultStyle: patch.style } : em;
+      }),
     }));
-  }, [selectedId, updateActiveLayer]);
+    setTemplateMenuOpen(false);
+  }, [activeLayer, updateActiveLayer]);
 
-  const handleUpdateEdgeMapping = useCallback((patch: Partial<EdgeMapping>) => {
-    if (!selectedId) return;
-    updateActiveLayer((layer) => ({
-      ...layer,
-      edgeMappings: layer.edgeMappings.map((m) =>
-        m.id === selectedId ? { ...m, ...patch } : m,
-      ),
-    }));
-  }, [selectedId, updateActiveLayer]);
-
-  // ─── Canvas interactions ─────────────────────────────────────────
-  const onNodeClick: NodeMouseHandler = useCallback((_: any, node: Node) => {
-    const isContainer = node.type === 'specContainerNode';
-    setSelectedType(isContainer ? 'container' : 'node');
-    setSelectedId(node.id);
-  }, []);
-
-  const onEdgeClick: EdgeMouseHandler = useCallback((_: any, edge: Edge) => {
-    setSelectedType('edge');
-    setSelectedId(edge.id);
-  }, []);
-
-  const onPaneClick = useCallback(() => {
-    setSelectedType(null);
-    setSelectedId(null);
-  }, []);
+  // ─── Keyboard shortcuts ──────────────────────────────────────────
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        handleSave();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        handleUndo();
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault();
+        handleRedo();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'C') {
+        e.preventDefault();
+        handleCopyStyle();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'V') {
+        e.preventDefault();
+        handlePasteStyle();
+      }
+      if (e.key === 'Delete' && selection) {
+        if (selection.type === 'node' || selection.type === 'container' || selection.type === 'edge') {
+          handleDeleteMapping(selection.type, selection.id);
+        }
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [handleSave, handleUndo, handleRedo, handleCopyStyle, handlePasteStyle, handleDeleteMapping, selection]);
 
   // ─── Loading ─────────────────────────────────────────────────────
   if (loading) {
@@ -513,26 +541,108 @@ function SpecEditorInner({ projectId: propPid, metamodelId: propMmid }: { projec
   }
 
   // ─── Render ──────────────────────────────────────────────────────
+  // Breadcrumb
+  const breadcrumb = useMemo(() => {
+    const parts: string[] = [spec?.name || 'Viewpoint'];
+    if (activeLayer) parts.push(activeLayer.name);
+    if (selection) {
+      if (selection.type === 'node') {
+        const m = activeLayer?.nodeMappings.find((n) => n.id === selection.id);
+        if (m) parts.push(m.domainClass);
+      } else if (selection.type === 'container') {
+        const m = activeLayer?.containerMappings.find((n) => n.id === selection.id);
+        if (m) parts.push(m.domainClass);
+      } else if (selection.type === 'edge') {
+        const m = activeLayer?.edgeMappings.find((n) => n.id === selection.id);
+        if (m) parts.push(m.sourceReference || m.domainClass || 'Edge');
+      }
+    }
+    return parts;
+  }, [spec, activeLayer, selection]);
+
+  const errorCount = validationIssues.filter((i) => i.severity === 'error').length;
+  const warnCount = validationIssues.filter((i) => i.severity === 'warning').length;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Header */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 12, padding: '8px 16px',
+        display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px',
         borderBottom: '1px solid var(--border)', background: 'var(--surface)', flexShrink: 0,
       }}>
-        <input
-          type="text"
-          value={spec?.name || ''}
-          onChange={(e) => updateSpec((prev) => ({ ...prev, name: e.target.value }))}
-          placeholder="Viewpoint name..."
-          style={{
-            background: 'transparent', border: 'none', color: 'var(--text)',
-            fontSize: 15, fontWeight: 600, outline: 'none', width: 200,
-          }}
-        />
+        {/* Breadcrumb */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-muted)', minWidth: 0, flex: '0 1 auto' }}>
+          {breadcrumb.map((part, i) => (
+            <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              {i > 0 && <ChevronRight size={10} />}
+              <span style={{ color: i === breadcrumb.length - 1 ? 'var(--text)' : undefined, fontWeight: i === 0 ? 600 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 120 }}>{part}</span>
+            </span>
+          ))}
+        </div>
+
         <div style={{ flex: 1 }} />
-        {saveStatus === 'saved' && <span style={{ color: 'var(--success)', fontSize: 11 }}>Saved</span>}
-        {saveStatus === 'unsaved' && <span style={{ color: 'var(--warning)', fontSize: 11 }}>Unsaved</span>}
+
+        {/* Validation indicator */}
+        {(errorCount > 0 || warnCount > 0) && (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, color: errorCount > 0 ? 'var(--error, #ef4444)' : 'var(--warning, #f59e0b)' }} title={`${errorCount} error(s), ${warnCount} warning(s)`}>
+            <AlertTriangle size={11} />
+            {errorCount > 0 && <span>{errorCount}E</span>}
+            {warnCount > 0 && <span>{warnCount}W</span>}
+          </span>
+        )}
+
+        {/* Save status */}
+        {saveStatus === 'saved' && <span style={{ color: 'var(--success)', fontSize: 10 }}>Saved</span>}
+        {saveStatus === 'unsaved' && <span style={{ color: 'var(--warning)', fontSize: 10 }}>Unsaved</span>}
+
+        {/* Undo/Redo */}
+        <button className="btn btn-ghost btn-sm" onClick={handleUndo} disabled={!history.canUndo} title="Undo (Ctrl+Z)" style={{ padding: '4px 6px', opacity: history.canUndo ? 1 : 0.3 }}>
+          <Undo2 size={14} />
+        </button>
+        <button className="btn btn-ghost btn-sm" onClick={handleRedo} disabled={!history.canRedo} title="Redo (Ctrl+Y)" style={{ padding: '4px 6px', opacity: history.canRedo ? 1 : 0.3 }}>
+          <Redo2 size={14} />
+        </button>
+
+        <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
+
+        {/* Copy/Paste Style */}
+        <button className="btn btn-ghost btn-sm" onClick={handleCopyStyle} disabled={!selection} title="Copy Style (Ctrl+Shift+C)" style={{ padding: '4px 6px', opacity: selection ? 1 : 0.3 }}>
+          <Copy size={14} />
+        </button>
+
+        {/* Templates */}
+        <div style={{ position: 'relative' }}>
+          <button className="btn btn-ghost btn-sm" onClick={() => setTemplateMenuOpen(!templateMenuOpen)} title="Apply style template" style={{ padding: '4px 6px' }}>
+            <Palette size={14} />
+          </button>
+          {templateMenuOpen && (
+            <>
+              <div style={{ position: 'fixed', inset: 0, zIndex: 99 }} onClick={() => setTemplateMenuOpen(false)} />
+              <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'var(--surface-elevated, var(--surface))', border: '1px solid var(--border)', borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.2)', zIndex: 100, minWidth: 180, overflow: 'hidden' }}>
+                {STYLE_TEMPLATES.map((t) => (
+                  <button key={t.id} onClick={() => handleApplyTemplate(t.id)} style={{ display: 'flex', flexDirection: 'column', gap: 1, width: '100%', textAlign: 'left', padding: '8px 12px', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text)', fontSize: 12 }} onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover, rgba(255,255,255,0.05))')} onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}>
+                    <span style={{ fontWeight: 600 }}>{t.name}</span>
+                    <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{t.description}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
+
+        {/* Import/Export */}
+        <button className="btn btn-ghost btn-sm" onClick={handleImport} title="Import spec from JSON" style={{ padding: '4px 6px' }}>
+          <Upload size={14} />
+        </button>
+        <button className="btn btn-ghost btn-sm" onClick={handleExport} title="Export spec as JSON" style={{ padding: '4px 6px' }}>
+          <Download size={14} />
+        </button>
+
+        <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
+
+        {/* Generate & Save */}
         <button className="btn btn-secondary btn-sm" onClick={handleAutoGenerate} title="Auto-generate from metamodel">
           <Wand2 size={14} /> Generate
         </button>
@@ -549,75 +659,56 @@ function SpecEditorInner({ projectId: propPid, metamodelId: propMmid }: { projec
 
       {/* Main 3-column layout */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* Left Panel */}
+        {/* Left Panel — Mapping Navigator */}
         <div style={{
           width: 260, background: 'var(--surface)', borderRight: '1px solid var(--border)',
           display: 'flex', flexDirection: 'column', overflow: 'hidden', flexShrink: 0,
         }}>
-          <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
-            <MetamodelBrowser
-              eclasses={eclasses}
-              existingMappings={existingMappings}
-              existingEdgeMappings={existingEdgeMappings}
-              onAddNodeMapping={handleAddNodeMapping}
-              onAddEdgeMapping={handleAddEdgeMapping}
-            />
-            <div style={{ borderTop: '1px solid var(--border)', margin: '8px 0' }} />
-            <LayerPanel
-              layers={allLayers}
+          {activeLayer && (
+            <MappingNavigator
+              layer={activeLayer}
+              allLayers={allLayers}
               activeLayerId={activeLayerId}
+              eclasses={eclasses}
+              selection={selection}
+              onSelect={setSelection}
+              onAddNodeMapping={handleAddNodeMapping}
+              onAddContainerMapping={handleAddContainerMapping}
+              onAddEdgeMapping={handleAddEdgeMapping}
+              onDeleteMapping={handleDeleteMapping}
+              onDuplicateMapping={handleDuplicateMapping}
               onSelectLayer={setActiveLayerId}
-              onAddLayer={handleAddLayer}
-              onRemoveLayer={handleRemoveLayer}
-              onRenameLayer={handleRenameLayer}
-              onToggleActive={handleToggleLayerActive}
             />
-            <div style={{ borderTop: '1px solid var(--border)', margin: '8px 0' }} />
-            <ToolBuilder
-              toolSections={activeLayer?.toolSections || []}
-              nodeMappings={activeLayer?.nodeMappings || []}
-              edgeMappings={activeLayer?.edgeMappings || []}
+          )}
+        </div>
+
+        {/* Center Panel — Detail Editor */}
+        <div style={{ flex: 1, overflow: 'hidden', borderRight: '1px solid var(--border)' }}>
+          {activeLayer && (
+            <MappingDetailPanel
+              selection={selection}
+              layer={activeLayer}
+              allLayers={allLayers}
+              onUpdateNodeMapping={handleUpdateNodeMapping}
+              onUpdateContainerMapping={handleUpdateContainerMapping}
+              onUpdateEdgeMapping={handleUpdateEdgeMapping}
               onUpdateToolSections={handleUpdateToolSections}
             />
-          </div>
+          )}
         </div>
 
-        {/* Center Canvas */}
-        <div style={{ flex: 1, position: 'relative' }}>
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={handleNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onNodeClick={onNodeClick}
-            onEdgeClick={onEdgeClick}
-            onPaneClick={onPaneClick}
-            nodeTypes={nodeTypes}
-            edgeTypes={edgeTypes}
-            connectionMode={ConnectionMode.Loose}
-            fitView
-            minZoom={0.3}
-            maxZoom={2}
-          >
-            <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
-            <Controls position="bottom-left" />
-            <MiniMap position="bottom-right" pannable zoomable />
-          </ReactFlow>
-        </div>
-
-        {/* Right Panel */}
+        {/* Right Panel — Live Preview */}
         <div style={{
-          width: 300, background: 'var(--surface)', borderLeft: '1px solid var(--border)',
-          overflowY: 'auto', flexShrink: 0,
+          width: 300, background: 'var(--background)', flexShrink: 0,
+          display: 'flex', flexDirection: 'column', overflow: 'hidden',
         }}>
-          <SpecStylePanel
-            selectedType={selectedType}
-            nodeMapping={selectedNodeMapping}
-            edgeMapping={selectedEdgeMapping}
-            onUpdateNodeMapping={handleUpdateNodeMapping}
-            onUpdateEdgeMapping={handleUpdateEdgeMapping}
-          />
+          {activeLayer && (
+            <MappingPreview
+              selection={selection}
+              layer={activeLayer}
+              eclasses={eclasses}
+            />
+          )}
         </div>
       </div>
     </div>
@@ -625,7 +716,7 @@ function SpecEditorInner({ projectId: propPid, metamodelId: propMmid }: { projec
 }
 
 /* ------------------------------------------------------------------ */
-/*  Wrapper with ReactFlowProvider                                     */
+/*  Wrapper with ReactFlowProvider (needed for MappingPreview)         */
 /* ------------------------------------------------------------------ */
 
 export default function SpecEditor(props: { projectId?: string; metamodelId?: string }) {
