@@ -41,6 +41,7 @@ interface WorkspaceState {
 interface WorkspaceActions {
   openTab: (tab: Omit<WorkspaceTab, 'id'>) => void;
   closeTab: (tabId: string) => void;
+  closeProjectTabs: (projectId: string) => void;
   setActiveTab: (tabId: string) => void;
   toggleSidebar: () => void;
   setDirty: (tabId: string, dirty: boolean) => void;
@@ -68,6 +69,7 @@ const DEFAULT_WELCOME_TAB: WorkspaceTab = {
 type WorkspaceAction =
   | { type: 'OPEN_TAB'; payload: Omit<WorkspaceTab, 'id'> }
   | { type: 'CLOSE_TAB'; payload: string }
+  | { type: 'CLOSE_PROJECT_TABS'; payload: string }
   | { type: 'SET_ACTIVE_TAB'; payload: string }
   | { type: 'TOGGLE_SIDEBAR' }
   | { type: 'SET_DIRTY'; payload: { tabId: string; dirty: boolean } }
@@ -129,6 +131,25 @@ function workspaceReducer(
           // Activate the tab now at the same index (adjacent right)
           newActiveTabId = newTabs[tabIndex].id;
         }
+      }
+
+      return {
+        ...state,
+        tabs: newTabs,
+        activeTabId: newActiveTabId,
+      };
+    }
+
+    case 'CLOSE_PROJECT_TABS': {
+      const projectId = action.payload;
+      const newTabs = state.tabs.filter(
+        (t) => t.projectId !== projectId,
+      );
+
+      let newActiveTabId = state.activeTabId;
+      // If active tab was removed, pick the last remaining or null
+      if (newActiveTabId && !newTabs.some((t) => t.id === newActiveTabId)) {
+        newActiveTabId = newTabs.length > 0 ? newTabs[newTabs.length - 1].id : null;
       }
 
       return {
@@ -246,6 +267,10 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
     dispatch({ type: 'CLOSE_TAB', payload: tabId });
   }, []);
 
+  const closeProjectTabs = useCallback((projectId: string) => {
+    dispatch({ type: 'CLOSE_PROJECT_TABS', payload: projectId });
+  }, []);
+
   const setActiveTab = useCallback((tabId: string) => {
     dispatch({ type: 'SET_ACTIVE_TAB', payload: tabId });
   }, []);
@@ -267,12 +292,13 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
       ...state,
       openTab,
       closeTab,
+      closeProjectTabs,
       setActiveTab,
       toggleSidebar,
       setDirty,
       setContext,
     }),
-    [state, openTab, closeTab, setActiveTab, toggleSidebar, setDirty, setContext]
+    [state, openTab, closeTab, closeProjectTabs, setActiveTab, toggleSidebar, setDirty, setContext]
   );
 
   return (

@@ -43,7 +43,7 @@ interface SidebarProps {
   currentProjectId?: string;
   currentMetamodelId?: string;
   projectRefreshKey?: number;
-  onProjectDeleted?: () => void;
+  onProjectDeleted?: (projectId: string) => void;
 }
 
 interface ProjectNode {
@@ -141,7 +141,7 @@ export default function Sidebar({
       await deleteProject(id);
       setProjects((prev) => prev.filter((n) => n.project.id !== id));
       addToast('Project deleted successfully', 'success');
-      onProjectDeleted?.();
+      onProjectDeleted?.(id);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to delete project';
       addToast(msg, 'error');

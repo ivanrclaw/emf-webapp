@@ -698,7 +698,10 @@ function WorkspaceInner() {
               currentProjectId={workspace.currentProjectId || undefined}
               currentMetamodelId={workspace.currentMetamodelId || undefined}
               projectRefreshKey={projectRefreshKey}
-              onProjectDeleted={() => setProjectRefreshKey((k) => k + 1)}
+              onProjectDeleted={(projectId) => {
+                setProjectRefreshKey((k) => k + 1);
+                workspace.closeProjectTabs(projectId);
+              }}
             />
             {/* Portal target for editor panels (Toolbox + TreeView) */}
             <div ref={panels.leftPanelRef} style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', borderTop: '1px solid var(--border)' }} />
