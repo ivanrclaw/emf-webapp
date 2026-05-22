@@ -530,17 +530,7 @@ function SpecEditorInner({ projectId: propPid, metamodelId: propMmid }: { projec
     return () => window.removeEventListener('keydown', handler);
   }, [handleSave, handleUndo, handleRedo, handleCopyStyle, handlePasteStyle, handleDeleteMapping, selection]);
 
-  // ─── Loading ─────────────────────────────────────────────────────
-  if (loading) {
-    return (
-      <div style={{ padding: 24 }}>
-        <div className="skeleton" style={{ height: 32, width: 240, marginBottom: 24 }} />
-        <div className="skeleton" style={{ height: 400, borderRadius: 'var(--radius)' }} />
-      </div>
-    );
-  }
-
-  // ─── Render ──────────────────────────────────────────────────────
+  // ─── Render helpers (must be before any early return) ────────────
   // Breadcrumb
   const breadcrumb = useMemo(() => {
     const parts: string[] = [spec?.name || 'Viewpoint'];
@@ -562,6 +552,16 @@ function SpecEditorInner({ projectId: propPid, metamodelId: propMmid }: { projec
 
   const errorCount = validationIssues.filter((i) => i.severity === 'error').length;
   const warnCount = validationIssues.filter((i) => i.severity === 'warning').length;
+
+  // ─── Loading ─────────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div style={{ padding: 24 }}>
+        <div className="skeleton" style={{ height: 32, width: 240, marginBottom: 24 }} />
+        <div className="skeleton" style={{ height: 400, borderRadius: 'var(--radius)' }} />
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
