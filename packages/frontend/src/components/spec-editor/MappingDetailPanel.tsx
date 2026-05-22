@@ -608,7 +608,9 @@ function TabBar({ tabs, active, onChange }: { tabs: string[]; active: string; on
           onClick={() => onChange(tab)}
           style={{
             ...styles.tab,
-            ...(active === tab ? styles.tabActive : {}),
+            color: active === tab ? 'var(--primary)' : 'var(--text-muted)',
+            borderBottomColor: active === tab ? 'var(--primary)' : 'transparent',
+            fontWeight: active === tab ? 600 : 500,
           }}
         >
           {tab.charAt(0).toUpperCase() + tab.slice(1)}

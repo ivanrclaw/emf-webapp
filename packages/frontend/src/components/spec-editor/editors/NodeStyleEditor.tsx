@@ -63,7 +63,8 @@ export function NodeStyleEditor({ style, onChange }: NodeStyleEditorProps) {
             title={shape.label}
             style={{
               ...styles.shapeBtn,
-              ...(style.shape === shape.value ? styles.shapeBtnActive : {}),
+              borderColor: style.shape === shape.value ? 'var(--primary)' : 'var(--border)',
+              background: style.shape === shape.value ? 'var(--primary-bg, rgba(99, 102, 241, 0.12))' : 'var(--bg-input, var(--background))',
             }}
           >
             <span style={styles.shapeIcon}>{shape.icon}</span>

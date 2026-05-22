@@ -260,7 +260,9 @@ export function MappingNavigator({
               key={ts.id}
               style={{
                 ...styles.item,
-                ...(isSelected('tool-section', ts.id) ? styles.itemSelected : {}),
+                background: isSelected('tool-section', ts.id) ? 'var(--primary-bg, rgba(99, 102, 241, 0.12))' : 'transparent',
+                borderLeft: isSelected('tool-section', ts.id) ? '3px solid var(--primary)' : '3px solid transparent',
+                paddingLeft: '13px',
               }}
               onClick={() => onSelect({ type: 'tool-section', id: ts.id })}
             >
@@ -290,8 +292,10 @@ export function MappingNavigator({
               key={l.id}
               style={{
                 ...styles.item,
-                ...(l.id === activeLayerId ? styles.itemActive : {}),
-                ...(isSelected('layer', l.id) ? styles.itemSelected : {}),
+                fontWeight: l.id === activeLayerId ? 600 : 400,
+                background: isSelected('layer', l.id) ? 'var(--primary-bg, rgba(99, 102, 241, 0.12))' : 'transparent',
+                borderLeft: isSelected('layer', l.id) ? '3px solid var(--primary)' : '3px solid transparent',
+                paddingLeft: '13px',
               }}
               onClick={() => {
                 onSelectLayer(l.id);
@@ -369,8 +373,13 @@ function MappingItem({
     <div
       style={{
         ...styles.item,
-        ...(selected ? styles.itemSelected : {}),
-        ...(hovered && !selected ? styles.itemHover : {}),
+        background: selected
+          ? 'var(--primary-bg, rgba(99, 102, 241, 0.12))'
+          : hovered
+            ? 'var(--bg-hover, rgba(255, 255, 255, 0.03))'
+            : 'transparent',
+        borderLeft: selected ? '3px solid var(--primary)' : '3px solid transparent',
+        paddingLeft: selected ? '13px' : '13px',
       }}
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}

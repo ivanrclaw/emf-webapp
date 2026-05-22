@@ -74,7 +74,9 @@ export function EdgeStyleEditor({ style, onChange }: EdgeStyleEditorProps) {
             onClick={() => onChange({ routingStyle: rs.value })}
             style={{
               ...styles.routingBtn,
-              ...(style.routingStyle === rs.value ? styles.routingBtnActive : {}),
+              borderColor: style.routingStyle === rs.value ? 'var(--primary)' : 'var(--border)',
+              background: style.routingStyle === rs.value ? 'var(--primary-bg, rgba(99, 102, 241, 0.12))' : 'var(--bg-input, var(--background))',
+              color: style.routingStyle === rs.value ? 'var(--primary)' : 'var(--text)',
             }}
             title={rs.label}
           >
@@ -93,7 +95,8 @@ export function EdgeStyleEditor({ style, onChange }: EdgeStyleEditorProps) {
             title={d.label}
             style={{
               ...styles.decoBtn,
-              ...(style.sourceDecoration === d.value ? styles.decoBtnActive : {}),
+              borderColor: style.sourceDecoration === d.value ? 'var(--primary)' : 'var(--border)',
+              background: style.sourceDecoration === d.value ? 'var(--primary-bg, rgba(99, 102, 241, 0.12))' : 'var(--bg-input, var(--background))',
             }}
           >
             <span style={styles.decoPreview}>{d.preview}</span>
@@ -111,7 +114,8 @@ export function EdgeStyleEditor({ style, onChange }: EdgeStyleEditorProps) {
             title={d.label}
             style={{
               ...styles.decoBtn,
-              ...(style.targetDecoration === d.value ? styles.decoBtnActive : {}),
+              borderColor: style.targetDecoration === d.value ? 'var(--primary)' : 'var(--border)',
+              background: style.targetDecoration === d.value ? 'var(--primary-bg, rgba(99, 102, 241, 0.12))' : 'var(--bg-input, var(--background))',
             }}
           >
             <span style={styles.decoPreview}>{d.preview}</span>

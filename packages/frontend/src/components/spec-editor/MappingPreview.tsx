@@ -123,21 +123,21 @@ export function MappingPreview({ selection, layer, eclasses }: MappingPreviewPro
         {/* Mode buttons */}
         <button
           onClick={() => setMode('selection')}
-          style={{ ...styles.toggleBtn, ...(mode === 'selection' ? styles.toggleBtnActive : {}) }}
+          style={{ ...styles.toggleBtn, borderColor: mode === 'selection' ? 'var(--primary)' : 'var(--border)', color: mode === 'selection' ? 'var(--primary)' : 'var(--text-muted)', background: mode === 'selection' ? 'var(--primary-bg, rgba(99, 102, 241, 0.12))' : 'none' }}
           title="Preview selected mapping"
         >
           <Eye size={11} />
         </button>
         <button
           onClick={() => setMode('full')}
-          style={{ ...styles.toggleBtn, ...(mode === 'full' ? styles.toggleBtnActive : {}) }}
+          style={{ ...styles.toggleBtn, borderColor: mode === 'full' ? 'var(--primary)' : 'var(--border)', color: mode === 'full' ? 'var(--primary)' : 'var(--text-muted)', background: mode === 'full' ? 'var(--primary-bg, rgba(99, 102, 241, 0.12))' : 'none' }}
           title="Show all mappings"
         >
           <Layers size={11} />
         </button>
         <button
           onClick={() => setMode('diagram')}
-          style={{ ...styles.toggleBtn, ...(mode === 'diagram' ? styles.toggleBtnActive : {}) }}
+          style={{ ...styles.toggleBtn, borderColor: mode === 'diagram' ? 'var(--primary)' : 'var(--border)', color: mode === 'diagram' ? 'var(--primary)' : 'var(--text-muted)', background: mode === 'diagram' ? 'var(--primary-bg, rgba(99, 102, 241, 0.12))' : 'none' }}
           title="Diagram preview with dummy data"
         >
           D
