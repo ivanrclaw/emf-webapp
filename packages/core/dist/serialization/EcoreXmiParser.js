@@ -297,7 +297,9 @@ function unescapeXml(str) {
         .replace(/&lt;/g, '<')
         .replace(/&gt;/g, '>')
         .replace(/&quot;/g, '"')
-        .replace(/&apos;/g, "'");
+        .replace(/&apos;/g, "'")
+        .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+        .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)));
 }
 /**
  * Extrae el valor de un atributo XML.
@@ -331,7 +333,8 @@ function extractAttrArray(xml, attrName) {
  */
 function extractBlocks(xml, tagName) {
     const results = [];
-    const regex = new RegExp(`<${tagName}[^>]*\\/?>`, 'gi');
+    // Match opening tags while skipping '>' inside quoted attribute values
+    const regex = new RegExp(`<${tagName}(?:[^>"']|"[^"]*"|'[^']*')*\\/?>`, 'gi');
     let match;
     while ((match = regex.exec(xml)) !== null) {
         const full = match[0];
