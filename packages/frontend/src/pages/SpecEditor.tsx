@@ -129,13 +129,16 @@ function SpecEditorInner({ projectId: propPid, metamodelId: propMmid }: { projec
           setActiveSpec(found);
           const parsed = JSON.parse(found.spec || '{}') as ViewpointSpec;
           setSpec(parsed);
+          history.reset(parsed);
         } else if (specs.length > 0) {
           setActiveSpec(specs[0]);
           const parsed = JSON.parse(specs[0].spec || '{}') as ViewpointSpec;
           setSpec(parsed);
+          history.reset(parsed);
         } else {
           const empty = createDefaultViewpointSpec(metamodelId);
           setSpec(empty);
+          history.reset(empty);
         }
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : 'Failed to load');
