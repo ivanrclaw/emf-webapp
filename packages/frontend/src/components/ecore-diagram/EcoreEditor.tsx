@@ -38,10 +38,12 @@ import { edgeTypes } from './edges/CustomEdges';
 import { EdgeLayoutProvider } from './edges/EdgeLayoutContext';
 import { getMetamodel, getProject, exportEcore, exportGenmodel, exportXmiZip } from '../../api/client';
 import { useCollaboration } from '../../hooks/useCollaboration';
+import { useCollaborativeModel } from '../../hooks/useCollaborativeModel';
 import { useOCLValidation } from '../../hooks/useOCLValidation';
 import { useToast } from '../ToastProvider';
 import { RemoteCursors } from '../collaboration/RemoteCursors';
 import type { RoomUser } from '../../hooks/useCollaboration';
+import type { AwarenessState } from '../../hooks/useYjsCollaboration';
 import { ErrorBoundary } from '../ErrorBoundary';
 import { useEditorContext } from '../../contexts/EditorContext';
 import { usePanelPortals } from '../../contexts/PanelPortalContext';
@@ -293,6 +295,21 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
       setRemoteContent(null);
     }
   }, [remoteContent]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Yjs CRDT Collaboration (new system) ─────────────────────
+  const collaborative = useCollaborativeModel({
+    metamodelId,
+    userName: 'Anonymous',
+    nodes: model.nodes as any,
+    edges: model.edges as any,
+    onRemoteNodesChange: (remoteNodes) => {
+      // For now, remote changes come through the legacy system
+      // This will be the primary path once we fully migrate
+    },
+    onRemoteEdgesChange: (remoteEdges) => {
+      // Same as above — gradual migration
+    },
+  });
 
   // Track initial load complete
   if (fetchedPkg && initialLoad.current) {
@@ -619,7 +636,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
       )}
 
       {/* ── Canvas ─────────────────────────────────────────── */}
-      <RemoteCursors users={collabUsers} currentUserSocketId={socketId} />
+      <RemoteCursors users={collabUsers} currentUserSocketId={socketId} awarenessStates={collaborative.remoteStates} />
       <EdgeLayoutProvider>
       <ReactFlow
         nodes={model.nodes as any}

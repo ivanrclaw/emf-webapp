@@ -2,15 +2,20 @@
  * @emf-webapp/frontend — RemoteCursors
  *
  * Muestra los cursores de otros usuarios colaborando en el mismo metamodelo.
+ * Soporta tanto el sistema legacy (RoomUser) como el nuevo Yjs awareness.
  * Se renderiza como overlay absoluto sobre el canvas React Flow.
  */
 import React from 'react';
 import type { RoomUser } from '../../hooks/useCollaboration';
+import type { AwarenessState } from '../../hooks/useYjsCollaboration';
 
 interface RemoteCursorsProps {
+  /** Legacy users from Socket.IO */
   users: RoomUser[];
   /** ID del usuario actual para no mostrar su propio cursor */
   currentUserSocketId?: string;
+  /** New Yjs awareness states */
+  awarenessStates?: Map<number, AwarenessState>;
 }
 
 const userColors = [
@@ -33,12 +38,27 @@ function getUserColor(userId: string): string {
   return userColors[Math.abs(hash) % userColors.length];
 }
 
-export function RemoteCursors({ users, currentUserSocketId }: RemoteCursorsProps) {
+export function RemoteCursors({ users, currentUserSocketId, awarenessStates }: RemoteCursorsProps) {
   const activeCursors = users.filter(
     (u) => u.cursor && u.id !== currentUserSocketId
   );
 
-  if (activeCursors.length === 0) return null;
+  // Yjs awareness cursors
+  const yjsCursors: Array<{ id: string; name: string; color: string; cursor: { x: number; y: number } }> = [];
+  if (awarenessStates) {
+    awarenessStates.forEach((state, clientId) => {
+      if (state.cursor && state.user) {
+        yjsCursors.push({
+          id: `yjs-${clientId}`,
+          name: state.user.name,
+          color: state.user.color,
+          cursor: state.cursor,
+        });
+      }
+    });
+  }
+
+  if (activeCursors.length === 0 && yjsCursors.length === 0) return null;
 
   return (
     <>
@@ -88,6 +108,47 @@ export function RemoteCursors({ users, currentUserSocketId }: RemoteCursorsProps
           </div>
         );
       })}
+      {yjsCursors.map((cursor) => (
+        <div
+          key={cursor.id}
+          style={{
+            position: 'absolute',
+            left: cursor.cursor.x,
+            top: cursor.cursor.y,
+            pointerEvents: 'none',
+            zIndex: 1000,
+            transform: 'translate(-4px, -4px)',
+            transition: 'left 0.05s linear, top 0.05s linear',
+          }}
+        >
+          <svg width="16" height="20" viewBox="0 0 16 20" fill="none">
+            <path
+              d="M2 1L13 12H8L6 15L4 12H2L2 1Z"
+              fill={cursor.color}
+              stroke="#fff"
+              strokeWidth="1.5"
+              strokeLinejoin="round"
+            />
+          </svg>
+          <span
+            style={{
+              position: 'absolute',
+              left: 12,
+              top: -2,
+              background: cursor.color,
+              color: '#fff',
+              fontSize: 11,
+              fontWeight: 600,
+              padding: '1px 6px',
+              borderRadius: 4,
+              whiteSpace: 'nowrap',
+              lineHeight: '18px',
+            }}
+          >
+            {cursor.name}
+          </span>
+        </div>
+      ))}
     </>
   );
 }
