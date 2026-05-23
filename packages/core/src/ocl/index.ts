@@ -128,3 +128,24 @@ export type {
   OCLDefinitionTarget,
   OCLDefinitionResult,
 } from './OCLDefinitionEngine.js';
+
+// ── File I/O (Phase 7) ──────────────────────────────────────────────────
+
+export { importOCLFile, exportOCLFile } from './OCLFileIO.js';
+export type {
+  OCLFileImportResult,
+  ImportedConstraint,
+  ImportError,
+  ExportableConstraint,
+  ExportOptions,
+} from './OCLFileIO.js';
+
+// ── Batch Validation (Phase 7) ──────────────────────────────────────────
+
+export { validateBatch, formatBatchReport } from './OCLBatchValidator.js';
+export type {
+  BatchValidationOptions,
+  BatchConstraintResult,
+  BatchFailure,
+  BatchValidationReport,
+} from './OCLBatchValidator.js';
