@@ -47,9 +47,11 @@ import { EditorToolbar } from '../components/model-editor/EditorToolbar';
 import { EditorStatusBar } from '../components/model-editor/EditorStatusBar';
 import { InlineEditor, type InlineEditorState } from '../components/model-editor/InlineEditor';
 import { ContextMenu, type ContextMenuTarget } from '../components/model-editor/ContextMenu';
+import { QuickCreate } from '../components/model-editor/QuickCreate';
 import { useModelHistory } from '../components/model-editor/hooks/useModelHistory';
 import { useClipboard } from '../components/model-editor/hooks/useClipboard';
 import { useKeyboardShortcuts } from '../components/model-editor/hooks/useKeyboardShortcuts';
+import { useDragCreate } from '../components/model-editor/hooks/useDragCreate';
 import {
   collectActiveToolSections,
   collectActiveMappings,
@@ -138,6 +140,9 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
   // Clipboard
   const clipboard = useClipboard();
 
+  // Drag-to-canvas
+  const dragCreate = useDragCreate();
+
   // ReactFlow instance
   const reactFlowInstance = useReactFlow();
 
@@ -179,6 +184,15 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
       eReferences?: { name: string; eType?: string; containment?: boolean; lowerBound?: number; upperBound?: number }[];
     }>;
   }, [metamodel]);
+
+  // Instance counts per eClass (for palette)
+  const instanceCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const obj of objects) {
+      counts[obj.eClass] = (counts[obj.eClass] || 0) + 1;
+    }
+    return counts;
+  }, [objects]);
 
   // Selected object
   const selectedObject = useMemo(() => {
@@ -375,7 +389,7 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
   }, [handleSave, objects, activeLayers]);
 
   // ─── Create node from tool ───────────────────────────────────────
-  const handleCreateNode = useCallback((tool: NodeCreationTool | ContainerCreationTool) => {
+  const handleCreateNode = useCallback((tool: NodeCreationTool | ContainerCreationTool, position?: { x: number; y: number }) => {
     const newObj: SemanticObject = {
       id: uid(),
       eClass: tool.createType,
@@ -390,7 +404,13 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
         newObj.attributes[key] = val;
       }
     }
+    // Set position if provided (from drag-drop or quick-create)
+    if (position) {
+      savedPositionsRef.current[newObj.id] = position;
+    }
     setObjects((prev) => [...prev, newObj]);
+    setSelectedNodeId(newObj.id);
+    setSelectedNodeIds(new Set());
     setSaveStatus('unsaved');
   }, []);
 
@@ -802,6 +822,38 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
     }
   }, []);
 
+  // ─── Drag-to-canvas drop ────────────────────────────────────────
+  const handleCanvasDragOver = useCallback((e: React.DragEvent) => {
+    dragCreate.onDragOver(e);
+  }, [dragCreate]);
+
+  const handleCanvasDrop = useCallback((e: React.DragEvent) => {
+    const result = dragCreate.onDrop(e, reactFlowInstance.screenToFlowPosition);
+    if (result) {
+      handleCreateNode(result.tool, result.position);
+    }
+  }, [dragCreate, reactFlowInstance, handleCreateNode]);
+
+  // ─── Active tool cursor + banner ────────────────────────────────
+  const canvasCursor = useMemo(() => {
+    if (dragCreate.dragState?.active) return 'grabbing';
+    if (connectMode) return 'crosshair';
+    if (activeTool) {
+      const tool = allTools.find((t) => t.id === activeTool);
+      if (tool?.type === 'nodeCreation' || tool?.type === 'containerCreation') return 'cell';
+      if (tool?.type === 'delete') return 'not-allowed';
+    }
+    return undefined;
+  }, [activeTool, connectMode, allTools, dragCreate.dragState]);
+
+  const toolBannerText = useMemo(() => {
+    if (!activeTool) return null;
+    const tool = allTools.find((t) => t.id === activeTool);
+    if (!tool) return null;
+    if (tool.type === 'edgeCreation') return `🔗 Connect mode: drag from source to target · Esc to cancel`;
+    return null;
+  }, [activeTool, allTools]);
+
   // ─── Keyboard shortcuts (centralized hook) ─────────────────────
   useKeyboardShortcuts(
     {
@@ -931,11 +983,39 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
             onCreateNode={handleCreateNode}
             connectMode={connectMode}
             hasSelection={!!selectedNodeId || selectedNodeIds.size > 0}
+            instanceCounts={instanceCounts}
+            onDragStart={dragCreate.onDragStart}
           />
         </div>
 
         {/* Center — Canvas */}
-        <div style={{ flex: 1, position: 'relative' }}>
+        <div
+          style={{ flex: 1, position: 'relative', cursor: canvasCursor }}
+          onDragOver={handleCanvasDragOver}
+          onDrop={handleCanvasDrop}
+        >
+          {/* Tool state banner */}
+          {toolBannerText && (
+            <div style={{
+              position: 'absolute',
+              top: 8,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 50,
+              padding: '6px 14px',
+              background: 'var(--surface, #1e1e2e)',
+              border: '1px solid var(--primary, #6366f1)',
+              borderRadius: 8,
+              fontSize: 12,
+              color: 'var(--text, #e4e4e7)',
+              boxShadow: '0 4px 12px rgba(99,102,241,0.2)',
+              pointerEvents: 'none',
+              animation: 'fadeIn 0.15s ease-out',
+            }}>
+              {toolBannerText}
+            </div>
+          )}
+
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -982,6 +1062,13 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
             state={inlineEditState}
             onConfirm={handleConfirmInlineEdit}
             onCancel={handleCancelInlineEdit}
+          />
+
+          {/* Quick Create FAB */}
+          <QuickCreate
+            tools={allTools}
+            onCreateNode={handleCreateNode}
+            instanceCounts={instanceCounts}
           />
         </div>
 
