@@ -246,7 +246,10 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
   // Single collaboration system — stable identity managed by useYjsCollaboration
   // Remote changes are applied directly via model.applyRemoteNodes/applyRemoteEdges.
   // Local changes sync to Y.Doc via useEffect with isRemoteUpdateRef guard.
-  const isRemoteUpdateRef = useRef(false);
+  // The counter increments on each remote apply — useEffect compares against its
+  // own snapshot to know if the current render was triggered by a remote update.
+  const remoteUpdateCounterRef = useRef(0);
+  const lastSyncedCounterRef = useRef(0);
 
   const collaborative = useCollaborativeModel({
     metamodelId,
@@ -254,13 +257,11 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
     nodes: model.nodes as any,
     edges: model.edges as any,
     onRemoteNodesChange: (remoteNodes) => {
-      // Flag stays true until AFTER React commits the render triggered by this update.
-      // This prevents the sync useEffect from echoing back to Y.Doc.
-      isRemoteUpdateRef.current = true;
+      remoteUpdateCounterRef.current += 1;
       model.applyRemoteNodes(remoteNodes as any);
     },
     onRemoteEdgesChange: (remoteEdges) => {
-      isRemoteUpdateRef.current = true;
+      remoteUpdateCounterRef.current += 1;
       model.applyRemoteEdges(remoteEdges as any);
     },
   });
@@ -269,20 +270,17 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
   const collaborativeRef = useRef(collaborative);
   collaborativeRef.current = collaborative;
 
-  // Sync local changes to Y.Doc — runs after every render where nodes/edges changed.
-  // Safe because:
-  // 1. Remote updates set isRemoteUpdateRef=true → skipped
-  // 2. syncNodes/syncEdges only write to Y.Doc if values actually differ (deep compare)
-  // 3. Even if a write happens, onDocObserve is guarded by isLocalUpdateRef in useYjsCollaboration
+  // Sync local changes to Y.Doc — only fires when nodes/edges actually change.
+  // Skips if the change was caused by a remote update (counter mismatch).
   useEffect(() => {
-    if (isRemoteUpdateRef.current) {
-      // Reset the flag — this render was caused by a remote update, don't echo back
-      isRemoteUpdateRef.current = false;
+    if (remoteUpdateCounterRef.current !== lastSyncedCounterRef.current) {
+      // This render was triggered by a remote update — don't echo back
+      lastSyncedCounterRef.current = remoteUpdateCounterRef.current;
       return;
     }
     if (!collaborativeRef.current.connected) return;
     collaborativeRef.current.syncLocal(model.nodes as any, model.edges as any);
-  }); // No deps — runs every render, but exits early if remote or no change (syncNodes has internal guards)
+  }, [model.nodes, model.edges]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Wrapped onNodesChange: applies changes locally (sync happens via useEffect above)
   const wrappedOnNodesChange = useCallback((changes: any[]) => {
