@@ -37,14 +37,12 @@ import { nodeTypes } from './nodes/nodeTypes';
 import { edgeTypes } from './edges/CustomEdges';
 import { EdgeLayoutProvider } from './edges/EdgeLayoutContext';
 import { getMetamodel, getProject, exportEcore, exportGenmodel, exportXmiZip } from '../../api/client';
-import { useCollaboration } from '../../hooks/useCollaboration';
 import { useCollaborativeModel } from '../../hooks/useCollaborativeModel';
 import { useOCLValidation } from '../../hooks/useOCLValidation';
 import { useToast } from '../ToastProvider';
 import { RemoteCursors, SelectionHighlightsOverlay, PresencePanel } from '../collaboration/RemoteCursors';
 import { OfflineBanner } from '../collaboration/OfflineBanner';
 import { FollowModePanel, useFollowMode, useCursorChat, CursorChatInput, CursorMessages } from '../collaboration/PremiumFeatures';
-import type { RoomUser } from '../../hooks/useCollaboration';
 import type { AwarenessState } from '../../hooks/useYjsCollaboration';
 import { ErrorBoundary } from '../ErrorBoundary';
 import { useEditorContext } from '../../contexts/EditorContext';
@@ -244,65 +242,11 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
     }
   }, [fetchedPkg, model.nodes.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Colaboración en tiempo real ────────────────────────────
-  const [collabUsers, setCollabUsers] = useState<RoomUser[]>([]);
-  const [remoteContent, setRemoteContent] = useState<Record<string, any> | null>(null);
-  const [socketId, setSocketId] = useState<string>('');
-
-  const collab = useCollaboration(metamodelId, {
-    userName: 'Anonymous',
-    onRoomUsers: (users) => {
-      setCollabUsers(users);
-    },
-    onModelUpdate: (content) => {
-      setRemoteContent(content);
-    },
-    onModelSynced: (content) => {
-      setRemoteContent(content);
-    },
-  });
-
-  useEffect(() => {
-    if (collab.connected && !socketId) {
-      setSocketId(`local_${Date.now()}`);
-    }
-  }, [collab.connected, socketId]);
-
-  // Track mouse position for cursor sharing (legacy)
-  const mousePosRef = useRef({ x: 0, y: 0 });
-  useEffect(() => {
-    const handler = (e: MouseEvent) => { mousePosRef.current = { x: e.clientX, y: e.clientY }; };
-    window.addEventListener('mousemove', handler);
-    return () => window.removeEventListener('mousemove', handler);
-  }, []);
-
-  useEffect(() => {
-    if (!collab.connected) return;
-    const interval = setInterval(() => {
-      collab.sendCursorMove(mousePosRef.current);
-    }, 150);
-    return () => clearInterval(interval);
-  }, [collab.connected, collab.sendCursorMove]);
-
-  // Handle remote content sync
-  useEffect(() => {
-    if (remoteContent) {
-      const pkg: SerializableEPackage = {
-        name: (remoteContent as any).name || (fetchedPkg?.name || 'model'),
-        nsURI: (remoteContent as any).nsURI || (fetchedPkg?.nsURI || ''),
-        nsPrefix: (remoteContent as any).nsPrefix || (fetchedPkg?.nsPrefix || ''),
-        eClassifiers: Array.isArray((remoteContent as any).eClassifiers)
-          ? (remoteContent as any).eClassifiers : [],
-      };
-      setFetchedPkg(pkg);
-      setRemoteContent(null);
-    }
-  }, [remoteContent]);  // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Yjs CRDT Collaboration (new system) ─────────────────────
+  // ── Yjs CRDT Collaboration ───────────────────────────────────
+  // Single collaboration system — stable identity managed by useYjsCollaboration
   const collaborative = useCollaborativeModel({
     metamodelId,
-    userName: 'Anonymous',
+    userName: 'Anonymous', // Stable session name assigned internally by the hook
     nodes: model.nodes as any,
     edges: model.edges as any,
     onRemoteNodesChange: (remoteNodes) => {
@@ -536,8 +480,8 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
         nodeCount: model.nodes?.length ?? 0,
         edgeCount: model.edges?.length ?? 0,
         packageName: model.pkg?.name ?? '',
-        connected: collab.connected,
-        collaborators: collabUsers.length,
+        connected: collaborative.connected,
+        collaborators: collaborative.remoteStates.size,
       },
     );
 
@@ -560,14 +504,14 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
       nodeCount: model.nodes?.length ?? 0,
       edgeCount: model.edges?.length ?? 0,
       packageName: model.pkg?.name ?? '',
-      connected: collab.connected,
-      collaborators: collabUsers.length,
+      connected: collaborative.connected,
+      collaborators: collaborative.remoteStates.size,
     });
   }, [
     model.isDirty, model.loading, model.canUndo, model.canRedo,
     model.nodes?.length, model.edges?.length, model.pkg?.name,
     ocl.result?.totalViolations, ocl.enabled,
-    collab.connected, collabUsers.length,
+    collaborative.connected, collaborative.remoteStates.size,
     collaborative.connected, collaborative.canUndo, collaborative.canRedo,
     updateState,
   ]);

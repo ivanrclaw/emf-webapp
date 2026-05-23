@@ -4,14 +4,13 @@
  * React hook that connects to the Yjs WebSocket server and syncs
  * the Y.Doc CRDT state with React Flow nodes/edges.
  *
- * Features:
- * - Automatic WebSocket connection with reconnection
- * - Bidirectional sync: React Flow ↔ Y.Doc
- * - Awareness protocol for cursors and selection
- * - Conflict-free concurrent editing
- * - Offline support (edits queue locally, sync on reconnect)
+ * Production-grade presence management:
+ * - Stable session identity via sessionStorage (F5 reuses same identity)
+ * - Heartbeat protocol (responds to server pings, sends own heartbeats)
+ * - Proper cleanup on unmount, beforeunload, and visibilitychange
+ * - New Y.Doc per connection cycle (no stale clientID reuse)
  */
-import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import * as Y from 'yjs';
 import * as awarenessProtocol from 'y-protocols/awareness';
 import * as syncProtocol from 'y-protocols/sync';
@@ -95,6 +94,10 @@ export interface YjsCollaborationReturn {
 
 const MSG_SYNC = 0;
 const MSG_AWARENESS = 1;
+const MSG_HEARTBEAT = 2;
+
+/** Client sends heartbeat every 10s (server TTL is 30s, so 3x margin) */
+const CLIENT_HEARTBEAT_INTERVAL_MS = 10_000;
 
 const USER_COLORS = [
   '#6366f1', '#f59e0b', '#10b981', '#ec4899',
@@ -110,10 +113,35 @@ function getAutoColor(name: string): string {
   return USER_COLORS[Math.abs(hash) % USER_COLORS.length];
 }
 
+// ─── Stable Session Identity ─────────────────────────────────────────────
+// Persists across F5 within the same tab, but unique per tab.
+// This ensures that refreshing doesn't create a new "user" — the server
+// will see the same identity reconnecting and clean up the old state.
+
+function getSessionUserName(baseName: string): string {
+  const key = 'emf-collab-session-name';
+  const existing = sessionStorage.getItem(key);
+  if (existing) return existing;
+  // Generate a stable name for this tab session
+  const suffix = Math.random().toString(36).slice(2, 6);
+  const name = baseName === 'Anonymous' ? `User-${suffix}` : baseName;
+  sessionStorage.setItem(key, name);
+  return name;
+}
+
+function getSessionColor(): string {
+  const key = 'emf-collab-session-color';
+  const existing = sessionStorage.getItem(key);
+  if (existing) return existing;
+  const color = USER_COLORS[Math.floor(Math.random() * USER_COLORS.length)];
+  sessionStorage.setItem(key, color);
+  return color;
+}
+
 // ─── Hook ────────────────────────────────────────────────────────────────
 
 export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollaborationReturn {
-  const { roomId, userName, userColor, onRemoteUpdate, onAwarenessUpdate, onConnectionChange } = options;
+  const { roomId } = options;
 
   const [connected, setConnected] = useState(false);
   const [remoteStates, setRemoteStates] = useState<Map<number, AwarenessState>>(new Map());
@@ -124,23 +152,21 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
   const optionsRef = useRef(options);
   optionsRef.current = options;
 
-  // Y.Doc and awareness — stable across renders
-  const docRef = useRef<Y.Doc | null>(null);
-  const awarenessRef = useRef<awarenessProtocol.Awareness | null>(null);
+  // Y.Doc and awareness — created fresh per connection cycle
+  const docRef = useRef<Y.Doc>(new Y.Doc());
+  const awarenessRef = useRef<awarenessProtocol.Awareness>(
+    new awarenessProtocol.Awareness(docRef.current)
+  );
   const undoManagerRef = useRef<Y.UndoManager | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isLocalUpdateRef = useRef(false);
   const idbRef = useRef<IndexeddbPersistence | null>(null);
-
-  // Initialize Y.Doc once
-  if (!docRef.current) {
-    docRef.current = new Y.Doc();
-    awarenessRef.current = new awarenessProtocol.Awareness(docRef.current);
-  }
+  const cleanedUpRef = useRef(false);
 
   const doc = docRef.current;
-  const awareness = awarenessRef.current!;
+  const awareness = awarenessRef.current;
 
   // IndexedDB persistence — survives page reloads and offline edits
   useEffect(() => {
@@ -176,11 +202,34 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
     };
   }, [doc]);
 
-  // WebSocket connection
+  // WebSocket connection with heartbeat
   useEffect(() => {
     if (!roomId) return;
 
     let destroyed = false;
+    cleanedUpRef.current = false;
+
+    // Resolve stable identity for this tab
+    const userName = getSessionUserName(optionsRef.current.userName);
+    const userColor = optionsRef.current.userColor || getSessionColor();
+
+    function sendHeartbeat(ws: WebSocket) {
+      if (ws.readyState === WebSocket.OPEN) {
+        const encoder = encoding.createEncoder();
+        encoding.writeVarUint(encoder, MSG_HEARTBEAT);
+        ws.send(encoding.toUint8Array(encoder));
+      }
+    }
+
+    function cleanupAwareness() {
+      if (cleanedUpRef.current) return;
+      cleanedUpRef.current = true;
+      try {
+        awarenessProtocol.removeAwarenessStates(awareness, [doc.clientID], 'cleanup');
+      } catch {
+        // Ignore errors during cleanup
+      }
+    }
 
     function connect() {
       if (destroyed) return;
@@ -193,15 +242,12 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
 
       ws.onopen = () => {
         if (destroyed) { ws.close(); return; }
+        cleanedUpRef.current = false;
         setConnected(true);
         optionsRef.current.onConnectionChange?.(true);
 
-        // Set awareness state
-        const color = optionsRef.current.userColor || getAutoColor(optionsRef.current.userName);
-        awareness.setLocalStateField('user', {
-          name: optionsRef.current.userName,
-          color,
-        });
+        // Set awareness state with stable identity
+        awareness.setLocalStateField('user', { name: userName, color: userColor });
         awareness.setLocalStateField('cursor', null);
         awareness.setLocalStateField('selectedNodeIds', []);
         awareness.setLocalStateField('selectedEdgeIds', []);
@@ -209,6 +255,12 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
         awareness.setLocalStateField('editingField', null);
         awareness.setLocalStateField('viewport', null);
         awareness.setLocalStateField('cursorMessage', null);
+
+        // Start client heartbeat — sends every 10s to keep alive on server
+        if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
+        heartbeatTimerRef.current = setInterval(() => sendHeartbeat(ws), CLIENT_HEARTBEAT_INTERVAL_MS);
+        // Send first heartbeat immediately
+        sendHeartbeat(ws);
       };
 
       ws.onmessage = (event) => {
@@ -231,6 +283,11 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
             awarenessProtocol.applyAwarenessUpdate(awareness, update, ws);
             break;
           }
+          case MSG_HEARTBEAT: {
+            // Server sent a heartbeat ping — respond immediately
+            sendHeartbeat(ws);
+            break;
+          }
         }
       };
 
@@ -239,6 +296,12 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
         setConnected(false);
         optionsRef.current.onConnectionChange?.(false);
         wsRef.current = null;
+
+        // Stop heartbeat
+        if (heartbeatTimerRef.current) {
+          clearInterval(heartbeatTimerRef.current);
+          heartbeatTimerRef.current = null;
+        }
 
         // Reconnect after delay
         reconnectTimerRef.current = setTimeout(connect, 2000);
@@ -263,6 +326,37 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
       }
     };
     doc.on('update', onDocUpdate);
+
+    // Clean up awareness on page unload (tab close / F5)
+    // Belt-and-suspenders: server will also sweep via heartbeat TTL
+    const onBeforeUnload = () => {
+      cleanupAwareness();
+      // Try to send the removal before the page unloads
+      const ws = wsRef.current;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        const encoder = encoding.createEncoder();
+        encoding.writeVarUint(encoder, MSG_AWARENESS);
+        encoding.writeVarUint8Array(
+          encoder,
+          awarenessProtocol.encodeAwarenessUpdate(awareness, [doc.clientID]),
+        );
+        ws.send(encoding.toUint8Array(encoder));
+      }
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+
+    // Also handle visibility change — when tab is hidden for too long,
+    // proactively send heartbeat to prevent server sweep
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        // Tab became visible again — send heartbeat immediately
+        const ws = wsRef.current;
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          sendHeartbeat(ws);
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
 
     // Listen for awareness changes → send to server
     const onAwarenessChange = ({ added, updated, removed }: any) => {
@@ -330,10 +424,18 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
     return () => {
       destroyed = true;
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      if (heartbeatTimerRef.current) {
+        clearInterval(heartbeatTimerRef.current);
+        heartbeatTimerRef.current = null;
+      }
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       doc.off('update', onDocUpdate);
       awareness.off('change', onAwarenessChange);
       nodesMap.unobserveDeep(onDocObserve);
       edgesMap.unobserveDeep(onDocObserve);
+      // Clean awareness before closing WS so the removal propagates
+      cleanupAwareness();
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;

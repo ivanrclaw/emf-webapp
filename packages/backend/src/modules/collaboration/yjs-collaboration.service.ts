@@ -10,6 +10,11 @@
  * - SQLite persistence (snapshots + incremental updates)
  * - Automatic compaction of update log
  * - Room cleanup on inactivity
+ * - Production-grade presence management:
+ *   • Heartbeat protocol (MSG_HEARTBEAT = 2)
+ *   • TTL sweep every 10s — removes stale awareness states (>30s without heartbeat)
+ *   • Aggressive cleanup on WS close — immediate removal of all tracked clientIDs
+ *   • Broadcast of awareness removals to remaining clients
  */
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -26,6 +31,12 @@ import { CollaborationUpdate } from './entities/collaboration-update.entity.js';
 // Message types matching y-websocket protocol
 const MSG_SYNC = 0;
 const MSG_AWARENESS = 1;
+const MSG_HEARTBEAT = 2;
+
+// Heartbeat / TTL configuration
+const HEARTBEAT_INTERVAL_MS = 15_000; // Server sends heartbeat ping every 15s
+const HEARTBEAT_TTL_MS = 30_000; // Client considered stale after 30s without heartbeat
+const SWEEP_INTERVAL_MS = 10_000; // Sweep for stale clients every 10s
 
 // Compaction threshold: merge updates into snapshot after this many
 const COMPACTION_THRESHOLD = 50;
@@ -36,6 +47,10 @@ interface YjsRoom {
   doc: Y.Doc;
   awareness: awarenessProtocol.Awareness;
   clients: Set<WebSocket>;
+  /** Map WebSocket → awareness clientID (learned from first awareness message) */
+  clientIds: Map<WebSocket, number>;
+  /** Tracks last heartbeat timestamp per clientID for TTL sweep */
+  clientLastSeen: Map<number, number>;
   lastActivity: number;
   updateCount: number;
   persistTimer: ReturnType<typeof setTimeout> | null;
@@ -45,11 +60,19 @@ interface YjsRoom {
   batchTimer: ReturnType<typeof setTimeout> | null;
 }
 
+/** Per-WebSocket metadata for heartbeat intervals */
+interface ClientMeta {
+  heartbeatInterval: ReturnType<typeof setInterval>;
+}
+
 @Injectable()
 export class YjsCollaborationService implements OnModuleInit, OnModuleDestroy {
   private rooms = new Map<string, YjsRoom>();
   private wss: WebSocketServer | null = null;
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
+  private sweepInterval: ReturnType<typeof setInterval> | null = null;
+  /** Per-WebSocket metadata (heartbeat timers) — keyed by ws instance */
+  private clientMeta = new WeakMap<WebSocket, ClientMeta>();
 
   constructor(
     @InjectRepository(CollaborationSnapshot)
@@ -61,10 +84,13 @@ export class YjsCollaborationService implements OnModuleInit, OnModuleDestroy {
   onModuleInit() {
     // Cleanup idle rooms every 5 minutes
     this.cleanupInterval = setInterval(() => this.cleanupIdleRooms(), 5 * 60 * 1000);
+    // Sweep stale awareness states every 10 seconds
+    this.sweepInterval = setInterval(() => this.sweepStaleClients(), SWEEP_INTERVAL_MS);
   }
 
   onModuleDestroy() {
     if (this.cleanupInterval) clearInterval(this.cleanupInterval);
+    if (this.sweepInterval) clearInterval(this.sweepInterval);
     // Persist all rooms before shutdown
     for (const [roomId, room] of this.rooms) {
       this.persistRoom(roomId, room).catch(console.error);
@@ -114,6 +140,17 @@ export class YjsCollaborationService implements OnModuleInit, OnModuleDestroy {
     encoding.writeVarUint8Array(awarenessEncoder, awarenessStates);
     ws.send(encoding.toUint8Array(awarenessEncoder));
 
+    // Start heartbeat ping interval for this client
+    const heartbeatInterval = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        const hbEncoder = encoding.createEncoder();
+        encoding.writeVarUint(hbEncoder, MSG_HEARTBEAT);
+        ws.send(encoding.toUint8Array(hbEncoder));
+      }
+    }, HEARTBEAT_INTERVAL_MS);
+
+    this.clientMeta.set(ws, { heartbeatInterval });
+
     // Handle incoming messages
     ws.on('message', (data: Buffer) => {
       try {
@@ -124,25 +161,52 @@ export class YjsCollaborationService implements OnModuleInit, OnModuleDestroy {
     });
 
     ws.on('close', () => {
-      room.clients.delete(ws);
-      // Remove awareness state for this client
-      awarenessProtocol.removeAwarenessStates(
-        room.awareness,
-        [room.doc.clientID], // This is approximate; proper impl tracks per-ws clientID
-        null,
-      );
-      room.lastActivity = Date.now();
-
-      // If no clients left, schedule persistence
-      if (room.clients.size === 0) {
-        this.schedulePersist(roomId, room);
-      }
+      this.cleanupClient(ws, room, roomId);
     });
 
     ws.on('error', (err) => {
       console.error(`[Yjs] WebSocket error in room ${roomId}:`, err);
-      room.clients.delete(ws);
+      this.cleanupClient(ws, room, roomId);
     });
+  }
+
+  /**
+   * Aggressively clean up all state associated with a disconnected WebSocket.
+   * Removes awareness states, clears heartbeat tracking, and broadcasts removal.
+   */
+  private cleanupClient(ws: WebSocket, room: YjsRoom, roomId: string): void {
+    // Prevent double-cleanup
+    if (!room.clients.has(ws)) return;
+    room.clients.delete(ws);
+
+    // Clear heartbeat interval for this client
+    const meta = this.clientMeta.get(ws);
+    if (meta) {
+      clearInterval(meta.heartbeatInterval);
+      this.clientMeta.delete(ws);
+    }
+
+    // Remove awareness state and broadcast removal
+    const clientId = room.clientIds.get(ws);
+    if (clientId !== undefined) {
+      awarenessProtocol.removeAwarenessStates(
+        room.awareness,
+        [clientId],
+        null,
+      );
+      // Broadcast the removal to all remaining clients
+      this.broadcastAwarenessRemoval(room, [clientId]);
+      // Clean up tracking maps
+      room.clientIds.delete(ws);
+      room.clientLastSeen.delete(clientId);
+    }
+
+    room.lastActivity = Date.now();
+
+    // If no clients left, schedule persistence
+    if (room.clients.size === 0) {
+      this.schedulePersist(roomId, room);
+    }
   }
 
   private handleMessage(ws: WebSocket, room: YjsRoom, roomId: string, data: Uint8Array): void {
@@ -167,6 +231,31 @@ export class YjsCollaborationService implements OnModuleInit, OnModuleDestroy {
       case MSG_AWARENESS: {
         const update = decoding.readVarUint8Array(decoder);
         awarenessProtocol.applyAwarenessUpdate(room.awareness, update, ws);
+
+        // Track the clientID for this WebSocket (extracted from awareness update)
+        // Awareness updates encode: [length, clientID, clock, state...]
+        // We can learn the sender's clientID from the update
+        if (!room.clientIds.has(ws)) {
+          try {
+            const updateDecoder = decoding.createDecoder(update);
+            const len = decoding.readVarUint(updateDecoder);
+            if (len > 0) {
+              const clientId = decoding.readVarUint(updateDecoder);
+              room.clientIds.set(ws, clientId);
+              // Initialize lastSeen for this clientID
+              room.clientLastSeen.set(clientId, Date.now());
+            }
+          } catch {
+            // Ignore parse errors — we'll get it on the next message
+          }
+        } else {
+          // Update lastSeen on any awareness message (acts as implicit heartbeat)
+          const clientId = room.clientIds.get(ws);
+          if (clientId !== undefined) {
+            room.clientLastSeen.set(clientId, Date.now());
+          }
+        }
+
         // Broadcast awareness to all OTHER clients
         const encoder = encoding.createEncoder();
         encoding.writeVarUint(encoder, MSG_AWARENESS);
@@ -179,8 +268,113 @@ export class YjsCollaborationService implements OnModuleInit, OnModuleDestroy {
         });
         break;
       }
+
+      case MSG_HEARTBEAT: {
+        // Client responded to heartbeat ping — update lastSeen
+        const clientId = room.clientIds.get(ws);
+        if (clientId !== undefined) {
+          room.clientLastSeen.set(clientId, Date.now());
+        }
+        break;
+      }
     }
   }
+
+  // ─── Heartbeat / TTL Sweep ──────────────────────────────────────────────────
+
+  /**
+   * Sweep all rooms for stale awareness states.
+   * Any clientID whose lastSeen is older than HEARTBEAT_TTL_MS gets removed
+   * and the removal is broadcast to all remaining clients in the room.
+   */
+  private sweepStaleClients(): void {
+    const now = Date.now();
+
+    for (const [, room] of this.rooms) {
+      if (room.clientLastSeen.size === 0) continue;
+
+      const staleClientIds: number[] = [];
+
+      for (const [clientId, lastSeen] of room.clientLastSeen) {
+        if (now - lastSeen > HEARTBEAT_TTL_MS) {
+          staleClientIds.push(clientId);
+        }
+      }
+
+      if (staleClientIds.length === 0) continue;
+
+      // Remove stale awareness states from the server's awareness instance
+      awarenessProtocol.removeAwarenessStates(
+        room.awareness,
+        staleClientIds,
+        null,
+      );
+
+      // Broadcast the removal to all remaining clients
+      this.broadcastAwarenessRemoval(room, staleClientIds);
+
+      // Clean up tracking maps
+      for (const clientId of staleClientIds) {
+        room.clientLastSeen.delete(clientId);
+        // Also remove from clientIds map (find the ws that had this clientId)
+        for (const [ws, id] of room.clientIds) {
+          if (id === clientId) {
+            room.clientIds.delete(ws);
+            // Clear heartbeat interval for this stale client's ws
+            const meta = this.clientMeta.get(ws);
+            if (meta) {
+              clearInterval(meta.heartbeatInterval);
+              this.clientMeta.delete(ws);
+            }
+            // Remove from clients set (the ws is likely already dead)
+            room.clients.delete(ws);
+            break;
+          }
+        }
+      }
+
+      console.log(
+        `[Yjs] Swept ${staleClientIds.length} stale client(s): [${staleClientIds.join(', ')}]`,
+      );
+    }
+  }
+
+  /**
+   * Broadcast an awareness removal message to all connected clients in a room.
+   * Encodes the removed clientIDs with null state so clients clear their UI.
+   */
+  private broadcastAwarenessRemoval(room: YjsRoom, clientIds: number[]): void {
+    if (room.clients.size === 0 || clientIds.length === 0) return;
+
+    // Encode an awareness update with null states for the removed clients.
+    // The awareness protocol encodes removals as: clientID with clock incremented and null state.
+    // We use encodeAwarenessUpdate which reads from the awareness instance —
+    // but since we already called removeAwarenessStates, those clients now have null state.
+    // We need to manually encode the removal message.
+    const encoder = encoding.createEncoder();
+    encoding.writeVarUint(encoder, clientIds.length);
+    for (const clientId of clientIds) {
+      encoding.writeVarUint(encoder, clientId);
+      // Clock = 1 (any value > 0 signals an update; clients will see null state)
+      encoding.writeVarUint(encoder, 1);
+      // Null state encoded as JSON "null"
+      encoding.writeVarString(encoder, 'null');
+    }
+    const removalUpdate = encoding.toUint8Array(encoder);
+
+    const msgEncoder = encoding.createEncoder();
+    encoding.writeVarUint(msgEncoder, MSG_AWARENESS);
+    encoding.writeVarUint8Array(msgEncoder, removalUpdate);
+    const msg = encoding.toUint8Array(msgEncoder);
+
+    room.clients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(msg);
+      }
+    });
+  }
+
+  // ─── Room Management ────────────────────────────────────────────────────────
 
   private async getOrCreateRoom(roomId: string): Promise<YjsRoom> {
     if (this.rooms.has(roomId)) {
@@ -226,6 +420,8 @@ export class YjsCollaborationService implements OnModuleInit, OnModuleDestroy {
       doc,
       awareness,
       clients: new Set(),
+      clientIds: new Map(),
+      clientLastSeen: new Map(),
       lastActivity: Date.now(),
       updateCount: 0,
       persistTimer: null,

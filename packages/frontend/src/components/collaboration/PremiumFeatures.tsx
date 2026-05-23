@@ -117,6 +117,8 @@ export function FollowModePanel({ awarenessStates, followingId, onFollow }: Foll
 
 /**
  * Hook that syncs viewport to followed user's viewport.
+ * Uses direct setViewport without animation to avoid stacking 150ms transitions
+ * on every frame. Throttled to ~30fps to reduce jitter.
  */
 export function useFollowMode(
   followingId: number | null,
@@ -124,20 +126,35 @@ export function useFollowMode(
 ) {
   const reactFlow = useReactFlow();
   const animFrameRef = useRef<number | null>(null);
+  const lastAppliedRef = useRef<{ x: number; y: number; zoom: number } | null>(null);
+  const lastTimeRef = useRef(0);
 
   useEffect(() => {
     if (followingId === null) {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      lastAppliedRef.current = null;
       return;
     }
 
     function syncViewport() {
+      const now = performance.now();
+      // Throttle to ~30fps (33ms) to avoid excessive updates
+      if (now - lastTimeRef.current < 33) {
+        animFrameRef.current = requestAnimationFrame(syncViewport);
+        return;
+      }
+      lastTimeRef.current = now;
+
       const state = awarenessStates.get(followingId!);
       if (state?.viewport) {
-        reactFlow.setViewport(
-          { x: state.viewport.x, y: state.viewport.y, zoom: state.viewport.zoom },
-          { duration: 150 },
-        );
+        const { x, y, zoom } = state.viewport;
+        const last = lastAppliedRef.current;
+        // Only update if viewport actually changed (avoid redundant calls)
+        if (!last || Math.abs(last.x - x) > 0.5 || Math.abs(last.y - y) > 0.5 || Math.abs(last.zoom - zoom) > 0.001) {
+          lastAppliedRef.current = { x, y, zoom };
+          // No duration — instant snap prevents animation stacking
+          reactFlow.setViewport({ x, y, zoom });
+        }
       }
       animFrameRef.current = requestAnimationFrame(syncViewport);
     }
