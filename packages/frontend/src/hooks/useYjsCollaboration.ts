@@ -267,6 +267,14 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
           cursorMessage: null,
         });
 
+        // Send SyncStep1 to server — this requests the server's current state.
+        // Without this, the client never receives existing document data from
+        // other clients that connected before it.
+        const syncEncoder = encoding.createEncoder();
+        encoding.writeVarUint(syncEncoder, MSG_SYNC);
+        syncProtocol.writeSyncStep1(syncEncoder, doc);
+        ws.send(encoding.toUint8Array(syncEncoder));
+
         // Start client heartbeat — sends every 10s to keep alive on server
         if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
         heartbeatTimerRef.current = setInterval(() => sendHeartbeat(ws), CLIENT_HEARTBEAT_INTERVAL_MS);
@@ -491,8 +499,19 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
       });
       toDelete.forEach(key => nodesMap.delete(key));
 
-      // Add/update nodes
+      // Add/update nodes — only store serializable data (strip functions)
       for (const node of nodes) {
+        // Extract only serializable fields from data
+        // Only sync what's needed: classifier (source of truth), label, type
+        // Exclude: functions, ePackage (redundant/huge), violations (derived)
+        const serializableData: Record<string, any> = {};
+        if (node.data) {
+          const d = node.data as Record<string, any>;
+          if (d.classifier) serializableData.classifier = d.classifier;
+          if (d.label) serializableData.label = d.label;
+          if (d.type) serializableData.type = d.type;
+        }
+
         const existing = nodesMap.get(node.id);
         if (existing) {
           // Only update if changed
@@ -500,9 +519,9 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
           if (pos?.x !== node.position.x || pos?.y !== node.position.y) {
             existing.set('position', { x: node.position.x, y: node.position.y });
           }
-          const data = existing.get('data');
-          if (JSON.stringify(data) !== JSON.stringify(node.data)) {
-            existing.set('data', node.data);
+          const storedData = existing.get('data');
+          if (JSON.stringify(storedData) !== JSON.stringify(serializableData)) {
+            existing.set('data', serializableData);
           }
           if (node.measured) {
             const m = existing.get('measured');
@@ -516,7 +535,7 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
           yNode.set('id', node.id);
           yNode.set('type', node.type || 'default');
           yNode.set('position', { x: node.position.x, y: node.position.y });
-          yNode.set('data', node.data || {});
+          yNode.set('data', serializableData);
           if (node.measured) yNode.set('measured', node.measured);
           nodesMap.set(node.id, yNode);
         }
