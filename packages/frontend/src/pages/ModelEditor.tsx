@@ -23,6 +23,7 @@ import {
   Panel,
   MarkerType,
   ConnectionMode,
+  useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import {
@@ -34,15 +35,16 @@ import {
   M1Model,
   GraphicalSpec,
 } from '../api/client';
-import { Download, Save } from '../components/icons';
 import ErrorPanel from '../components/feedback/ErrorPanel';
 import type { ViewpointSpec, NodeCreationTool, ContainerCreationTool, EdgeCreationTool, NodeMapping, Tool } from '../components/spec-diagram/types';
 import VsmNode, { type VsmNodeData } from '../components/model-editor/VsmNode';
 import VsmContainerNode, { type VsmContainerNodeData } from '../components/model-editor/VsmContainerNode';
 import VsmEdge, { type VsmEdgeData } from '../components/model-editor/VsmEdge';
 import { VsmPalette } from '../components/model-editor/VsmPalette';
-import { LayerToggle } from '../components/model-editor/LayerToggle';
 import { VsmPropertyInspector } from '../components/model-editor/VsmPropertyInspector';
+import { EditorToolbar } from '../components/model-editor/EditorToolbar';
+import { EditorStatusBar } from '../components/model-editor/EditorStatusBar';
+import { useModelHistory } from '../components/model-editor/hooks/useModelHistory';
 import {
   collectActiveToolSections,
   collectActiveMappings,
@@ -112,11 +114,23 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
   const [activeTool, setActiveTool] = useState<string | null>(null);
   const [connectMode, setConnectMode] = useState(false);
 
+  // View state
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [showGrid, setShowGrid] = useState(true);
+  const [showMinimap, setShowMinimap] = useState(true);
+  const [gridSize] = useState(20);
+
+  // History (undo/redo)
+  const history = useModelHistory(null);
+
+  // ReactFlow instance
+  const reactFlowInstance = useReactFlow();
+
   const lastSavedRef = useRef('');
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   // Stores loaded positions so nodes keep their place on re-render
-  const savedPositionsRef = useRef<Record<string, { x: number; y: number }>>({});
+  const savedPositionsRef = useRef<Record<string, { x: number; y: number }>>({}); 
 
   // ─── Derived from spec + active layers ───────────────────────────
   const toolSections = useMemo(() => {
@@ -419,6 +433,60 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
     // Direct edit updates the label — handled via handleUpdateAttribute
   }, []);
 
+  // ─── Undo/Redo ──────────────────────────────────────────────────
+  const handleUndo = useCallback(() => {
+    const prev = history.undo();
+    if (prev) {
+      setObjects(prev as SemanticObject[]);
+      setSaveStatus('unsaved');
+    }
+  }, [history]);
+
+  const handleRedo = useCallback(() => {
+    const next = history.redo();
+    if (next) {
+      setObjects(next as SemanticObject[]);
+      setSaveStatus('unsaved');
+    }
+  }, [history]);
+
+  // Push to history whenever objects change (debounced inside hook)
+  useEffect(() => {
+    if (objects.length > 0 || history.historySize > 0) {
+      history.push(objects);
+    }
+  }, [objects]);
+
+  // ─── Duplicate selected ─────────────────────────────────────────
+  const handleDuplicate = useCallback(() => {
+    if (!selectedNodeId) return;
+    const obj = objects.find((o) => o.id === selectedNodeId);
+    if (!obj) return;
+
+    const newObj: SemanticObject = {
+      id: uid(),
+      eClass: obj.eClass,
+      attributes: { ...obj.attributes, name: `${obj.attributes.name || obj.eClass}_copy` },
+      references: { ...obj.references },
+    };
+    setObjects((prev) => [...prev, newObj]);
+    // Offset position for the duplicate
+    const pos = savedPositionsRef.current[selectedNodeId];
+    if (pos) {
+      savedPositionsRef.current[newObj.id] = { x: pos.x + 30, y: pos.y + 30 };
+    }
+    setSelectedNodeId(newObj.id);
+    setSaveStatus('unsaved');
+  }, [selectedNodeId, objects]);
+
+  // ─── Select all ─────────────────────────────────────────────────
+  const handleSelectAll = useCallback(() => {
+    // Select first node (multi-select will come in Sprint 3)
+    if (objects.length > 0) {
+      setSelectedNodeId(objects[0].id);
+    }
+  }, [objects]);
+
   // ─── Layer toggle ────────────────────────────────────────────────
   const handleToggleLayer = useCallback((layerId: string) => {
     setActiveLayers((prev) => {
@@ -448,18 +516,65 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
   // ─── Keyboard shortcuts ──────────────────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      const isInput = document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA';
+      if (isInput) return;
+
+      // Delete
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (selectedNodeId && document.activeElement?.tagName !== 'INPUT') {
-          handleDelete();
+        if (selectedNodeId) handleDelete();
+        return;
+      }
+
+      // Ctrl/Cmd shortcuts
+      if (e.ctrlKey || e.metaKey) {
+        switch (e.key) {
+          case 'z':
+            e.preventDefault();
+            if (e.shiftKey) handleRedo();
+            else handleUndo();
+            break;
+          case 'd':
+            e.preventDefault();
+            handleDuplicate();
+            break;
+          case 'a':
+            e.preventDefault();
+            handleSelectAll();
+            break;
+          case 's':
+            e.preventDefault();
+            handleSave();
+            break;
         }
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [selectedNodeId, handleDelete]);
+  }, [selectedNodeId, handleDelete, handleUndo, handleRedo, handleDuplicate, handleSelectAll, handleSave]);
 
   // ─── Export ──────────────────────────────────────────────────────
-  const handleExport = useCallback((format: 'json' | 'xmi') => {
+  const handleExport = useCallback((format: 'json' | 'xmi' | 'svg') => {
+    if (format === 'svg') {
+      // Export the ReactFlow canvas as SVG
+      const svgEl = document.querySelector('.react-flow__viewport');
+      if (svgEl) {
+        const svgClone = svgEl.cloneNode(true) as Element;
+        const svgWrap = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svgWrap.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+        svgWrap.setAttribute('width', '1200');
+        svgWrap.setAttribute('height', '800');
+        svgWrap.appendChild(svgClone);
+        const blob = new Blob([svgWrap.outerHTML], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'model.svg';
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+      return;
+    }
+
     const data = format === 'json'
       ? JSON.stringify({ objects }, null, 2)
       : objects.map((o) => `  <${o.eClass} name="${o.attributes.name || o.id}"/>`).join('\n');
@@ -491,39 +606,34 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg)' }}>
       {/* Toolbar */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 12, padding: '8px 20px',
-        background: 'var(--surface)', borderBottom: '1px solid var(--border)', flexShrink: 0,
-      }}>
-        <Link to={`/projects/${pid}/metamodels/${mmid}/models`} style={{ color: 'var(--text-secondary)', fontSize: 13, textDecoration: 'none' }}>
-          ← Models
-        </Link>
-        <div style={{ flex: 1 }} />
-        <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
-          {m1Model?.name || 'Model Editor'}
-        </span>
-        <div style={{ flex: 1 }} />
-
-        {/* Layer toggles */}
-        <LayerToggle
-          layers={allLayers}
-          activeLayers={activeLayers}
-          onToggleLayer={handleToggleLayer}
-        />
-
-        <div style={{ flex: 1 }} />
-        {saveStatus === 'saved' && <span style={{ color: 'var(--success)', fontSize: 11 }}>Saved</span>}
-        {saveStatus === 'unsaved' && <span style={{ color: 'var(--warning)', fontSize: 11 }}>Unsaved</span>}
-        <button className="btn btn-secondary btn-sm" onClick={() => handleExport('json')}>
-          <Download size={14} /> JSON
-        </button>
-        <button className="btn btn-secondary btn-sm" onClick={() => handleExport('xmi')}>
-          <Download size={14} /> XMI
-        </button>
-        <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving}>
-          {saving ? 'Saving...' : <><Save size={14} /> Save</>}
-        </button>
-      </div>
+      <EditorToolbar
+        projectId={pid || ''}
+        metamodelId={mmid || ''}
+        modelName={m1Model?.name || 'Model Editor'}
+        canUndo={history.canUndo}
+        canRedo={history.canRedo}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        hasSelection={!!selectedNodeId}
+        onDelete={handleDelete}
+        onDuplicate={handleDuplicate}
+        onSelectAll={handleSelectAll}
+        zoomLevel={zoomLevel}
+        onZoomIn={() => reactFlowInstance.zoomIn()}
+        onZoomOut={() => reactFlowInstance.zoomOut()}
+        onFitView={() => reactFlowInstance.fitView()}
+        showGrid={showGrid}
+        onToggleGrid={() => setShowGrid((v) => !v)}
+        showMinimap={showMinimap}
+        onToggleMinimap={() => setShowMinimap((v) => !v)}
+        layers={allLayers}
+        activeLayers={activeLayers}
+        onToggleLayer={handleToggleLayer}
+        saving={saving}
+        saveStatus={saveStatus}
+        onSave={handleSave}
+        onExport={handleExport}
+      />
 
       {error && (
         <div style={{ padding: '6px 20px' }}>
@@ -544,6 +654,7 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
             onSelectTool={handleSelectTool}
             onCreateNode={handleCreateNode}
             connectMode={connectMode}
+            hasSelection={!!selectedNodeId}
           />
         </div>
 
@@ -557,16 +668,19 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
             onConnect={onConnect}
             onNodeClick={onNodeClick}
             onPaneClick={onPaneClick}
+            onMoveEnd={(_, viewport) => setZoomLevel(viewport.zoom)}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             connectionMode={connectMode ? ConnectionMode.Loose : ConnectionMode.Strict}
             fitView
             minZoom={0.3}
             maxZoom={2}
+            snapToGrid={showGrid}
+            snapGrid={[gridSize, gridSize]}
           >
-            <Background gap={20} size={1} />
-            <Controls position="bottom-left" />
-            <MiniMap position="bottom-right" pannable zoomable />
+            {showGrid && <Background gap={gridSize} size={1} />}
+            <Controls position="bottom-left" showZoom={false} showFitView={false} />
+            {showMinimap && <MiniMap position="bottom-right" pannable zoomable />}
             {!spec && (
               <Panel position="top-center">
                 <div style={{
@@ -594,6 +708,20 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
           />
         </div>
       </div>
+
+      {/* Status Bar */}
+      <EditorStatusBar
+        zoomLevel={zoomLevel}
+        onResetZoom={() => reactFlowInstance.zoomTo(1)}
+        nodeCount={objects.length}
+        edgeCount={edges.length}
+        selectedName={selectedObject?.attributes?.name as string || null}
+        selectedType={selectedObject?.eClass || null}
+        validationErrors={0}
+        validationWarnings={0}
+        showGrid={showGrid}
+        gridSize={gridSize}
+      />
     </div>
   );
 }

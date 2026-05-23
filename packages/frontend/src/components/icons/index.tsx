@@ -91,6 +91,16 @@ export {
   Lock,
   Wand2,
   Wrench,
+
+  // Model Editor
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  Grid3X3,
+  MousePointer2,
+  Scissors,
+  ClipboardPaste,
+  MoreHorizontal,
 } from 'lucide-react';
 
 // Re-export type for consistent prop typing
