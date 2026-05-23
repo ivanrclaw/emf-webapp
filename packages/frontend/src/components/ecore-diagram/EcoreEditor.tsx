@@ -244,7 +244,8 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
 
   // ── Yjs CRDT Collaboration ───────────────────────────────────
   // Single collaboration system — stable identity managed by useYjsCollaboration
-  // Flag to prevent syncing remote changes back to Y.Doc
+  // Remote changes are applied directly via model.applyRemoteNodes/applyRemoteEdges.
+  // Local changes sync to Y.Doc via useEffect with isRemoteUpdateRef guard.
   const isRemoteUpdateRef = useRef(false);
 
   const collaborative = useCollaborativeModel({
@@ -253,56 +254,40 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
     nodes: model.nodes as any,
     edges: model.edges as any,
     onRemoteNodesChange: (remoteNodes) => {
-      // Set flag BEFORE calling onNodesChange so the wrapped handler won't sync back
+      // Flag stays true until AFTER React commits the render triggered by this update.
+      // This prevents the sync useEffect from echoing back to Y.Doc.
       isRemoteUpdateRef.current = true;
-      model.onNodesChange(
-        remoteNodes.map(n => ({
-          type: 'position' as const,
-          id: n.id,
-          position: n.position,
-          dragging: false,
-        }))
-      );
-      // Reset after React processes the update
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          isRemoteUpdateRef.current = false;
-        });
-      });
+      model.applyRemoteNodes(remoteNodes as any);
     },
     onRemoteEdgesChange: (remoteEdges) => {
-      // Remote edge changes — structural changes go through pkg layer
+      isRemoteUpdateRef.current = true;
+      model.applyRemoteEdges(remoteEdges as any);
     },
   });
 
-  // Wrapped onNodesChange: applies changes locally AND syncs to Y.Doc (only for local changes)
-  const wrappedOnNodesChange = useCallback((changes: any[]) => {
-    model.onNodesChange(changes);
-  }, [model]);
-
-  // Sync local node/edge changes to Y.Doc — fires after React commits state updates
-  // Safe because useCollaborativeModel no longer has its own useEffect watchers
   // Use ref to avoid putting `collaborative` in deps (it's a new object every render)
   const collaborativeRef = useRef(collaborative);
   collaborativeRef.current = collaborative;
 
-  const prevSyncFingerprintRef = useRef('');
+  // Sync local changes to Y.Doc — runs after every render where nodes/edges changed.
+  // Safe because:
+  // 1. Remote updates set isRemoteUpdateRef=true → skipped
+  // 2. syncNodes/syncEdges only write to Y.Doc if values actually differ (deep compare)
+  // 3. Even if a write happens, onDocObserve is guarded by isLocalUpdateRef in useYjsCollaboration
   useEffect(() => {
-    // Quick fingerprint to detect actual changes
-    const fp = (model.nodes as any[]).map((n: any) =>
-      `${n.id}:${n.position?.x}:${n.position?.y}:${n.data?.name || ''}`
-    ).join('|') + '||' + (model.edges as any[]).map((e: any) =>
-      `${e.id}:${e.source}:${e.target}`
-    ).join('|');
-    if (fp === prevSyncFingerprintRef.current) return;
-    prevSyncFingerprintRef.current = fp;
-
-    // Skip sync if this render was triggered by a remote update
-    if (isRemoteUpdateRef.current) return;
+    if (isRemoteUpdateRef.current) {
+      // Reset the flag — this render was caused by a remote update, don't echo back
+      isRemoteUpdateRef.current = false;
+      return;
+    }
     if (!collaborativeRef.current.connected) return;
-
     collaborativeRef.current.syncLocal(model.nodes as any, model.edges as any);
-  }, [model.nodes, model.edges]); // eslint-disable-line react-hooks/exhaustive-deps
+  }); // No deps — runs every render, but exits early if remote or no change (syncNodes has internal guards)
+
+  // Wrapped onNodesChange: applies changes locally (sync happens via useEffect above)
+  const wrappedOnNodesChange = useCallback((changes: any[]) => {
+    model.onNodesChange(changes);
+  }, [model]);
 
   // ── Yjs cursor tracking in CANVAS coordinates ──────────────
   const canvasCursorRef = useRef<{ x: number; y: number } | null>(null);

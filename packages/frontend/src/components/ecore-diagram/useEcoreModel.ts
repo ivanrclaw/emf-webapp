@@ -118,6 +118,11 @@ export interface UseEcoreModelReturn {
   canUndo: boolean;
   canRedo: boolean;
   autoLayout: (direction?: 'TB' | 'LR') => void;
+
+  /** Apply remote nodes directly (no undo, no dirty flag) */
+  applyRemoteNodes: (nodes: AppNode[]) => void;
+  /** Apply remote edges directly (no undo, no dirty flag) */
+  applyRemoteEdges: (edges: AppEdge[]) => void;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -642,6 +647,19 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg, violationsMa
     resync();
   }, [pkg, resync]);
 
+  // ── Remote state application (no undo, no dirty, no auto-save) ──
+  const applyRemoteNodes = useCallback((remoteNodes: AppNode[]) => {
+    // Update posMap from remote positions
+    for (const n of remoteNodes) {
+      if (n.position) posMap.current.set(n.id, { ...n.position });
+    }
+    setNodes(remoteNodes);
+  }, []);
+
+  const applyRemoteEdges = useCallback((remoteEdges: AppEdge[]) => {
+    setEdges(remoteEdges);
+  }, []);
+
   return {
     nodes,
     edges,
@@ -667,6 +685,8 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg, violationsMa
     canUndo,
     canRedo,
     autoLayout,
+    applyRemoteNodes,
+    applyRemoteEdges,
   };
 }
 
