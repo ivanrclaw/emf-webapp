@@ -192,6 +192,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
       eAttributes: 'eAttributes' in c ? (c as any).eAttributes || [] : [],
       eReferences: 'eReferences' in c ? (c as any).eReferences || [] : [],
       abstract: 'abstract' in c ? (c as any).abstract : false,
+      eSuperTypes: 'eSuperTypes' in c ? (c as any).eSuperTypes || [] : [],
     }));
   }, [fetchedPkg]);
 
