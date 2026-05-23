@@ -48,6 +48,7 @@ import { EditorStatusBar } from '../components/model-editor/EditorStatusBar';
 import { InlineEditor, type InlineEditorState } from '../components/model-editor/InlineEditor';
 import { ContextMenu, type ContextMenuTarget } from '../components/model-editor/ContextMenu';
 import { QuickCreate } from '../components/model-editor/QuickCreate';
+import { ObjectExplorer } from '../components/model-editor/ObjectExplorer';
 import { useModelHistory } from '../components/model-editor/hooks/useModelHistory';
 import { useClipboard } from '../components/model-editor/hooks/useClipboard';
 import { useKeyboardShortcuts } from '../components/model-editor/hooks/useKeyboardShortcuts';
@@ -133,6 +134,11 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
   const [showGrid, setShowGrid] = useState(true);
   const [showMinimap, setShowMinimap] = useState(true);
   const [gridSize] = useState(20);
+
+  // Panel visibility
+  const [showExplorer, setShowExplorer] = useState(true);
+  const [showPalette, setShowPalette] = useState(true);
+  const [showInspector, setShowInspector] = useState(true);
 
   // History (undo/redo)
   const history = useModelHistory(null);
@@ -725,6 +731,53 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
     setContextMenuTarget(null);
   }, [handleDelete, handleDuplicate, handleCopy, handlePaste, handleSelectAll, handleStartInlineEdit, reactFlowInstance]);
 
+  // ─── Explorer rename handler ─────────────────────────────────────
+  const handleExplorerRename = useCallback((objectId: string, newName: string) => {
+    setObjects((prev) => prev.map((obj) =>
+      obj.id === objectId
+        ? { ...obj, attributes: { ...obj.attributes, name: newName } }
+        : obj,
+    ));
+    setSaveStatus('unsaved');
+  }, []);
+
+  const handleExplorerDelete = useCallback((objectId: string) => {
+    setSelectedNodeId(objectId);
+    setSelectedNodeIds(new Set());
+    // Defer to allow state to update
+    setTimeout(() => {
+      setObjects((prev) => prev.filter((o) => o.id !== objectId));
+      setObjects((prev) => prev.map((o) => {
+        const refs = { ...o.references };
+        for (const [key, targets] of Object.entries(refs)) {
+          refs[key] = targets.filter((t) => t !== objectId);
+        }
+        return { ...o, references: refs };
+      }));
+      setSelectedNodeId(null);
+      setSaveStatus('unsaved');
+    }, 0);
+  }, []);
+
+  const handleExplorerDuplicate = useCallback((objectId: string) => {
+    const obj = objects.find((o) => o.id === objectId);
+    if (!obj) return;
+    const newObj: SemanticObject = {
+      id: uid(),
+      eClass: obj.eClass,
+      attributes: { ...obj.attributes, name: `${obj.attributes.name || obj.eClass}_copy` },
+      references: { ...obj.references },
+    };
+    const pos = savedPositionsRef.current[objectId];
+    if (pos) {
+      savedPositionsRef.current[newObj.id] = { x: pos.x + 30, y: pos.y + 30 };
+    }
+    setObjects((prev) => [...prev, newObj]);
+    setSelectedNodeId(newObj.id);
+    setSelectedNodeIds(new Set());
+    setSaveStatus('unsaved');
+  }, [objects]);
+
   // ─── Layer toggle ────────────────────────────────────────────────
   const handleToggleLayer = useCallback((layerId: string) => {
     setActiveLayers((prev) => {
@@ -971,22 +1024,98 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
 
       {/* Main layout */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* Left — VSM Palette */}
-        <div style={{
-          width: 220, background: 'var(--surface)', borderRight: '1px solid var(--border)',
-          overflowY: 'auto', flexShrink: 0,
-        }}>
-          <VsmPalette
-            toolSections={toolSections}
-            activeTool={activeTool}
-            onSelectTool={handleSelectTool}
-            onCreateNode={handleCreateNode}
-            connectMode={connectMode}
-            hasSelection={!!selectedNodeId || selectedNodeIds.size > 0}
-            instanceCounts={instanceCounts}
-            onDragStart={dragCreate.onDragStart}
-          />
-        </div>
+        {/* Left panels — Explorer + Palette */}
+        {(showExplorer || showPalette) && (
+          <div style={{
+            display: 'flex', flexDirection: 'column',
+            width: 240, background: 'var(--surface)', borderRight: '1px solid var(--border)',
+            flexShrink: 0, overflow: 'hidden',
+          }}>
+            {/* Panel toggle tabs */}
+            <div style={{
+              display: 'flex', borderBottom: '1px solid var(--border, #27272a)',
+              background: 'var(--bg, #0f0f14)',
+            }}>
+              <button
+                onClick={() => setShowExplorer((v) => !v)}
+                style={{
+                  flex: 1, padding: '5px 8px', border: 'none',
+                  background: showExplorer ? 'var(--surface, #1e1e2e)' : 'transparent',
+                  color: showExplorer ? 'var(--text, #e4e4e7)' : 'var(--text-muted, #71717a)',
+                  fontSize: 10, fontWeight: 600, cursor: 'pointer',
+                  textTransform: 'uppercase', letterSpacing: '0.03em',
+                  borderBottom: showExplorer ? '2px solid var(--primary, #6366f1)' : '2px solid transparent',
+                  fontFamily: 'inherit',
+                }}
+              >
+                Explorer
+              </button>
+              <button
+                onClick={() => setShowPalette((v) => !v)}
+                style={{
+                  flex: 1, padding: '5px 8px', border: 'none',
+                  background: showPalette ? 'var(--surface, #1e1e2e)' : 'transparent',
+                  color: showPalette ? 'var(--text, #e4e4e7)' : 'var(--text-muted, #71717a)',
+                  fontSize: 10, fontWeight: 600, cursor: 'pointer',
+                  textTransform: 'uppercase', letterSpacing: '0.03em',
+                  borderBottom: showPalette ? '2px solid var(--primary, #6366f1)' : '2px solid transparent',
+                  fontFamily: 'inherit',
+                }}
+              >
+                Palette
+              </button>
+              <button
+                onClick={() => setShowInspector((v) => !v)}
+                style={{
+                  flex: 1, padding: '5px 8px', border: 'none',
+                  background: showInspector ? 'var(--surface, #1e1e2e)' : 'transparent',
+                  color: showInspector ? 'var(--text, #e4e4e7)' : 'var(--text-muted, #71717a)',
+                  fontSize: 10, fontWeight: 600, cursor: 'pointer',
+                  textTransform: 'uppercase', letterSpacing: '0.03em',
+                  borderBottom: showInspector ? '2px solid var(--primary, #6366f1)' : '2px solid transparent',
+                  fontFamily: 'inherit',
+                }}
+              >
+                Inspector
+              </button>
+            </div>
+
+            {/* Explorer panel */}
+            {showExplorer && (
+              <div style={{ flex: showPalette ? '0 0 50%' : 1, overflow: 'hidden', borderBottom: showPalette ? '1px solid var(--border, #27272a)' : undefined }}>
+                <ObjectExplorer
+                  objects={objects}
+                  eclasses={eclasses}
+                  selectedNodeId={selectedNodeId}
+                  selectedNodeIds={selectedNodeIds}
+                  nodeMappings={mappings.nodeMappings}
+                  containerMappings={mappings.containerMappings}
+                  onSelect={(id) => { setSelectedNodeId(id); setSelectedNodeIds(new Set()); }}
+                  onNavigate={handleNavigateToObject}
+                  onRename={handleExplorerRename}
+                  onDelete={handleExplorerDelete}
+                  onDuplicate={handleExplorerDuplicate}
+                />
+              </div>
+            )}
+
+            {/* Palette panel */}
+            {showPalette && (
+              <div style={{ flex: 1, overflow: 'hidden' }}>
+                <VsmPalette
+                  toolSections={toolSections}
+                  activeTool={activeTool}
+                  onSelectTool={handleSelectTool}
+                  onCreateNode={handleCreateNode}
+                  connectMode={connectMode}
+                  hasSelection={!!selectedNodeId || selectedNodeIds.size > 0}
+                  instanceCounts={instanceCounts}
+                  onDragStart={dragCreate.onDragStart}
+                />
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Center — Canvas */}
         <div
@@ -1073,25 +1202,27 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
         </div>
 
         {/* Right — Property Inspector */}
-        <div style={{
-          width: 280, background: 'var(--surface)', borderLeft: '1px solid var(--border)',
-          overflow: 'hidden', flexShrink: 0,
-        }}>
-          <VsmPropertyInspector
-            semanticData={selectedObject?.attributes || null}
-            selectedObject={selectedObject}
-            mapping={selectedMapping}
-            tools={allTools}
-            allObjects={objects}
-            eclasses={eclasses}
-            onUpdateAttribute={handleUpdateAttribute}
-            onDirectEdit={handleDirectEdit}
-            onAddReference={handleAddReference}
-            onRemoveReference={handleRemoveReference}
-            onNavigateToObject={handleNavigateToObject}
-            onDelete={selectedNodeId ? handleDelete : undefined}
-          />
-        </div>
+        {showInspector && (
+          <div style={{
+            width: 280, background: 'var(--surface)', borderLeft: '1px solid var(--border)',
+            overflow: 'hidden', flexShrink: 0,
+          }}>
+            <VsmPropertyInspector
+              semanticData={selectedObject?.attributes || null}
+              selectedObject={selectedObject}
+              mapping={selectedMapping}
+              tools={allTools}
+              allObjects={objects}
+              eclasses={eclasses}
+              onUpdateAttribute={handleUpdateAttribute}
+              onDirectEdit={handleDirectEdit}
+              onAddReference={handleAddReference}
+              onRemoveReference={handleRemoveReference}
+              onNavigateToObject={handleNavigateToObject}
+              onDelete={selectedNodeId ? handleDelete : undefined}
+            />
+          </div>
+        )}
       </div>
 
       {/* Status Bar */}
