@@ -215,6 +215,7 @@ export class YjsCollaborationService implements OnModuleInit, OnModuleDestroy {
     const msgType = decoding.readVarUint(decoder);
 
     room.lastActivity = Date.now();
+    console.log(`[Yjs] Received msg type=${msgType} (${msgType === 0 ? 'SYNC' : msgType === 1 ? 'AWARENESS' : 'HEARTBEAT'}) in room ${roomId}, data.length=${data.length}`);
 
     switch (msgType) {
       case MSG_SYNC: {
