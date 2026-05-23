@@ -45,6 +45,7 @@ export function RemoteCursors({ awarenessStates }: RemoteCursorsProps) {
   const { x: vpX, y: vpY, zoom } = useViewport();
 
   // Convert awareness states to cursor data with screen positions
+  // Lazy awareness: only render cursors visible in the viewport
   const cursors = useMemo(() => {
     const result: Array<{
       id: number;
@@ -60,6 +61,12 @@ export function RemoteCursors({ awarenessStates }: RemoteCursorsProps) {
       // Transform canvas coords → screen coords using current viewport
       const screenX = state.cursor.x * zoom + vpX;
       const screenY = state.cursor.y * zoom + vpY;
+
+      // Skip cursors outside viewport (with 100px margin)
+      if (screenX < -100 || screenX > window.innerWidth + 100 ||
+          screenY < -100 || screenY > window.innerHeight + 100) {
+        return;
+      }
 
       result.push({
         id: clientId,

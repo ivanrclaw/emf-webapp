@@ -39,6 +39,10 @@ interface YjsRoom {
   lastActivity: number;
   updateCount: number;
   persistTimer: ReturnType<typeof setTimeout> | null;
+  /** Batched updates waiting to be persisted */
+  pendingUpdates: Uint8Array[];
+  /** Timer for batched persistence flush */
+  batchTimer: ReturnType<typeof setTimeout> | null;
 }
 
 @Injectable()
@@ -205,9 +209,10 @@ export class YjsCollaborationService implements OnModuleInit, OnModuleDestroy {
           }
         });
 
-        // Track updates for compaction
+        // Track updates for compaction (batched persistence)
         room.updateCount++;
-        this.saveUpdate(roomId, update).catch(console.error);
+        room.pendingUpdates.push(update);
+        this.scheduleBatchFlush(roomId, room);
 
         // Compact if threshold reached
         if (room.updateCount >= COMPACTION_THRESHOLD) {
@@ -224,6 +229,8 @@ export class YjsCollaborationService implements OnModuleInit, OnModuleDestroy {
       lastActivity: Date.now(),
       updateCount: 0,
       persistTimer: null,
+      pendingUpdates: [],
+      batchTimer: null,
     };
 
     this.rooms.set(roomId, room);
@@ -231,6 +238,23 @@ export class YjsCollaborationService implements OnModuleInit, OnModuleDestroy {
   }
 
   // ─── Persistence ─────────────────────────────────────────────────────────
+
+  /**
+   * Batch rapid updates into a single DB write (every 100ms).
+   * Reduces SQLite write pressure during drag operations.
+   */
+  private scheduleBatchFlush(roomId: string, room: YjsRoom): void {
+    if (room.batchTimer) return; // Already scheduled
+    room.batchTimer = setTimeout(async () => {
+      room.batchTimer = null;
+      const updates = room.pendingUpdates.splice(0);
+      if (updates.length === 0) return;
+
+      // Merge all pending updates into one
+      const merged = Y.mergeUpdates(updates);
+      await this.saveUpdate(roomId, merged).catch(console.error);
+    }, 100); // 100ms batch window
+  }
 
   private async loadPersistedState(roomId: string, doc: Y.Doc): Promise<void> {
     try {
