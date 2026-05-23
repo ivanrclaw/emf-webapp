@@ -24,15 +24,13 @@ import {
   type Node,
 } from '@xyflow/react';
 import type { EcoreEdgeData } from '../types';
-import { useEdgeRouting } from '../../../hooks/useEdgeRouting';
 import {
   spreadHandlePosition,
   computeGlobalSideAssignment,
   computeSelfLoopPath,
-  CHANNEL_SPACING,
 } from '../../../lib/edge-routing';
 import { CrossingBridges } from '../../shared/CrossingBridges';
-import type { EdgeGroupInfo, Side, NodeRect } from '../../../lib/edge-routing';
+import type { Side, NodeRect } from '../../../lib/edge-routing';
 
 // ─────────────────────────────────────────────────────────────────
 // Constants
@@ -140,7 +138,86 @@ const HOLLOW_TRIANGLE = (id: string, color: string) => (
 );
 
 // ─────────────────────────────────────────────────────────────────
-// Orthogonal path with rounded corners
+// Node avoidance: shift channel if it intersects any node
+// ─────────────────────────────────────────────────────────────────
+
+const NODE_MARGIN = 12;
+
+function doesHorizontalSegmentIntersectNode(
+  y: number, x1: number, x2: number,
+  nodeRects: Map<string, NodeRect>,
+  excludeIds: Set<string>,
+): NodeRect | null {
+  const minX = Math.min(x1, x2);
+  const maxX = Math.max(x1, x2);
+  for (const [id, rect] of nodeRects) {
+    if (excludeIds.has(id)) continue;
+    const top = rect.y - NODE_MARGIN;
+    const bottom = rect.y + rect.height + NODE_MARGIN;
+    const left = rect.x;
+    const right = rect.x + rect.width;
+    if (y >= top && y <= bottom && maxX >= left && minX <= right) {
+      return rect;
+    }
+  }
+  return null;
+}
+
+function doesVerticalSegmentIntersectNode(
+  x: number, y1: number, y2: number,
+  nodeRects: Map<string, NodeRect>,
+  excludeIds: Set<string>,
+): NodeRect | null {
+  const minY = Math.min(y1, y2);
+  const maxY = Math.max(y1, y2);
+  for (const [id, rect] of nodeRects) {
+    if (excludeIds.has(id)) continue;
+    const left = rect.x - NODE_MARGIN;
+    const right = rect.x + rect.width + NODE_MARGIN;
+    const top = rect.y;
+    const bottom = rect.y + rect.height;
+    if (x >= left && x <= right && maxY >= top && minY <= bottom) {
+      return rect;
+    }
+  }
+  return null;
+}
+
+function findSafeHorizontalChannel(
+  baseY: number, x1: number, x2: number,
+  nodeRects: Map<string, NodeRect>,
+  excludeIds: Set<string>,
+): number {
+  let y = baseY;
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const hit = doesHorizontalSegmentIntersectNode(y, x1, x2, nodeRects, excludeIds);
+    if (!hit) return y;
+    // Shift above or below the blocking node
+    const aboveY = hit.y - NODE_MARGIN - 4;
+    const belowY = hit.y + hit.height + NODE_MARGIN + 4;
+    y = Math.abs(aboveY - baseY) < Math.abs(belowY - baseY) ? aboveY : belowY;
+  }
+  return y;
+}
+
+function findSafeVerticalChannel(
+  baseX: number, y1: number, y2: number,
+  nodeRects: Map<string, NodeRect>,
+  excludeIds: Set<string>,
+): number {
+  let x = baseX;
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const hit = doesVerticalSegmentIntersectNode(x, y1, y2, nodeRects, excludeIds);
+    if (!hit) return x;
+    const leftX = hit.x - NODE_MARGIN - 4;
+    const rightX = hit.x + hit.width + NODE_MARGIN + 4;
+    x = Math.abs(leftX - baseX) < Math.abs(rightX - baseX) ? leftX : rightX;
+  }
+  return x;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Orthogonal path with rounded corners + node avoidance
 // ─────────────────────────────────────────────────────────────────
 
 function computeOrthogonalPath(
@@ -149,10 +226,18 @@ function computeOrthogonalPath(
   channelOffset: number,
   pairGroupIndex: number,
   _pairGroupSize: number,
+  nodeRects?: Map<string, NodeRect>,
+  sourceId?: string,
+  targetId?: string,
 ): [string, number, number] {
   const R = CORNER_RADIUS;
   const isHorizSource = sPos === Position.Left || sPos === Position.Right;
   const isHorizTarget = tPos === Position.Left || tPos === Position.Right;
+
+  // Exclude source and target from node avoidance checks
+  const excludeIds = new Set<string>();
+  if (sourceId) excludeIds.add(sourceId);
+  if (targetId) excludeIds.add(targetId);
 
   // Both horizontal (left/right connections) — most common
   if (isHorizSource && isHorizTarget) {
@@ -162,7 +247,12 @@ function computeOrthogonalPath(
     const riserOffset = RISER_SPACING * pairGroupIndex;
     const b1x = sx + sDir * (BEND_DIST + riserOffset);
     const b4x = tx + tDir * (BEND_DIST + riserOffset);
-    const midY = (sy + ty) / 2 + channelOffset;
+    let midY = (sy + ty) / 2 + channelOffset;
+
+    // Node avoidance: shift midY if it passes through a node
+    if (nodeRects) {
+      midY = findSafeHorizontalChannel(midY, Math.min(b1x, b4x), Math.max(b1x, b4x), nodeRects, excludeIds);
+    }
 
     // Nearly straight — use direct path
     if (Math.abs(midY - sy) < 3 && Math.abs(midY - ty) < 3) {
@@ -201,7 +291,12 @@ function computeOrthogonalPath(
     const riserOffset = RISER_SPACING * pairGroupIndex;
     const b1y = sy + sDir * (BEND_DIST + riserOffset);
     const b4y = ty + tDir * (BEND_DIST + riserOffset);
-    const midX = (sx + tx) / 2 + channelOffset;
+    let midX = (sx + tx) / 2 + channelOffset;
+
+    // Node avoidance: shift midX if it passes through a node
+    if (nodeRects) {
+      midX = findSafeVerticalChannel(midX, Math.min(b1y, b4y), Math.max(b1y, b4y), nodeRects, excludeIds);
+    }
 
     if (Math.abs(midX - sx) < 3 && Math.abs(midX - tx) < 3) {
       const path = `M ${sx} ${sy} L ${tx} ${ty}`;
@@ -409,6 +504,9 @@ function useEdgeCoords(
     channelOffset,
     pairGroupIndex: Math.max(0, pairIdx),
     pairGroupSize: pairSize,
+    nodeRects,
+    sourceId,
+    targetId,
   };
 }
 
@@ -457,11 +555,13 @@ function ReferenceEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
 
   const { sourceX: sx, sourceY: sy, sourcePosition: sPos,
     targetX: tx, targetY: ty, targetPosition: tPos,
-    channelOffset, pairGroupIndex, pairGroupSize } = coords as any;
+    channelOffset, pairGroupIndex, pairGroupSize,
+    nodeRects: nRects, sourceId: sId, targetId: tId } = coords as any;
 
   const [edgePath, labelX, labelY] = computeOrthogonalPath(
     sx, sy, sPos, tx, ty, tPos,
     channelOffset, pairGroupIndex, pairGroupSize,
+    nRects, sId, tId,
   );
 
   const ref = data?.reference;
@@ -531,11 +631,13 @@ function ContainmentEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
 
   const { sourceX: sx, sourceY: sy, sourcePosition: sPos,
     targetX: tx, targetY: ty, targetPosition: tPos,
-    channelOffset, pairGroupIndex, pairGroupSize } = coords as any;
+    channelOffset, pairGroupIndex, pairGroupSize,
+    nodeRects: nRects, sourceId: sId, targetId: tId } = coords as any;
 
   const [edgePath, labelX, labelY] = computeOrthogonalPath(
     sx, sy, sPos, tx, ty, tPos,
     channelOffset, pairGroupIndex, pairGroupSize,
+    nRects, sId, tId,
   );
 
   const ref = data?.reference;
@@ -575,17 +677,18 @@ function InheritanceEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
   }
 
   if (coords.isSelfLoop) {
-    // Inheritance self-loop is unusual but handle gracefully
     return null;
   }
 
   const { sourceX: sx, sourceY: sy, sourcePosition: sPos,
     targetX: tx, targetY: ty, targetPosition: tPos,
-    channelOffset, pairGroupIndex, pairGroupSize } = coords as any;
+    channelOffset, pairGroupIndex, pairGroupSize,
+    nodeRects: nRects, sourceId: sId, targetId: tId } = coords as any;
 
   const [edgePath] = computeOrthogonalPath(
     sx, sy, sPos, tx, ty, tPos,
     channelOffset, pairGroupIndex, pairGroupSize,
+    nRects, sId, tId,
   );
 
   const color = 'var(--text-muted)';
