@@ -38,6 +38,8 @@ export interface CollaborativeModelReturn {
   connected: boolean;
   /** Remote users' awareness states */
   remoteStates: Map<number, AwarenessState>;
+  /** True if this client is the save leader (lowest clientID) */
+  isLeader: boolean;
   /** Update cursor position (call on mouse move, throttled) */
   setCursor: (position: { x: number; y: number } | null) => void;
   /** Update selection (call when selection changes) */
@@ -143,6 +145,11 @@ export function useCollaborativeModel(options: CollaborativeModelOptions): Colla
         // Remove nodes that were deleted remotely
         const finalNodes = mergedNodes.filter(n => remoteNodeMap.has(n.id));
 
+        // Pre-update fingerprint BEFORE setting state so the useEffect won't echo back
+        prevNodesFingerprintRef.current = finalNodes.map(n =>
+          `${n.id}:${n.position.x}:${n.position.y}:${JSON.stringify(n.data?.name || '')}`
+        ).join('|');
+
         onRemoteNodesChange?.(finalNodes);
       }
 
@@ -170,11 +177,17 @@ export function useCollaborativeModel(options: CollaborativeModelOptions): Colla
         // Remove edges deleted remotely
         const finalEdges = mergedEdges.filter(e => remoteEdgeMap.has(e.id));
 
+        // Pre-update edge fingerprint (must match useEffect format)
+        prevEdgesFingerprintRef.current = finalEdges.map(e =>
+          `${e.id}:${e.source}:${e.target}`
+        ).join('|');
+
         onRemoteEdgesChange?.(finalEdges);
       }
 
-      // Reset flag after a tick (to allow React to process)
-      setTimeout(() => { isApplyingRemoteRef.current = false; }, 0);
+      // Use queueMicrotask for tighter timing — resets after React processes
+      // the state update but before the next macrotask
+      queueMicrotask(() => { isApplyingRemoteRef.current = false; });
     },
     onConnectionChange: (connected: boolean) => {
       if (connected) {
@@ -237,6 +250,7 @@ export function useCollaborativeModel(options: CollaborativeModelOptions): Colla
   return {
     connected: yjs.connected,
     remoteStates: yjs.remoteStates,
+    isLeader: yjs.isLeader,
     setCursor: throttledSetCursor,
     setSelection: yjs.setSelection,
     setEditingNode: yjs.setEditingNode,

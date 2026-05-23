@@ -30,7 +30,7 @@ function CursorIcon({ color }: { color: string }) {
   return (
     <svg width="16" height="20" viewBox="0 0 16 20" fill="none" style={{ display: 'block' }}>
       <path
-        d="M2.5 1L14 12.5H8.5L6.5 17L4 12.5H2.5V1Z"
+        d="M1 1L1 14L5 10.5L7.5 17L10 16L7.5 9.5L12.5 9.5L1 1Z"
         fill={color}
         stroke="#fff"
         strokeWidth="1.5"

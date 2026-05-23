@@ -80,6 +80,8 @@ export interface YjsCollaborationReturn {
   setCursorMessage: (text: string | null) => void;
   /** Other users' awareness states */
   remoteStates: Map<number, AwarenessState>;
+  /** True if this client is the save leader (lowest clientID) */
+  isLeader: boolean;
   /** Undo last local operation */
   undo: () => void;
   /** Redo last undone operation */
@@ -582,6 +584,11 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
     setViewport,
     setCursorMessage,
     remoteStates,
+    /** True if this client has the lowest clientID — used for leader-based autosave */
+    isLeader: connected && (() => {
+      const allClientIds = Array.from(awareness.getStates().keys());
+      return allClientIds.length === 0 || Math.min(...allClientIds) === doc.clientID;
+    })(),
     undo,
     redo,
     canUndo,

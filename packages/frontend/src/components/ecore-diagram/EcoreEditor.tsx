@@ -352,11 +352,23 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
     collaborative.setEditingField(null);
   }, [collaborative]);
 
+  const initialPopulationDoneRef = useRef(false);
+
   useEffect(() => {
     const currentNames = new Set<string>();
     collaborative.remoteStates.forEach((state) => {
       if (state.user) currentNames.add(state.user.name);
     });
+
+    // Skip toasts on initial population (first time we see remote states after connect)
+    if (!initialPopulationDoneRef.current) {
+      if (currentNames.size > 0 || prevRemoteNamesRef.current.size > 0) {
+        initialPopulationDoneRef.current = true;
+      }
+      prevRemoteNamesRef.current = currentNames;
+      prevRemoteCountRef.current = currentNames.size;
+      return;
+    }
 
     // Detect joins
     currentNames.forEach((name) => {
@@ -375,6 +387,22 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
     prevRemoteNamesRef.current = currentNames;
     prevRemoteCountRef.current = currentNames.size;
   }, [collaborative.remoteStates, addToast]);
+
+  // ── Leader-gated autosave (only the client with lowest clientID persists) ──
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (model.isDirty && collaborative.isLeader) {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = setTimeout(() => {
+        model.save().catch((err) => {
+          console.error('[Autosave] Failed:', err);
+        });
+      }, 2000);
+    }
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  }, [model.isDirty, collaborative.isLeader]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Track initial load complete
   if (fetchedPkg && initialLoad.current) {

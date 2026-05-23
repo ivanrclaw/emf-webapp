@@ -395,21 +395,7 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg, violationsMa
     setEdges(pkgToEdges(pkgRef.current, posMap.current));
   }, []);
 
-  // ── Auto-save ─────────────────────────────────────────────
-  useEffect(() => {
-    if (isDirty) {
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-      saveTimer.current = setTimeout(() => {
-        // Build content with positions from nodesRef
-        const content = buildContent(pkgRef.current, posMap.current);
-        updateMetamodelContent(projectId, metamodelId, content);
-        setIsDirty(false);
-      }, AUTO_SAVE_MS);
-    }
-    return () => {
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-    };
-  }, [isDirty, projectId, metamodelId]);
+  // ── Auto-save (disabled — handled by EcoreEditor with leader election) ──
 
   // ── Selection ─────────────────────────────────────────────
   const setSelected = useCallback((id: string | null, type: string | null) => {
