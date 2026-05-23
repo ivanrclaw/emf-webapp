@@ -239,7 +239,9 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
 
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const host = window.location.host;
-      const ws = new WebSocket(`${protocol}//${host}/yjs?room=${encodeURIComponent(roomId)}`);
+      const wsUrl = `${protocol}//${host}/yjs?room=${encodeURIComponent(roomId)}`;
+      console.log('[Yjs] Connecting to', wsUrl);
+      const ws = new WebSocket(wsUrl);
       ws.binaryType = 'arraybuffer';
       wsRef.current = ws;
 
@@ -247,6 +249,7 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
         if (destroyed) { ws.close(); return; }
         cleanedUpRef.current = false;
         setConnected(true);
+        console.log('[Yjs] Connected! clientID=', doc.clientID);
         optionsRef.current.onConnectionChange?.(true);
 
         // Set awareness state with stable identity
@@ -294,8 +297,9 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
         }
       };
 
-      ws.onclose = () => {
+      ws.onclose = (event) => {
         if (destroyed) return;
+        console.log('[Yjs] WS closed, code=', event.code, 'reason=', event.reason);
         setConnected(false);
         optionsRef.current.onConnectionChange?.(false);
         wsRef.current = null;
@@ -310,7 +314,8 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
         reconnectTimerRef.current = setTimeout(connect, 2000);
       };
 
-      ws.onerror = () => {
+      ws.onerror = (err) => {
+        console.error('[Yjs] WS error', err);
         ws.close();
       };
     }
@@ -364,6 +369,9 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
     // Listen for awareness changes → send to server
     const onAwarenessChange = ({ added, updated, removed }: any) => {
       const changedClients = [...added, ...updated, ...removed];
+      if (added.length > 0 || removed.length > 0) {
+        console.log('[Yjs] Awareness change: added=', added, 'removed=', removed, 'total states=', awareness.getStates().size);
+      }
       const ws = wsRef.current;
       if (ws && ws.readyState === WebSocket.OPEN) {
         const encoder = encoding.createEncoder();
