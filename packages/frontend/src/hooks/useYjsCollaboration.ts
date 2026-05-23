@@ -17,6 +17,7 @@ import * as awarenessProtocol from 'y-protocols/awareness';
 import * as syncProtocol from 'y-protocols/sync';
 import * as encoding from 'lib0/encoding';
 import * as decoding from 'lib0/decoding';
+import { IndexeddbPersistence } from 'y-indexeddb';
 import type { Node, Edge } from '@xyflow/react';
 
 // ─── Types ───────────────────────────────────────────────────────────────
@@ -118,6 +119,7 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLocalUpdateRef = useRef(false);
+  const idbRef = useRef<IndexeddbPersistence | null>(null);
 
   // Initialize Y.Doc once
   if (!docRef.current) {
@@ -127,6 +129,18 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
 
   const doc = docRef.current;
   const awareness = awarenessRef.current!;
+
+  // IndexedDB persistence — survives page reloads and offline edits
+  useEffect(() => {
+    if (!roomId) return;
+    const idb = new IndexeddbPersistence(`emf-collab-${roomId}`, doc);
+    idbRef.current = idb;
+
+    return () => {
+      idb.destroy();
+      idbRef.current = null;
+    };
+  }, [roomId, doc]);
 
   // Initialize UndoManager scoped to nodes and edges maps
   useEffect(() => {

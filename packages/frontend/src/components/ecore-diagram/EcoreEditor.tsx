@@ -42,6 +42,7 @@ import { useCollaborativeModel } from '../../hooks/useCollaborativeModel';
 import { useOCLValidation } from '../../hooks/useOCLValidation';
 import { useToast } from '../ToastProvider';
 import { RemoteCursors, SelectionHighlightsOverlay, PresencePanel } from '../collaboration/RemoteCursors';
+import { OfflineBanner } from '../collaboration/OfflineBanner';
 import type { RoomUser } from '../../hooks/useCollaboration';
 import type { AwarenessState } from '../../hooks/useYjsCollaboration';
 import { ErrorBoundary } from '../ErrorBoundary';
@@ -734,6 +735,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
       )}
 
       {/* ── Canvas ─────────────────────────────────────────── */}
+      <OfflineBanner connected={collaborative.connected} />
       <RemoteCursors awarenessStates={collaborative.remoteStates} />
       {/* Selection highlights + editing indicators (viewport-transformed) */}
       <SelectionHighlightsOverlay
