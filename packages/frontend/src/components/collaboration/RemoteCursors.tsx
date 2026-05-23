@@ -101,7 +101,7 @@ export function RemoteCursors({ awarenessStates }: RemoteCursorsProps) {
             left: cursor.screenX,
             top: cursor.screenY,
             transform: 'translate(-2px, -2px)',
-            transition: 'left 33ms linear, top 33ms linear',
+            transition: 'left 120ms cubic-bezier(0.25, 0.1, 0.25, 1), top 120ms cubic-bezier(0.25, 0.1, 0.25, 1)',
             willChange: 'left, top',
           }}
         >
@@ -199,7 +199,7 @@ export function SelectionHighlights({ awarenessStates, nodes }: SelectionHighlig
           borderRadius: 10,
           pointerEvents: 'none',
           boxShadow: `0 0 0 1px ${primaryColor}33, 0 0 12px ${primaryColor}22`,
-          transition: 'left 50ms, top 50ms, width 50ms, height 50ms',
+          transition: 'left 150ms ease-out, top 150ms ease-out, width 150ms ease-out, height 150ms ease-out',
         }}
       >
         {/* User name badge at top-left */}
@@ -288,7 +288,7 @@ export function EditingIndicators({ awarenessStates, nodes }: EditingIndicatorsP
           alignItems: 'center',
           gap: 4,
           pointerEvents: 'none',
-          transition: 'left 50ms, top 50ms',
+          transition: 'left 150ms ease-out, top 150ms ease-out',
         }}
       >
         {/* Avatar circle */}

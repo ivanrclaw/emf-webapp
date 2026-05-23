@@ -287,6 +287,17 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
     model.onNodesChange(changes);
   }, [model]);
 
+  // ── Update cursor during node drag (pointer capture prevents onMouseMove) ──
+  const onNodeDrag = useCallback((_event: any, node: any) => {
+    if (!reactFlowInstance) return;
+    // Use the node's center as cursor position during drag
+    const pos = {
+      x: node.position.x + ((node.measured?.width ?? 200) / 2),
+      y: node.position.y + ((node.measured?.height ?? 100) / 2),
+    };
+    collaborativeRef.current.setCursor(pos);
+  }, [reactFlowInstance]);
+
   // ── Yjs cursor tracking in CANVAS coordinates ──────────────
   const canvasCursorRef = useRef<{ x: number; y: number } | null>(null);
   const onMouseMoveCanvas = useCallback((event: React.MouseEvent) => {
@@ -791,6 +802,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
         onEdgesChange={model.onEdgesChange}
         onConnect={model.onConnect}
         onNodeClick={onNodeClick}
+        onNodeDrag={onNodeDrag}
         onEdgeClick={onEdgeClick}
         onPaneClick={onPaneClick}
         onDragOver={onDragOver}

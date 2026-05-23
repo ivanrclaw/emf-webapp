@@ -136,7 +136,12 @@ export function useCollaborativeModel(options: CollaborativeModelOptions): Colla
           // Add nodes that exist remotely but not locally
           for (const [id, remote] of remoteNodeMap) {
             if (!localNodes.find(n => n.id === id)) {
-              mergedNodes.push(remote);
+              // Ensure new remote nodes have measured dimensions so React Flow
+              // doesn't warn about "dragging a node that is not initialized"
+              mergedNodes.push({
+                ...remote,
+                measured: remote.measured || { width: 200, height: 100 },
+              });
             }
           }
 
