@@ -10,7 +10,7 @@
  * - Proper cleanup on unmount, beforeunload, and visibilitychange
  * - New Y.Doc per connection cycle (no stale clientID reuse)
  */
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import * as Y from 'yjs';
 import * as awarenessProtocol from 'y-protocols/awareness';
 import * as syncProtocol from 'y-protocols/sync';
@@ -586,7 +586,15 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
     undoManagerRef.current?.redo();
   }, []);
 
-  return {
+  // Compute isLeader as a stable value (only changes when connected or remoteStates change)
+  const isLeader = useMemo(() => {
+    if (!connected) return false;
+    const allClientIds = Array.from(awareness.getStates().keys());
+    return allClientIds.length === 0 || Math.min(...allClientIds) === doc.clientID;
+  }, [connected, remoteStates, awareness, doc.clientID]);
+
+  // Memoize the return object to prevent unnecessary re-renders in consumers
+  return useMemo(() => ({
     connected,
     doc,
     awareness,
@@ -599,14 +607,15 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
     setViewport,
     setCursorMessage,
     remoteStates,
-    /** True if this client has the lowest clientID — used for leader-based autosave */
-    isLeader: connected && (() => {
-      const allClientIds = Array.from(awareness.getStates().keys());
-      return allClientIds.length === 0 || Math.min(...allClientIds) === doc.clientID;
-    })(),
+    isLeader,
     undo,
     redo,
     canUndo,
     canRedo,
-  };
+  }), [
+    connected, doc, awareness, syncNodes, syncEdges,
+    setCursor, setSelection, setEditingNode, setEditingField,
+    setViewport, setCursorMessage, remoteStates, isLeader,
+    undo, redo, canUndo, canRedo,
+  ]);
 }
