@@ -56,6 +56,10 @@ import { useClipboard } from '../components/model-editor/hooks/useClipboard';
 import { useKeyboardShortcuts } from '../components/model-editor/hooks/useKeyboardShortcuts';
 import { useDragCreate } from '../components/model-editor/hooks/useDragCreate';
 import { useModelValidation } from '../components/model-editor/hooks/useModelValidation';
+import { useAutoLayout } from '../components/model-editor/hooks/useAutoLayout';
+import { useAlignment } from '../components/model-editor/hooks/useAlignment';
+import { AlignmentToolbar } from '../components/model-editor/AlignmentToolbar';
+import { SnapGuides, useSnapGuides } from '../components/model-editor/SnapGuides';
 import { exportJSON, exportXMI, exportSVG, exportPNG, downloadBlob } from '../lib/model-export';
 import { importJSON, importXMI, readFileAsText, detectFormat } from '../lib/model-import';
 import {
@@ -208,6 +212,11 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
 
   // Model validation (must be after eclasses)
   const validation = useModelValidation(objects, eclasses);
+
+  // Auto-layout & alignment (Sprint 6)
+  const autoLayout = useAutoLayout();
+  const alignment = useAlignment(selectedNodeIds.size);
+  const snapGuides = useSnapGuides({ enabled: showGrid, threshold: 5, gridSize: showGrid ? gridSize : undefined });
 
   // Selected object
   const selectedObject = useMemo(() => {
@@ -634,6 +643,44 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
     setSelectedNodeId(result.objects[0]?.id || null);
     setSaveStatus('unsaved');
   }, [clipboard]);
+
+  // ─── Alignment & Auto-Layout (Sprint 6) ─────────────────────────
+  const handleAlign = useCallback((direction: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') => {
+    const updated = alignment.align(nodes, Array.from(selectedNodeIds), direction);
+    setNodes(updated);
+    // Sync positions back
+    for (const n of updated) {
+      if (selectedNodeIds.has(n.id)) {
+        savedPositionsRef.current[n.id] = { x: n.position.x, y: n.position.y };
+      }
+    }
+    setSaveStatus('unsaved');
+  }, [nodes, selectedNodeIds, alignment, setNodes]);
+
+  const handleDistribute = useCallback((direction: 'horizontal' | 'vertical') => {
+    const updated = alignment.distribute(nodes, Array.from(selectedNodeIds), direction);
+    setNodes(updated);
+    for (const n of updated) {
+      if (selectedNodeIds.has(n.id)) {
+        savedPositionsRef.current[n.id] = { x: n.position.x, y: n.position.y };
+      }
+    }
+    setSaveStatus('unsaved');
+  }, [nodes, selectedNodeIds, alignment, setNodes]);
+
+  const handleAutoLayout = useCallback((algorithm: 'tree' | 'force' | 'grid') => {
+    const result = autoLayout.applyLayout(nodes, edges, {
+      algorithm,
+      selectedOnly: selectedNodeIds.size > 0,
+    });
+    if (result.changed) {
+      setNodes(result.nodes);
+      for (const n of result.nodes) {
+        savedPositionsRef.current[n.id] = { x: n.position.x, y: n.position.y };
+      }
+      setSaveStatus('unsaved');
+    }
+  }, [nodes, edges, selectedNodeIds, autoLayout, setNodes]);
 
   // ─── Inline editing ─────────────────────────────────────────────
   const handleStartInlineEdit = useCallback((nodeId?: string) => {
@@ -1069,6 +1116,15 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
         onSave={handleSave}
         onExport={handleExport}
         onImport={handleImport}
+      />
+
+      {/* Alignment toolbar — visible when multi-select */}
+      <AlignmentToolbar
+        visible={selectedNodeIds.size >= 2}
+        selectionCount={selectedNodeIds.size}
+        onAlign={handleAlign}
+        onDistribute={handleDistribute}
+        onAutoLayout={handleAutoLayout}
       />
 
       {error && (

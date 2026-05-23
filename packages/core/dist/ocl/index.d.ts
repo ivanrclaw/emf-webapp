@@ -29,4 +29,8 @@ export { OCLHoverEngine } from './OCLHoverEngine.js';
 export type { OCLHoverInfo } from './OCLHoverEngine.js';
 export { OCLDefinitionEngine } from './OCLDefinitionEngine.js';
 export type { DefinitionTargetKind, OCLDefinitionTarget, OCLDefinitionResult, } from './OCLDefinitionEngine.js';
+export { importOCLFile, exportOCLFile } from './OCLFileIO.js';
+export type { OCLFileImportResult, ImportedConstraint, ImportError, ExportableConstraint, ExportOptions, } from './OCLFileIO.js';
+export { validateBatch, formatBatchReport } from './OCLBatchValidator.js';
+export type { BatchValidationOptions, BatchConstraintResult, BatchFailure, BatchValidationReport, } from './OCLBatchValidator.js';
 //# sourceMappingURL=index.d.ts.map

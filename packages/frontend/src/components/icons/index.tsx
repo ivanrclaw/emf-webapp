@@ -101,6 +101,18 @@ export {
   Scissors,
   ClipboardPaste,
   MoreHorizontal,
+
+  // Alignment & Layout
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  AlignStartVertical,
+  AlignCenterVertical,
+  AlignEndVertical,
+  Rows3,
+  Columns3,
+  TreePine,
+  Waypoints,
 } from 'lucide-react';
 
 // Re-export type for consistent prop typing

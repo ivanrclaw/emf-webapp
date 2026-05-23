@@ -19,4 +19,8 @@ export { OCLSemanticValidator } from './OCLSemanticValidator.js';
 export { OCLCompletionEngine } from './OCLCompletionEngine.js';
 export { OCLHoverEngine } from './OCLHoverEngine.js';
 export { OCLDefinitionEngine } from './OCLDefinitionEngine.js';
+// ── File I/O (Phase 7) ──────────────────────────────────────────────────
+export { importOCLFile, exportOCLFile } from './OCLFileIO.js';
+// ── Batch Validation (Phase 7) ──────────────────────────────────────────
+export { validateBatch, formatBatchReport } from './OCLBatchValidator.js';
 //# sourceMappingURL=index.js.map
