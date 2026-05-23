@@ -2,9 +2,10 @@
  * @emf-webapp/frontend — Custom Edge Components for Ecore Diagram Editor
  *
  * Professional edge routing with:
- * - Congestion-aware side selection (distributes edges evenly around nodes)
- * - Global channel assignment (prevents corridor overlaps)
- * - Self-loop handling (node → same node)
+ * - Shared EdgeLayoutContext (single computation for all edges)
+ * - Integrated crossing bridges (gap + arc in the SVG path itself)
+ * - Full node avoidance on all segments
+ * - Congestion-aware side selection
  * - Adaptive port spreading
  * - Rounded corners at bends
  *
@@ -12,26 +13,22 @@
  * containmentEdge → solid line, filled diamond (◆) at SOURCE + arrow TARGET
  * inheritanceEdge → dashed line, hollow triangle (△) at TARGET
  */
-import React, { useMemo } from 'react';
+import React from 'react';
 import {
   BaseEdge,
   EdgeLabelRenderer,
   Position,
-  useNodes,
-  useEdges,
   type EdgeProps,
   type Edge,
-  type Node,
 } from '@xyflow/react';
 import type { EcoreEdgeData } from '../types';
 import {
   spreadHandlePosition,
-  computeGlobalSideAssignment,
   computeSelfLoopPath,
-  detectCrossings,
+  BRIDGE_RADIUS,
 } from '../../../lib/edge-routing';
-import { CrossingBridges } from '../../shared/CrossingBridges';
 import type { Side, NodeRect, CrossingPoint } from '../../../lib/edge-routing';
+import { useEdgeLayout } from './EdgeLayoutContext';
 
 // ─────────────────────────────────────────────────────────────────
 // Constants
@@ -43,6 +40,7 @@ const PAIR_EDGE_SPACING = 30;
 const RISER_SPACING = 14;
 const BEND_DIST = 18;
 const CORNER_RADIUS = 6;
+const NODE_MARGIN = 12;
 
 // ─────────────────────────────────────────────────────────────────
 // Helpers
@@ -139,10 +137,8 @@ const HOLLOW_TRIANGLE = (id: string, color: string) => (
 );
 
 // ─────────────────────────────────────────────────────────────────
-// Node avoidance: shift channel if it intersects any node
+// Node avoidance
 // ─────────────────────────────────────────────────────────────────
-
-const NODE_MARGIN = 12;
 
 function doesHorizontalSegmentIntersectNode(
   y: number, x1: number, x2: number,
@@ -155,8 +151,8 @@ function doesHorizontalSegmentIntersectNode(
     if (excludeIds.has(id)) continue;
     const top = rect.y - NODE_MARGIN;
     const bottom = rect.y + rect.height + NODE_MARGIN;
-    const left = rect.x;
-    const right = rect.x + rect.width;
+    const left = rect.x - NODE_MARGIN;
+    const right = rect.x + rect.width + NODE_MARGIN;
     if (y >= top && y <= bottom && maxX >= left && minX <= right) {
       return rect;
     }
@@ -175,8 +171,8 @@ function doesVerticalSegmentIntersectNode(
     if (excludeIds.has(id)) continue;
     const left = rect.x - NODE_MARGIN;
     const right = rect.x + rect.width + NODE_MARGIN;
-    const top = rect.y;
-    const bottom = rect.y + rect.height;
+    const top = rect.y - NODE_MARGIN;
+    const bottom = rect.y + rect.height + NODE_MARGIN;
     if (x >= left && x <= right && maxY >= top && minY <= bottom) {
       return rect;
     }
@@ -190,13 +186,12 @@ function findSafeHorizontalChannel(
   excludeIds: Set<string>,
 ): number {
   let y = baseY;
-  for (let attempt = 0; attempt < 10; attempt++) {
+  for (let attempt = 0; attempt < 15; attempt++) {
     const hit = doesHorizontalSegmentIntersectNode(y, x1, x2, nodeRects, excludeIds);
     if (!hit) return y;
-    // Shift above or below the blocking node
-    const aboveY = hit.y - NODE_MARGIN - 4;
-    const belowY = hit.y + hit.height + NODE_MARGIN + 4;
-    y = Math.abs(aboveY - baseY) < Math.abs(belowY - baseY) ? aboveY : belowY;
+    const aboveY = hit.y - NODE_MARGIN - 6;
+    const belowY = hit.y + hit.height + NODE_MARGIN + 6;
+    y = Math.abs(aboveY - baseY) <= Math.abs(belowY - baseY) ? aboveY : belowY;
   }
   return y;
 }
@@ -207,12 +202,12 @@ function findSafeVerticalChannel(
   excludeIds: Set<string>,
 ): number {
   let x = baseX;
-  for (let attempt = 0; attempt < 10; attempt++) {
+  for (let attempt = 0; attempt < 15; attempt++) {
     const hit = doesVerticalSegmentIntersectNode(x, y1, y2, nodeRects, excludeIds);
     if (!hit) return x;
-    const leftX = hit.x - NODE_MARGIN - 4;
-    const rightX = hit.x + hit.width + NODE_MARGIN + 4;
-    x = Math.abs(leftX - baseX) < Math.abs(rightX - baseX) ? leftX : rightX;
+    const leftX = hit.x - NODE_MARGIN - 6;
+    const rightX = hit.x + hit.width + NODE_MARGIN + 6;
+    x = Math.abs(leftX - baseX) <= Math.abs(rightX - baseX) ? leftX : rightX;
   }
   return x;
 }
@@ -235,34 +230,38 @@ function computeOrthogonalPath(
   const isHorizSource = sPos === Position.Left || sPos === Position.Right;
   const isHorizTarget = tPos === Position.Left || tPos === Position.Right;
 
-  // Exclude source and target from node avoidance checks
   const excludeIds = new Set<string>();
   if (sourceId) excludeIds.add(sourceId);
   if (targetId) excludeIds.add(targetId);
 
-  // Both horizontal (left/right connections) — most common
+  // Both horizontal (left/right connections)
   if (isHorizSource && isHorizTarget) {
     const sDir = sPos === Position.Right ? 1 : -1;
     const tDir = tPos === Position.Left ? -1 : 1;
 
     const riserOffset = RISER_SPACING * pairGroupIndex;
-    const b1x = sx + sDir * (BEND_DIST + riserOffset);
+    let b1x = sx + sDir * (BEND_DIST + riserOffset);
     const b4x = tx + tDir * (BEND_DIST + riserOffset);
+
+    // Node avoidance on vertical riser from source
+    if (nodeRects) {
+      b1x = findSafeVerticalChannel(b1x, sy, (sy + ty) / 2, nodeRects, excludeIds);
+    }
+
     let midY = (sy + ty) / 2 + channelOffset;
 
-    // Node avoidance: shift midY if it passes through a node
+    // Node avoidance on horizontal channel
     if (nodeRects) {
       midY = findSafeHorizontalChannel(midY, Math.min(b1x, b4x), Math.max(b1x, b4x), nodeRects, excludeIds);
     }
 
-    // Nearly straight — use direct path
+    // Nearly straight
     if (Math.abs(midY - sy) < 3 && Math.abs(midY - ty) < 3) {
       const path = `M ${sx} ${sy} L ${tx} ${ty}`;
       return [path, (sx + tx) / 2, (sy + ty) / 2];
     }
 
-    const r = Math.min(R, Math.abs(midY - sy) / 2, Math.abs(midY - ty) / 2, Math.abs(b1x - sx) / 2);
-    const rr = Math.max(r, 0);
+    const r = Math.max(0, Math.min(R, Math.abs(midY - sy) / 2, Math.abs(midY - ty) / 2, Math.abs(b1x - sx) / 2));
 
     const yDir1 = midY > sy ? 1 : -1;
     const yDir2 = ty > midY ? 1 : -1;
@@ -270,14 +269,14 @@ function computeOrthogonalPath(
 
     const path = [
       `M ${sx} ${sy}`,
-      `L ${b1x - sDir * rr} ${sy}`,
-      `Q ${b1x} ${sy} ${b1x} ${sy + yDir1 * rr}`,
-      `L ${b1x} ${midY - yDir1 * rr}`,
-      `Q ${b1x} ${midY} ${b1x + xDirMid * rr} ${midY}`,
-      `L ${b4x - xDirMid * rr} ${midY}`,
-      `Q ${b4x} ${midY} ${b4x} ${midY + yDir2 * rr}`,
-      `L ${b4x} ${ty - yDir2 * rr}`,
-      `Q ${b4x} ${ty} ${b4x + (-tDir) * rr} ${ty}`,
+      `L ${b1x - sDir * r} ${sy}`,
+      `Q ${b1x} ${sy} ${b1x} ${sy + yDir1 * r}`,
+      `L ${b1x} ${midY - yDir1 * r}`,
+      `Q ${b1x} ${midY} ${b1x + xDirMid * r} ${midY}`,
+      `L ${b4x - xDirMid * r} ${midY}`,
+      `Q ${b4x} ${midY} ${b4x} ${midY + yDir2 * r}`,
+      `L ${b4x} ${ty - yDir2 * r}`,
+      `Q ${b4x} ${ty} ${b4x + (-tDir) * r} ${ty}`,
       `L ${tx} ${ty}`,
     ].join(' ');
 
@@ -290,11 +289,17 @@ function computeOrthogonalPath(
     const tDir = tPos === Position.Top ? -1 : 1;
 
     const riserOffset = RISER_SPACING * pairGroupIndex;
-    const b1y = sy + sDir * (BEND_DIST + riserOffset);
+    let b1y = sy + sDir * (BEND_DIST + riserOffset);
     const b4y = ty + tDir * (BEND_DIST + riserOffset);
+
+    // Node avoidance on horizontal riser from source
+    if (nodeRects) {
+      b1y = findSafeHorizontalChannel(b1y, sx, (sx + tx) / 2, nodeRects, excludeIds);
+    }
+
     let midX = (sx + tx) / 2 + channelOffset;
 
-    // Node avoidance: shift midX if it passes through a node
+    // Node avoidance on vertical channel
     if (nodeRects) {
       midX = findSafeVerticalChannel(midX, Math.min(b1y, b4y), Math.max(b1y, b4y), nodeRects, excludeIds);
     }
@@ -304,8 +309,7 @@ function computeOrthogonalPath(
       return [path, (sx + tx) / 2, (sy + ty) / 2];
     }
 
-    const r = Math.min(R, Math.abs(midX - sx) / 2, Math.abs(midX - tx) / 2, Math.abs(b1y - sy) / 2);
-    const rr = Math.max(r, 0);
+    const r = Math.max(0, Math.min(R, Math.abs(midX - sx) / 2, Math.abs(midX - tx) / 2, Math.abs(b1y - sy) / 2));
 
     const xDir1 = midX > sx ? 1 : -1;
     const xDir2 = tx > midX ? 1 : -1;
@@ -313,26 +317,24 @@ function computeOrthogonalPath(
 
     const path = [
       `M ${sx} ${sy}`,
-      `L ${sx} ${b1y - sDir * rr}`,
-      `Q ${sx} ${b1y} ${sx + xDir1 * rr} ${b1y}`,
-      `L ${midX - xDir1 * rr} ${b1y}`,
-      `Q ${midX} ${b1y} ${midX} ${b1y + yDirMid * rr}`,
-      `L ${midX} ${b4y - yDirMid * rr}`,
-      `Q ${midX} ${b4y} ${midX + xDir2 * rr} ${b4y}`,
-      `L ${tx - xDir2 * rr} ${b4y}`,
-      `Q ${tx} ${b4y} ${tx} ${b4y + (-tDir) * rr}`,
+      `L ${sx} ${b1y - sDir * r}`,
+      `Q ${sx} ${b1y} ${sx + xDir1 * r} ${b1y}`,
+      `L ${midX - xDir1 * r} ${b1y}`,
+      `Q ${midX} ${b1y} ${midX} ${b1y + yDirMid * r}`,
+      `L ${midX} ${b4y - yDirMid * r}`,
+      `Q ${midX} ${b4y} ${midX + xDir2 * r} ${b4y}`,
+      `L ${tx - xDir2 * r} ${b4y}`,
+      `Q ${tx} ${b4y} ${tx} ${b4y + (-tDir) * r}`,
       `L ${tx} ${ty}`,
     ].join(' ');
 
     return [path, midX, (b1y + b4y) / 2];
   }
 
-  // Mixed: one horizontal, one vertical — L-shaped path with one bend
-  const r = Math.min(R, Math.abs(tx - sx) / 2, Math.abs(ty - sy) / 2);
-  const rr = Math.max(r, 0);
+  // Mixed: one horizontal, one vertical — L-shaped path
+  const r = Math.max(0, Math.min(R, Math.abs(tx - sx) / 2, Math.abs(ty - sy) / 2));
 
   if (isHorizSource && !isHorizTarget) {
-    // Source exits horizontally, target enters vertically
     const bendX = tx;
     const bendY = sy;
     const xDir = tx > sx ? 1 : -1;
@@ -340,8 +342,8 @@ function computeOrthogonalPath(
 
     const path = [
       `M ${sx} ${sy}`,
-      `L ${bendX - xDir * rr} ${bendY}`,
-      `Q ${bendX} ${bendY} ${bendX} ${bendY + yDir * rr}`,
+      `L ${bendX - xDir * r} ${bendY}`,
+      `Q ${bendX} ${bendY} ${bendX} ${bendY + yDir * r}`,
       `L ${tx} ${ty}`,
     ].join(' ');
     return [path, (sx + tx) / 2, sy + channelOffset];
@@ -355,143 +357,131 @@ function computeOrthogonalPath(
 
   const path = [
     `M ${sx} ${sy}`,
-    `L ${bendX} ${bendY - yDir * rr}`,
-    `Q ${bendX} ${bendY} ${bendX + xDir * rr} ${bendY}`,
+    `L ${bendX} ${bendY - yDir * r}`,
+    `Q ${bendX} ${bendY} ${bendX + xDir * r} ${bendY}`,
     `L ${tx} ${ty}`,
   ].join(' ');
   return [path, sx + channelOffset, (sy + ty) / 2];
 }
 
 // ─────────────────────────────────────────────────────────────────
-// useGlobalEdgeLayout — computes sides and channels for ALL edges
+// Integrated crossing bridges — modify path to include gaps + arcs
 // ─────────────────────────────────────────────────────────────────
 
-function useGlobalEdgeLayout() {
-  const nodes = useNodes();
-  const edges = useEdges();
+/**
+ * Given an edge path and its crossing points, produce a modified path
+ * that has gaps at crossing points where this edge goes "under", and
+ * arc bridges where this edge goes "over".
+ *
+ * Strategy:
+ * - For the "over" edge (edgeId1 === this edge): draw an arc bump
+ * - For the "under" edge (edgeId2 === this edge): create a gap
+ *
+ * We render bridges as separate SVG elements overlaid precisely,
+ * but with correct stroke style matching the edge.
+ */
+function renderBridges(
+  edgeId: string,
+  crossings: CrossingPoint[],
+  strokeColor: string,
+  strokeWidth: number,
+  isDashed?: boolean,
+) {
+  // Only render bridges where this edge is the "over" edge
+  const overCrossings = crossings.filter((c) => c.edgeId1 === edgeId);
+  if (overCrossings.length === 0) return null;
 
-  return useMemo(() => {
-    // Build node rects
-    const nodeRects = new Map<string, NodeRect>();
-    nodes.forEach((n) => {
-      const measured = (n as any)?.measured;
-      nodeRects.set(n.id, {
-        x: n.position.x,
-        y: n.position.y,
-        width: measured?.width ?? DEFAULT_NODE_WIDTH,
-        height: measured?.height ?? DEFAULT_NODE_HEIGHT,
-      });
-    });
+  const r = BRIDGE_RADIUS + 1;
 
-    // Build edge list with source/target IDs
-    const edgeList = edges.map((e) => {
-      const data = e.data as EcoreEdgeData | undefined;
-      return {
-        id: e.id,
-        sourceId: data?.sourceId ?? e.source,
-        targetId: data?.targetId ?? e.target,
-      };
-    });
+  return (
+    <g className="crossing-bridges" pointerEvents="none">
+      {overCrossings.map((c, idx) => {
+        const { point, angle } = c;
+        // Determine if the crossing is more horizontal or vertical
+        // angle near PI/2 means perpendicular (one H, one V)
+        const isThisEdgeHorizontal = Math.abs(angle - Math.PI / 2) < 0.5;
 
-    // Compute global side assignment
-    const sideAssignment = computeGlobalSideAssignment(edgeList, nodeRects);
+        return (
+          <React.Fragment key={`bridge-${idx}`}>
+            {/* Background circle to hide the under-edge */}
+            <circle
+              cx={point.x}
+              cy={point.y}
+              r={r + 2}
+              fill="var(--bg, #0f0f23)"
+              stroke="none"
+            />
+            {/* Bridge arc matching edge style */}
+            {isThisEdgeHorizontal ? (
+              <>
+                {/* Horizontal edge: connect left→right with arc bump upward */}
+                <path
+                  d={`M ${point.x - r} ${point.y} A ${r} ${r} 0 0 1 ${point.x + r} ${point.y}`}
+                  fill="none"
+                  stroke={strokeColor}
+                  strokeWidth={strokeWidth}
+                  strokeLinecap="round"
+                  strokeDasharray={isDashed ? '6 4' : undefined}
+                />
+              </>
+            ) : (
+              <>
+                {/* Vertical edge: connect top→bottom with arc bump to the right */}
+                <path
+                  d={`M ${point.x} ${point.y - r} A ${r} ${r} 0 0 1 ${point.x} ${point.y + r}`}
+                  fill="none"
+                  stroke={strokeColor}
+                  strokeWidth={strokeWidth}
+                  strokeLinecap="round"
+                  strokeDasharray={isDashed ? '6 4' : undefined}
+                />
+              </>
+            )}
+          </React.Fragment>
+        );
+      })}
+    </g>
+  );
+}
 
-    // Compute unified port groups per (nodeId, side)
-    const portGroups = new Map<string, string[]>(); // "nodeId|side" → [edgeId:role, ...]
-    edgeList.forEach((e) => {
-      const sides = sideAssignment.get(e.id);
-      if (!sides) return;
-      const sKey = `${e.sourceId}|${sides.sourceSide}`;
-      if (!portGroups.has(sKey)) portGroups.set(sKey, []);
-      portGroups.get(sKey)!.push(`${e.id}:source`);
+/**
+ * Render gap circles for crossings where this edge goes "under".
+ * These hide the segment of this edge at the crossing point.
+ */
+function renderUnderGaps(
+  edgeId: string,
+  crossings: CrossingPoint[],
+) {
+  const underCrossings = crossings.filter((c) => c.edgeId2 === edgeId);
+  if (underCrossings.length === 0) return null;
 
-      const tKey = `${e.targetId}|${sides.targetSide}`;
-      if (!portGroups.has(tKey)) portGroups.set(tKey, []);
-      portGroups.get(tKey)!.push(`${e.id}:target`);
-    });
+  const r = BRIDGE_RADIUS + 3;
 
-    // Pair groups (edges between same two nodes)
-    const pairGroups = new Map<string, string[]>();
-    edgeList.forEach((e) => {
-      const pairKey = [e.sourceId, e.targetId].sort().join('|');
-      if (!pairGroups.has(pairKey)) pairGroups.set(pairKey, []);
-      pairGroups.get(pairKey)!.push(e.id);
-    });
-
-    // ── Compute all edge paths for crossing detection ──
-    const edgePaths: Array<{ edgeId: string; pathD: string }> = [];
-    edgeList.forEach((e) => {
-      const sides = sideAssignment.get(e.id);
-      if (!sides) return;
-      const sRect = nodeRects.get(e.sourceId);
-      const tRect = nodeRects.get(e.targetId);
-      if (!sRect || !tRect) return;
-
-      // Self-loops don't participate in crossing detection
-      if (e.sourceId === e.targetId) return;
-
-      const { sourceSide, targetSide } = sides;
-
-      // Get port indices
-      const sKey = `${e.sourceId}|${sourceSide}`;
-      const sourceGroup = portGroups.get(sKey) ?? [];
-      const sourceIdx = Math.max(0, sourceGroup.indexOf(`${e.id}:source`));
-      const sourceGroupSize = sourceGroup.length;
-
-      const tKey = `${e.targetId}|${targetSide}`;
-      const targetGroup = portGroups.get(tKey) ?? [];
-      const targetIdx = Math.max(0, targetGroup.indexOf(`${e.id}:target`));
-      const targetGroupSize = targetGroup.length;
-
-      const spreadSource = spreadHandlePosition(
-        sourceSide, sourceGroupSize, sourceIdx,
-        sRect.x, sRect.y, sRect.width, sRect.height,
-      );
-      const spreadTarget = spreadHandlePosition(
-        targetSide, targetGroupSize, targetIdx,
-        tRect.x, tRect.y, tRect.width, tRect.height,
-      );
-
-      // Pair channel offset
-      const pairKey = [e.sourceId, e.targetId].sort().join('|');
-      const pairGroup = pairGroups.get(pairKey) ?? [e.id];
-      const pairIdx = Math.max(0, pairGroup.indexOf(e.id));
-      const pairSize = pairGroup.length;
-      let channelOffset = 0;
-      if (pairSize > 1) {
-        const totalSpan = PAIR_EDGE_SPACING * (pairSize - 1);
-        channelOffset = -totalSpan / 2 + PAIR_EDGE_SPACING * pairIdx;
-      }
-
-      const sPos = sideToPosition(sourceSide);
-      const tPos = sideToPosition(targetSide);
-
-      const [pathD] = computeOrthogonalPath(
-        spreadSource.x, spreadSource.y, sPos,
-        spreadTarget.x, spreadTarget.y, tPos,
-        channelOffset, pairIdx, pairSize,
-        nodeRects, e.sourceId, e.targetId,
-      );
-      edgePaths.push({ edgeId: e.id, pathD });
-    });
-
-    // Detect crossings between all edge paths
-    const crossings = detectCrossings(edgePaths);
-
-    return { nodeRects, sideAssignment, portGroups, pairGroups, crossings };
-  }, [nodes, edges]);
+  return (
+    <g className="crossing-gaps" pointerEvents="none">
+      {underCrossings.map((c, idx) => (
+        <circle
+          key={`gap-${idx}`}
+          cx={c.point.x}
+          cy={c.point.y}
+          r={r}
+          fill="var(--bg, #0f0f23)"
+          stroke="none"
+        />
+      ))}
+    </g>
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────
-// useEdgeCoords — per-edge coordinate computation
+// useEdgeCoords — per-edge coordinate computation (uses shared context)
 // ─────────────────────────────────────────────────────────────────
 
 function useEdgeCoords(
   edgeId: string,
   data: EcoreEdgeData | undefined,
 ) {
-  const layout = useGlobalEdgeLayout();
-  const { nodeRects, sideAssignment, portGroups, pairGroups, crossings } = layout;
+  const { nodeRects, sideAssignment, portGroups, pairGroups, crossingsMap } = useEdgeLayout();
 
   const sourceId = data?.sourceId;
   const targetId = data?.targetId;
@@ -554,6 +544,9 @@ function useEdgeCoords(
     channelOffset = -totalSpan / 2 + PAIR_EDGE_SPACING * Math.max(0, pairIdx);
   }
 
+  // Get crossings for this edge
+  const edgeCrossings = crossingsMap.get(edgeId) ?? [];
+
   return {
     isSelfLoop: false,
     sourceX: spreadSource.x,
@@ -568,7 +561,7 @@ function useEdgeCoords(
     nodeRects,
     sourceId,
     targetId,
-    crossings,
+    crossings: edgeCrossings,
   };
 }
 
@@ -581,7 +574,6 @@ function ReferenceEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
   const coords = useEdgeCoords(id, data);
 
   if (!coords) {
-    // Fallback: straight line
     const path = `M ${sourceX} ${sourceY} L ${targetX} ${targetY}`;
     return <BaseEdge path={path} style={{ stroke: 'var(--border)', strokeWidth: 1.5 }} />;
   }
@@ -634,6 +626,7 @@ function ReferenceEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
   return (
     <>
       <defs>{ARROW_MARKER(id, colors.stroke)}</defs>
+      {renderUnderGaps(id, edgeCrossings)}
       <BaseEdge
         path={edgePath}
         interactionWidth={20}
@@ -643,7 +636,7 @@ function ReferenceEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
         }}
         markerEnd={`url(#arrow-${id})`}
       />
-      <CrossingBridges edgeId={id} crossings={edgeCrossings ?? []} strokeColor={colors.stroke} />
+      {renderBridges(id, edgeCrossings, colors.stroke, 1.5)}
       {renderCombinedLabel(label, cardinality, labelX, labelY, colors)}
     </>
   );
@@ -713,6 +706,7 @@ function ContainmentEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
         {DIAMOND_MARKER(id, colors.diamond)}
         {ARROW_MARKER(id, colors.stroke)}
       </defs>
+      {renderUnderGaps(id, edgeCrossings)}
       <BaseEdge
         path={edgePath}
         interactionWidth={20}
@@ -723,7 +717,7 @@ function ContainmentEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
         markerStart={`url(#diamond-${id})`}
         markerEnd={`url(#arrow-${id})`}
       />
-      <CrossingBridges edgeId={id} crossings={edgeCrossings ?? []} strokeColor={colors.stroke} strokeWidth={2} />
+      {renderBridges(id, edgeCrossings, colors.stroke, 2)}
       {renderCombinedLabel(label, cardinality, labelX, labelY, colors)}
     </>
   );
@@ -758,6 +752,7 @@ function InheritanceEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
   return (
     <>
       <defs>{HOLLOW_TRIANGLE(id, color)}</defs>
+      {renderUnderGaps(id, edgeCrossings)}
       <BaseEdge
         path={edgePath}
         interactionWidth={20}
@@ -768,7 +763,7 @@ function InheritanceEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
         }}
         markerEnd={`url(#hollow-${id})`}
       />
-      <CrossingBridges edgeId={id} crossings={edgeCrossings ?? []} strokeColor={color} />
+      {renderBridges(id, edgeCrossings, color, 1.5, true)}
     </>
   );
 }

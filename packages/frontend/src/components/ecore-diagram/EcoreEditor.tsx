@@ -35,6 +35,7 @@ import '@xyflow/react/dist/style.css';
 import { useEcoreModel } from './useEcoreModel';
 import { nodeTypes } from './nodes/nodeTypes';
 import { edgeTypes } from './edges/CustomEdges';
+import { EdgeLayoutProvider } from './edges/EdgeLayoutContext';
 import { getMetamodel, getProject, exportEcore, exportGenmodel, exportXmiZip } from '../../api/client';
 import { useCollaboration } from '../../hooks/useCollaboration';
 import { useOCLValidation } from '../../hooks/useOCLValidation';
@@ -619,6 +620,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
 
       {/* ── Canvas ─────────────────────────────────────────── */}
       <RemoteCursors users={collabUsers} currentUserSocketId={socketId} />
+      <EdgeLayoutProvider>
       <ReactFlow
         nodes={model.nodes as any}
         edges={model.edges as any}
@@ -720,6 +722,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
           </div>
         </Panel>
       </ReactFlow>
+      </EdgeLayoutProvider>
     </div>
   );
 }
