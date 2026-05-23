@@ -147,6 +147,7 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
 
   const [connected, setConnected] = useState(false);
   const [remoteStates, setRemoteStates] = useState<Map<number, AwarenessState>>(new Map());
+  const remoteStatesRef = useRef<Map<number, AwarenessState>>(remoteStates);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
 
@@ -374,14 +375,28 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
         ws.send(encoding.toUint8Array(encoder));
       }
 
-      // Update remote states for React
+      // Update remote states for React — only if actually changed
       const states = new Map<number, AwarenessState>();
       awareness.getStates().forEach((state, clientId) => {
         if (clientId !== doc.clientID && state.user) {
           states.set(clientId, state as AwarenessState);
         }
       });
-      setRemoteStates(states);
+      // Shallow compare: only update if keys or values differ
+      const prev = remoteStatesRef.current;
+      let changed = states.size !== prev.size;
+      if (!changed) {
+        for (const [id, state] of states) {
+          if (!prev.has(id) || prev.get(id) !== state) {
+            changed = true;
+            break;
+          }
+        }
+      }
+      if (changed) {
+        remoteStatesRef.current = states;
+        setRemoteStates(states);
+      }
       optionsRef.current.onAwarenessUpdate?.(states);
     };
     awareness.on('change', onAwarenessChange);
