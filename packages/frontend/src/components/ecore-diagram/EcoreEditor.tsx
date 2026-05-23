@@ -282,6 +282,10 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
 
   // Sync local node/edge changes to Y.Doc — fires after React commits state updates
   // Safe because useCollaborativeModel no longer has its own useEffect watchers
+  // Use ref to avoid putting `collaborative` in deps (it's a new object every render)
+  const collaborativeRef = useRef(collaborative);
+  collaborativeRef.current = collaborative;
+
   const prevSyncFingerprintRef = useRef('');
   useEffect(() => {
     // Quick fingerprint to detect actual changes
@@ -295,10 +299,10 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
 
     // Skip sync if this render was triggered by a remote update
     if (isRemoteUpdateRef.current) return;
-    if (!collaborative.connected) return;
+    if (!collaborativeRef.current.connected) return;
 
-    collaborative.syncLocal(model.nodes as any, model.edges as any);
-  }, [model.nodes, model.edges, collaborative]); // eslint-disable-line react-hooks/exhaustive-deps
+    collaborativeRef.current.syncLocal(model.nodes as any, model.edges as any);
+  }, [model.nodes, model.edges]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Yjs cursor tracking in CANVAS coordinates ──────────────
   const canvasCursorRef = useRef<{ x: number; y: number } | null>(null);
@@ -309,13 +313,13 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
       y: event.clientY,
     });
     canvasCursorRef.current = pos;
-    collaborative.setCursor(pos);
-  }, [reactFlowInstance, collaborative]);
+    collaborativeRef.current.setCursor(pos);
+  }, [reactFlowInstance]);
 
   const onMouseLeaveCanvas = useCallback(() => {
     canvasCursorRef.current = null;
-    collaborative.setCursor(null);
-  }, [collaborative]);
+    collaborativeRef.current.setCursor(null);
+  }, []);
 
   // ── Broadcast selection to Yjs awareness ───────────────────
   const prevSelectionRef = useRef<string>('');
@@ -329,18 +333,18 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
     const key = [...selectedNodes, '|', ...selectedEdges].join(',');
     if (key !== prevSelectionRef.current) {
       prevSelectionRef.current = key;
-      collaborative.setSelection(selectedNodes, selectedEdges);
+      collaborativeRef.current.setSelection(selectedNodes, selectedEdges);
     }
-  }, [model.nodes, model.edges, collaborative]);
+  }, [model.nodes, model.edges]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Broadcast editing state when PropertyInspector is active ─
   useEffect(() => {
     if (model.selectedId && model.selectedType && ['class', 'enum', 'dataType'].includes(model.selectedType)) {
-      collaborative.setEditingNode(model.selectedId);
+      collaborativeRef.current.setEditingNode(model.selectedId);
     } else {
-      collaborative.setEditingNode(null);
+      collaborativeRef.current.setEditingNode(null);
     }
-  }, [model.selectedId, model.selectedType, collaborative]);
+  }, [model.selectedId, model.selectedType]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Follow mode ────────────────────────────────────────────
   const [followingId, setFollowingId] = useState<number | null>(null);
@@ -352,16 +356,16 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
     if (!collaborative.connected) return;
     viewportBroadcastRef.current = setInterval(() => {
       const vp = reactFlowInstance.getViewport();
-      collaborative.setViewport(vp);
+      collaborativeRef.current.setViewport(vp);
     }, 200); // 5fps for viewport — enough for smooth follow
     return () => {
       if (viewportBroadcastRef.current) clearInterval(viewportBroadcastRef.current);
     };
-  }, [collaborative.connected, collaborative, reactFlowInstance]);
+  }, [collaborative.connected, reactFlowInstance]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Cursor chat ────────────────────────────────────────────
   const cursorChat = useCursorChat((text) => {
-    collaborative.setCursorMessage(text || null);
+    collaborativeRef.current.setCursorMessage(text || null);
   });
 
   // ── Presence toasts (join/leave) ───────────────────────────
@@ -378,13 +382,13 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
 
   const handleFieldFocus = useCallback((fieldName: string) => {
     if (model.selectedId) {
-      collaborative.setEditingField({ nodeId: model.selectedId, fieldName });
+      collaborativeRef.current.setEditingField({ nodeId: model.selectedId, fieldName });
     }
-  }, [model.selectedId, collaborative]);
+  }, [model.selectedId]);
 
   const handleFieldBlur = useCallback(() => {
-    collaborative.setEditingField(null);
-  }, [collaborative]);
+    collaborativeRef.current.setEditingField(null);
+  }, []);
 
   const initialPopulationDoneRef = useRef(false);
 
