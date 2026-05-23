@@ -358,11 +358,12 @@ export function EdgeLayoutProvider({ children }: { children: React.ReactNode }) 
     // Build per-edge crossing map
     const crossingsMap = new Map<string, CrossingPoint[]>();
     allCrossings.forEach((c) => {
-      // Both edges get the crossing point — the "over" edge renders the bridge
+      // edgeId1 = "over" edge (renders bridge), edgeId2 = "under" edge (gets gap)
+      // Store the SAME crossing object for both edges (no swap)
       if (!crossingsMap.has(c.edgeId1)) crossingsMap.set(c.edgeId1, []);
       crossingsMap.get(c.edgeId1)!.push(c);
       if (!crossingsMap.has(c.edgeId2)) crossingsMap.set(c.edgeId2, []);
-      crossingsMap.get(c.edgeId2)!.push({ ...c, edgeId1: c.edgeId2, edgeId2: c.edgeId1 });
+      crossingsMap.get(c.edgeId2)!.push(c);
     });
 
     return { nodeRects, sideAssignment, portGroups, pairGroups, crossingsMap };
