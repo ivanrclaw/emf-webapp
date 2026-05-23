@@ -153,6 +153,18 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
     return [spec.defaultLayer, ...spec.additionalLayers];
   }, [spec]);
 
+  // EClasses from metamodel
+  const eclasses = useMemo(() => {
+    if (!metamodel?.content?.eClassifiers) return [];
+    return metamodel.content.eClassifiers as Array<{
+      name: string;
+      abstract?: boolean;
+      interface?: boolean;
+      eAttributes?: { name: string; eType?: string; lowerBound?: number; upperBound?: number }[];
+      eReferences?: { name: string; eType?: string; containment?: boolean; lowerBound?: number; upperBound?: number }[];
+    }>;
+  }, [metamodel]);
+
   // Selected object
   const selectedObject = useMemo(() => {
     if (!selectedNodeId) return null;
@@ -433,6 +445,46 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
     // Direct edit updates the label — handled via handleUpdateAttribute
   }, []);
 
+  // ─── Reference management ───────────────────────────────────────
+  const handleAddReference = useCallback((refName: string, targetId: string) => {
+    if (!selectedNodeId) return;
+    setObjects((prev) => prev.map((obj) => {
+      if (obj.id !== selectedNodeId) return obj;
+      const refs = { ...obj.references };
+      const existing = refs[refName] || [];
+      if (!existing.includes(targetId)) {
+        refs[refName] = [...existing, targetId];
+      }
+      return { ...obj, references: refs };
+    }));
+    setSaveStatus('unsaved');
+  }, [selectedNodeId]);
+
+  const handleRemoveReference = useCallback((refName: string, targetId: string) => {
+    if (!selectedNodeId) return;
+    setObjects((prev) => prev.map((obj) => {
+      if (obj.id !== selectedNodeId) return obj;
+      const refs = { ...obj.references };
+      refs[refName] = (refs[refName] || []).filter((id) => id !== targetId);
+      if (refs[refName].length === 0) delete refs[refName];
+      return { ...obj, references: refs };
+    }));
+    setSaveStatus('unsaved');
+  }, [selectedNodeId]);
+
+  const handleNavigateToObject = useCallback((objectId: string) => {
+    setSelectedNodeId(objectId);
+    // Center view on the node
+    const node = nodes.find((n) => n.id === objectId);
+    if (node && reactFlowInstance) {
+      reactFlowInstance.setCenter(
+        node.position.x + 80,
+        node.position.y + 30,
+        { zoom: 1.2, duration: 300 },
+      );
+    }
+  }, [nodes, reactFlowInstance]);
+
   // ─── Undo/Redo ──────────────────────────────────────────────────
   const handleUndo = useCallback(() => {
     const prev = history.undo();
@@ -696,15 +748,22 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
 
         {/* Right — Property Inspector */}
         <div style={{
-          width: 260, background: 'var(--surface)', borderLeft: '1px solid var(--border)',
-          overflowY: 'auto', flexShrink: 0,
+          width: 280, background: 'var(--surface)', borderLeft: '1px solid var(--border)',
+          overflow: 'hidden', flexShrink: 0,
         }}>
           <VsmPropertyInspector
             semanticData={selectedObject?.attributes || null}
+            selectedObject={selectedObject}
             mapping={selectedMapping}
             tools={allTools}
+            allObjects={objects}
+            eclasses={eclasses}
             onUpdateAttribute={handleUpdateAttribute}
             onDirectEdit={handleDirectEdit}
+            onAddReference={handleAddReference}
+            onRemoveReference={handleRemoveReference}
+            onNavigateToObject={handleNavigateToObject}
+            onDelete={selectedNodeId ? handleDelete : undefined}
           />
         </div>
       </div>
