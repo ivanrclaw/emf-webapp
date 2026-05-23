@@ -252,15 +252,20 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
         console.log('[Yjs] Connected! clientID=', doc.clientID);
         optionsRef.current.onConnectionChange?.(true);
 
-        // Set awareness state with stable identity
-        awareness.setLocalStateField('user', { name: userName, color: userColor });
-        awareness.setLocalStateField('cursor', null);
-        awareness.setLocalStateField('selectedNodeIds', []);
-        awareness.setLocalStateField('selectedEdgeIds', []);
-        awareness.setLocalStateField('editingNodeId', null);
-        awareness.setLocalStateField('editingField', null);
-        awareness.setLocalStateField('viewport', null);
-        awareness.setLocalStateField('cursorMessage', null);
+        // Set awareness state with stable identity.
+        // IMPORTANT: Use setLocalState (not setLocalStateField) because after
+        // removeAwarenessStates the local state is null, and setLocalStateField
+        // is a no-op when localState === null.
+        awareness.setLocalState({
+          user: { name: userName, color: userColor },
+          cursor: null,
+          selectedNodeIds: [],
+          selectedEdgeIds: [],
+          editingNodeId: null,
+          editingField: null,
+          viewport: null,
+          cursorMessage: null,
+        });
 
         // Start client heartbeat — sends every 10s to keep alive on server
         if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
