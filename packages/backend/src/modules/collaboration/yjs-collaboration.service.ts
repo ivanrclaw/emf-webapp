@@ -123,6 +123,7 @@ export class YjsCollaborationService implements OnModuleInit, OnModuleDestroy {
     const room = await this.getOrCreateRoom(roomId);
     room.clients.add(ws);
     room.lastActivity = Date.now();
+    console.log(`[Yjs] Client connected to room ${roomId}, total clients: ${room.clients.size}`);
 
     // Send sync step 1
     const encoder = encoding.createEncoder();
@@ -261,11 +262,16 @@ export class YjsCollaborationService implements OnModuleInit, OnModuleDestroy {
         encoding.writeVarUint(encoder, MSG_AWARENESS);
         encoding.writeVarUint8Array(encoder, update);
         const msg = encoding.toUint8Array(encoder);
+        let sentCount = 0;
         room.clients.forEach((client) => {
           if (client !== ws && client.readyState === WebSocket.OPEN) {
             client.send(msg);
+            sentCount++;
           }
         });
+        if (sentCount > 0) {
+          console.log(`[Yjs] Broadcast awareness to ${sentCount} other client(s) in room ${roomId}`);
+        }
         break;
       }
 
