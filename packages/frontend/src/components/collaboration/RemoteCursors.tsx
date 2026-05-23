@@ -161,9 +161,7 @@ export function SelectionHighlights({ awarenessStates, nodes }: SelectionHighlig
     return map;
   }, [awarenessStates]);
 
-  if (highlights.size === 0) return null;
-
-  // Build node lookup for positions
+  // Build node lookup for positions (must be before early return — Rules of Hooks)
   const nodeMap = useMemo(() => {
     const m = new Map<string, { x: number; y: number; w: number; h: number }>();
     for (const node of nodes) {
@@ -176,6 +174,8 @@ export function SelectionHighlights({ awarenessStates, nodes }: SelectionHighlig
     }
     return m;
   }, [nodes]);
+
+  if (highlights.size === 0) return null;
 
   const elements: React.ReactElement[] = [];
 
@@ -255,8 +255,7 @@ export function EditingIndicators({ awarenessStates, nodes }: EditingIndicatorsP
     return map;
   }, [awarenessStates]);
 
-  if (editing.size === 0) return null;
-
+  // Build node lookup (must be before early return — Rules of Hooks)
   const nodeMap = useMemo(() => {
     const m = new Map<string, { x: number; y: number; w: number; h: number }>();
     for (const node of nodes) {
@@ -269,6 +268,8 @@ export function EditingIndicators({ awarenessStates, nodes }: EditingIndicatorsP
     }
     return m;
   }, [nodes]);
+
+  if (editing.size === 0) return null;
 
   const elements: React.ReactElement[] = [];
 
