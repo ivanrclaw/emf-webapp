@@ -59,32 +59,60 @@ export interface PropertyInspectorProps {
   onAddAttribute?: (classId: string) => void;
   /** Callback para añadir referencia (desde el inspector) */
   onAddReference?: (classId: string) => void;
+  /** Field locks from remote users (optional — collaboration feature) */
+  fieldLocks?: Map<string, { userName: string; userColor: string }>;
+  /** Callback when user focuses/blurs a field (for soft lock broadcast) */
+  onFieldFocus?: (fieldName: string) => void;
+  onFieldBlur?: () => void;
 }
 
 // ── Sub-components ──────────────────────────────────────────────
 
-/** Input de texto controlado */
+/** Input de texto controlado with optional field lock indicator */
 const TextInput: React.FC<{
   label: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
-}> = ({ label, value, onChange, placeholder }) => (
-  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-    <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)' }}>{label}</label>
+  lock?: { userName: string; userColor: string } | null;
+  onFocus?: () => void;
+  onBlur?: () => void;
+}> = ({ label, value, onChange, placeholder, lock, onFocus, onBlur }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, position: 'relative' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+      <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)' }}>{label}</label>
+      {lock && (
+        <span
+          style={{
+            fontSize: 9,
+            fontWeight: 600,
+            padding: '1px 5px',
+            borderRadius: 3,
+            background: lock.userColor,
+            color: '#fff',
+            lineHeight: '13px',
+          }}
+        >
+          {lock.userName}
+        </span>
+      )}
+    </div>
     <input
       type="text"
       value={value}
       onChange={(e) => onChange(e.target.value)}
+      onFocus={onFocus}
+      onBlur={onBlur}
       placeholder={placeholder}
       style={{
         width: '100%',
         padding: '6px 8px',
         fontSize: 13,
-        border: '1px solid var(--border)',
+        border: lock ? `1.5px solid ${lock.userColor}` : '1px solid var(--border)',
         borderRadius: 4,
         outline: 'none',
         background: 'var(--surface)',
+        boxShadow: lock ? `0 0 0 1px ${lock.userColor}33` : 'none',
       }}
     />
   </div>

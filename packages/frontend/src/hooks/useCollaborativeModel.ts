@@ -44,6 +44,8 @@ export interface CollaborativeModelReturn {
   setSelection: (nodeIds: string[], edgeIds: string[]) => void;
   /** Mark a node as being edited */
   setEditingNode: (nodeId: string | null) => void;
+  /** Mark a specific field as being edited (soft lock) */
+  setEditingField: (field: { nodeId: string; fieldName: string } | null) => void;
   /** Collaborative undo (only undoes local operations) */
   undo: () => void;
   /** Collaborative redo */
@@ -234,6 +236,7 @@ export function useCollaborativeModel(options: CollaborativeModelOptions): Colla
     setCursor: throttledSetCursor,
     setSelection: yjs.setSelection,
     setEditingNode: yjs.setEditingNode,
+    setEditingField: yjs.setEditingField,
     undo: yjs.undo,
     redo: yjs.redo,
     canUndo: yjs.canUndo,

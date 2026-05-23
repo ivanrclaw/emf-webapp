@@ -33,6 +33,8 @@ export interface AwarenessState {
   selectedNodeIds: string[];
   selectedEdgeIds: string[];
   editingNodeId: string | null;
+  /** Field-level lock: which field the user is actively editing */
+  editingField: { nodeId: string; fieldName: string } | null;
 }
 
 export interface YjsCollaborationOptions {
@@ -67,6 +69,8 @@ export interface YjsCollaborationReturn {
   setSelection: (nodeIds: string[], edgeIds: string[]) => void;
   /** Mark a node as being edited by this user */
   setEditingNode: (nodeId: string | null) => void;
+  /** Mark a specific field as being edited (soft lock) */
+  setEditingField: (field: { nodeId: string; fieldName: string } | null) => void;
   /** Other users' awareness states */
   remoteStates: Map<number, AwarenessState>;
   /** Undo last local operation */
@@ -194,6 +198,7 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
         awareness.setLocalStateField('selectedNodeIds', []);
         awareness.setLocalStateField('selectedEdgeIds', []);
         awareness.setLocalStateField('editingNodeId', null);
+        awareness.setLocalStateField('editingField', null);
       };
 
       ws.onmessage = (event) => {
@@ -428,6 +433,10 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
     awareness.setLocalStateField('editingNodeId', nodeId);
   }, [awareness]);
 
+  const setEditingField = useCallback((field: { nodeId: string; fieldName: string } | null) => {
+    awareness.setLocalStateField('editingField', field);
+  }, [awareness]);
+
   const undo = useCallback(() => {
     undoManagerRef.current?.undo();
   }, []);
@@ -445,6 +454,7 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
     setCursor,
     setSelection,
     setEditingNode,
+    setEditingField,
     remoteStates,
     undo,
     redo,

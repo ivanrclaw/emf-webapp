@@ -48,6 +48,7 @@ import type { AwarenessState } from '../../hooks/useYjsCollaboration';
 import { ErrorBoundary } from '../ErrorBoundary';
 import { useEditorContext } from '../../contexts/EditorContext';
 import { usePanelPortals } from '../../contexts/PanelPortalContext';
+import { useFieldLocks } from '../../hooks/useFieldLocks';
 
 import type {
   SerializableEPackage,
@@ -365,6 +366,25 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
   // ── Presence toasts (join/leave) ───────────────────────────
   const prevRemoteCountRef = useRef(0);
   const prevRemoteNamesRef = useRef<Set<string>>(new Set());
+
+  // ── Field locks for PropertyInspector ──────────────────────
+  const fieldLocks = useFieldLocks(collaborative.remoteStates);
+  const currentNodeLocks = useMemo(() => {
+    if (!model.selectedId) return undefined;
+    const locks = fieldLocks.getNodeLocks(model.selectedId);
+    return locks.size > 0 ? locks : undefined;
+  }, [fieldLocks, model.selectedId, collaborative.remoteStates]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleFieldFocus = useCallback((fieldName: string) => {
+    if (model.selectedId) {
+      collaborative.setEditingField({ nodeId: model.selectedId, fieldName });
+    }
+  }, [model.selectedId, collaborative]);
+
+  const handleFieldBlur = useCallback(() => {
+    collaborative.setEditingField(null);
+  }, [collaborative]);
+
   useEffect(() => {
     const currentNames = new Set<string>();
     collaborative.remoteStates.forEach((state) => {
@@ -718,6 +738,9 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
             onClassifierChange={model.handleClassifierChange}
             onAddAttribute={handleAddAttribute}
             onAddReference={handleAddReference}
+            fieldLocks={currentNodeLocks}
+            onFieldFocus={handleFieldFocus}
+            onFieldBlur={handleFieldBlur}
           />
           <div style={{ flexShrink: 0 }}>
             <OCLValidationPanel
