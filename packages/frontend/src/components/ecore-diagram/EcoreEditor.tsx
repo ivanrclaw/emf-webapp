@@ -303,11 +303,19 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
     nodes: model.nodes as any,
     edges: model.edges as any,
     onRemoteNodesChange: (remoteNodes) => {
-      // For now, remote changes come through the legacy system
-      // This will be the primary path once we fully migrate
+      // Apply remote node positions/data to local state
+      model.onNodesChange(
+        remoteNodes.map(n => ({
+          type: 'position' as const,
+          id: n.id,
+          position: n.position,
+          dragging: false,
+        }))
+      );
     },
     onRemoteEdgesChange: (remoteEdges) => {
-      // Same as above — gradual migration
+      // Remote edge changes — for now edges are structural (add/remove)
+      // which goes through the pkg layer. Data updates handled here.
     },
   });
 
@@ -456,8 +464,20 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
           };
           input.click();
         },
-        undo: () => model.undo(),
-        redo: () => model.redo(),
+        undo: () => {
+          if (collaborative.connected && collaborative.canUndo) {
+            collaborative.undo();
+          } else {
+            model.undo();
+          }
+        },
+        redo: () => {
+          if (collaborative.connected && collaborative.canRedo) {
+            collaborative.redo();
+          } else {
+            model.redo();
+          }
+        },
         validate: () => ocl.refresh(),
       },
       {
@@ -487,8 +507,8 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
     updateState({
       dirty: model.isDirty,
       loading: model.loading,
-      canUndo: model.canUndo,
-      canRedo: model.canRedo,
+      canUndo: collaborative.connected ? collaborative.canUndo : model.canUndo,
+      canRedo: collaborative.connected ? collaborative.canRedo : model.canRedo,
       validationStatus: ocl.result?.totalViolations
         ? 'invalid'
         : ocl.enabled ? 'valid' : 'unknown',
@@ -504,6 +524,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
     model.nodes?.length, model.edges?.length, model.pkg?.name,
     ocl.result?.totalViolations, ocl.enabled,
     collab.connected, collabUsers.length,
+    collaborative.connected, collaborative.canUndo, collaborative.canRedo,
     updateState,
   ]);
 
@@ -546,13 +567,21 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'z') {
         if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
         e.preventDefault();
-        model.undo();
+        if (collaborative.connected && collaborative.canUndo) {
+          collaborative.undo();
+        } else {
+          model.undo();
+        }
       }
       // Redo (Ctrl+Shift+Z)
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
         if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
         e.preventDefault();
-        model.redo();
+        if (collaborative.connected && collaborative.canRedo) {
+          collaborative.redo();
+        } else {
+          model.redo();
+        }
       }
     };
     window.addEventListener('keydown', handler);
