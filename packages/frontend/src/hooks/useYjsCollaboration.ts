@@ -35,6 +35,10 @@ export interface AwarenessState {
   editingNodeId: string | null;
   /** Field-level lock: which field the user is actively editing */
   editingField: { nodeId: string; fieldName: string } | null;
+  /** Viewport state for follow mode */
+  viewport: { x: number; y: number; zoom: number } | null;
+  /** Ephemeral cursor chat message */
+  cursorMessage: { text: string; timestamp: number } | null;
 }
 
 export interface YjsCollaborationOptions {
@@ -71,6 +75,10 @@ export interface YjsCollaborationReturn {
   setEditingNode: (nodeId: string | null) => void;
   /** Mark a specific field as being edited (soft lock) */
   setEditingField: (field: { nodeId: string; fieldName: string } | null) => void;
+  /** Update viewport state for follow mode */
+  setViewport: (viewport: { x: number; y: number; zoom: number }) => void;
+  /** Send ephemeral cursor chat message */
+  setCursorMessage: (text: string | null) => void;
   /** Other users' awareness states */
   remoteStates: Map<number, AwarenessState>;
   /** Undo last local operation */
@@ -199,6 +207,8 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
         awareness.setLocalStateField('selectedEdgeIds', []);
         awareness.setLocalStateField('editingNodeId', null);
         awareness.setLocalStateField('editingField', null);
+        awareness.setLocalStateField('viewport', null);
+        awareness.setLocalStateField('cursorMessage', null);
       };
 
       ws.onmessage = (event) => {
@@ -437,6 +447,18 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
     awareness.setLocalStateField('editingField', field);
   }, [awareness]);
 
+  const setViewport = useCallback((viewport: { x: number; y: number; zoom: number }) => {
+    awareness.setLocalStateField('viewport', viewport);
+  }, [awareness]);
+
+  const setCursorMessage = useCallback((text: string | null) => {
+    if (text) {
+      awareness.setLocalStateField('cursorMessage', { text, timestamp: Date.now() });
+    } else {
+      awareness.setLocalStateField('cursorMessage', null);
+    }
+  }, [awareness]);
+
   const undo = useCallback(() => {
     undoManagerRef.current?.undo();
   }, []);
@@ -455,6 +477,8 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
     setSelection,
     setEditingNode,
     setEditingField,
+    setViewport,
+    setCursorMessage,
     remoteStates,
     undo,
     redo,

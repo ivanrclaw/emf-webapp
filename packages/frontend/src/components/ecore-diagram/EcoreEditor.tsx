@@ -43,6 +43,7 @@ import { useOCLValidation } from '../../hooks/useOCLValidation';
 import { useToast } from '../ToastProvider';
 import { RemoteCursors, SelectionHighlightsOverlay, PresencePanel } from '../collaboration/RemoteCursors';
 import { OfflineBanner } from '../collaboration/OfflineBanner';
+import { FollowModePanel, useFollowMode, useCursorChat, CursorChatInput, CursorMessages } from '../collaboration/PremiumFeatures';
 import type { RoomUser } from '../../hooks/useCollaboration';
 import type { AwarenessState } from '../../hooks/useYjsCollaboration';
 import { ErrorBoundary } from '../ErrorBoundary';
@@ -362,6 +363,28 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
       collaborative.setEditingNode(null);
     }
   }, [model.selectedId, model.selectedType, collaborative]);
+
+  // ── Follow mode ────────────────────────────────────────────
+  const [followingId, setFollowingId] = useState<number | null>(null);
+  useFollowMode(followingId, collaborative.remoteStates);
+
+  // ── Broadcast viewport for follow mode ─────────────────────
+  const viewportBroadcastRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    if (!collaborative.connected) return;
+    viewportBroadcastRef.current = setInterval(() => {
+      const vp = reactFlowInstance.getViewport();
+      collaborative.setViewport(vp);
+    }, 200); // 5fps for viewport — enough for smooth follow
+    return () => {
+      if (viewportBroadcastRef.current) clearInterval(viewportBroadcastRef.current);
+    };
+  }, [collaborative.connected, collaborative, reactFlowInstance]);
+
+  // ── Cursor chat ────────────────────────────────────────────
+  const cursorChat = useCursorChat((text) => {
+    collaborative.setCursorMessage(text || null);
+  });
 
   // ── Presence toasts (join/leave) ───────────────────────────
   const prevRemoteCountRef = useRef(0);
@@ -759,8 +782,9 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
 
       {/* ── Canvas ─────────────────────────────────────────── */}
       <OfflineBanner connected={collaborative.connected} />
+      <CursorChatInput chat={cursorChat} />
       <RemoteCursors awarenessStates={collaborative.remoteStates} />
-      {/* Selection highlights + editing indicators (viewport-transformed) */}
+      {/* Selection highlights + editing indicators + cursor messages (viewport-transformed) */}
       <SelectionHighlightsOverlay
         awarenessStates={collaborative.remoteStates}
         nodes={model.nodes as any}
@@ -839,7 +863,12 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
           </div>
         </Panel>
         <Panel position="top-right">
-          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 4, alignItems: 'flex-start' }}>
+            <FollowModePanel
+              awarenessStates={collaborative.remoteStates}
+              followingId={followingId}
+              onFollow={setFollowingId}
+            />
             <PresencePanel
               awarenessStates={collaborative.remoteStates}
               currentUserName="Anonymous"

@@ -46,6 +46,10 @@ export interface CollaborativeModelReturn {
   setEditingNode: (nodeId: string | null) => void;
   /** Mark a specific field as being edited (soft lock) */
   setEditingField: (field: { nodeId: string; fieldName: string } | null) => void;
+  /** Update viewport state for follow mode */
+  setViewport: (viewport: { x: number; y: number; zoom: number }) => void;
+  /** Send ephemeral cursor chat message */
+  setCursorMessage: (text: string | null) => void;
   /** Collaborative undo (only undoes local operations) */
   undo: () => void;
   /** Collaborative redo */
@@ -237,6 +241,8 @@ export function useCollaborativeModel(options: CollaborativeModelOptions): Colla
     setSelection: yjs.setSelection,
     setEditingNode: yjs.setEditingNode,
     setEditingField: yjs.setEditingField,
+    setViewport: yjs.setViewport,
+    setCursorMessage: yjs.setCursorMessage,
     undo: yjs.undo,
     redo: yjs.redo,
     canUndo: yjs.canUndo,

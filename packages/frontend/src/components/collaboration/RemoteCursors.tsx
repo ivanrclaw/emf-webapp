@@ -15,6 +15,7 @@
 import React, { useMemo } from 'react';
 import { useReactFlow, useViewport } from '@xyflow/react';
 import type { AwarenessState } from '../../hooks/useYjsCollaboration';
+import { CursorMessages } from './PremiumFeatures';
 
 // ─── Types ───────────────────────────────────────────────────────────────
 
@@ -366,6 +367,7 @@ export function SelectionHighlightsOverlay({ awarenessStates, nodes }: Selection
       >
         <SelectionHighlights awarenessStates={awarenessStates} nodes={nodes} />
         <EditingIndicators awarenessStates={awarenessStates} nodes={nodes} />
+        <CursorMessages awarenessStates={awarenessStates} />
       </div>
     </div>
   );
