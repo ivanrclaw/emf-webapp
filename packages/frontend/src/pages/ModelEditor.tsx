@@ -49,10 +49,15 @@ import { InlineEditor, type InlineEditorState } from '../components/model-editor
 import { ContextMenu, type ContextMenuTarget } from '../components/model-editor/ContextMenu';
 import { QuickCreate } from '../components/model-editor/QuickCreate';
 import { ObjectExplorer } from '../components/model-editor/ObjectExplorer';
+import { ProblemsPanel } from '../components/model-editor/ProblemsPanel';
+import { EmptyState } from '../components/model-editor/EmptyState';
 import { useModelHistory } from '../components/model-editor/hooks/useModelHistory';
 import { useClipboard } from '../components/model-editor/hooks/useClipboard';
 import { useKeyboardShortcuts } from '../components/model-editor/hooks/useKeyboardShortcuts';
 import { useDragCreate } from '../components/model-editor/hooks/useDragCreate';
+import { useModelValidation } from '../components/model-editor/hooks/useModelValidation';
+import { exportJSON, exportXMI, exportSVG, exportPNG, downloadBlob } from '../lib/model-export';
+import { importJSON, importXMI, readFileAsText, detectFormat } from '../lib/model-import';
 import {
   collectActiveToolSections,
   collectActiveMappings,
@@ -139,6 +144,7 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
   const [showExplorer, setShowExplorer] = useState(true);
   const [showPalette, setShowPalette] = useState(true);
   const [showInspector, setShowInspector] = useState(true);
+  const [problemsCollapsed, setProblemsCollapsed] = useState(true);
 
   // History (undo/redo)
   const history = useModelHistory(null);
@@ -199,6 +205,9 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
     }
     return counts;
   }, [objects]);
+
+  // Model validation (must be after eclasses)
+  const validation = useModelValidation(objects, eclasses);
 
   // Selected object
   const selectedObject = useMemo(() => {
@@ -301,6 +310,8 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
           mapping,
           semanticData: { ...obj.attributes, name: obj.attributes.name || obj.id, eClass: obj.eClass },
           selected: obj.id === selectedNodeId,
+          hasError: validation.hasErrors(obj.id),
+          hasWarning: validation.hasWarnings(obj.id),
         },
       };
     });
@@ -934,40 +945,83 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
   );
 
   // ─── Export ──────────────────────────────────────────────────────
-  const handleExport = useCallback((format: 'json' | 'xmi' | 'svg') => {
-    if (format === 'svg') {
-      // Export the ReactFlow canvas as SVG
-      const svgEl = document.querySelector('.react-flow__viewport');
-      if (svgEl) {
-        const svgClone = svgEl.cloneNode(true) as Element;
-        const svgWrap = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        svgWrap.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-        svgWrap.setAttribute('width', '1200');
-        svgWrap.setAttribute('height', '800');
-        svgWrap.appendChild(svgClone);
-        const blob = new Blob([svgWrap.outerHTML], { type: 'image/svg+xml' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'model.svg';
-        a.click();
-        URL.revokeObjectURL(url);
-      }
-      return;
+  const handleExport = useCallback((format: 'json' | 'xmi' | 'svg' | 'png') => {
+    const positions: Record<string, { x: number; y: number }> = {};
+    for (const node of nodes) {
+      positions[node.id] = node.position;
     }
 
-    const data = format === 'json'
-      ? JSON.stringify({ objects }, null, 2)
-      : objects.map((o) => `  <${o.eClass} name="${o.attributes.name || o.id}"/>`).join('\n');
+    const options = {
+      objects,
+      positions,
+      metamodelName: metamodel?.name,
+      metamodelNsUri: metamodel?.content?.nsUri,
+      modelName: m1Model?.name,
+    };
 
-    const blob = new Blob([format === 'xmi' ? `<?xml version="1.0"?>\n<Model>\n${data}\n</Model>` : data]);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `model.${format}`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [objects]);
+    switch (format) {
+      case 'json': {
+        const content = exportJSON(options);
+        downloadBlob(content, `${m1Model?.name || 'model'}.json`, 'application/json');
+        break;
+      }
+      case 'xmi': {
+        const content = exportXMI(options);
+        downloadBlob(content, `${m1Model?.name || 'model'}.xmi`, 'application/xml');
+        break;
+      }
+      case 'svg': {
+        const content = exportSVG();
+        if (content) downloadBlob(content, `${m1Model?.name || 'model'}.svg`, 'image/svg+xml');
+        break;
+      }
+      case 'png': {
+        exportPNG().then((blob) => {
+          if (blob) downloadBlob(blob, `${m1Model?.name || 'model'}.png`, 'image/png');
+        });
+        break;
+      }
+    }
+  }, [nodes, objects, metamodel, m1Model]);
+
+  // ─── Import ─────────────────────────────────────────────────────
+  const handleImport = useCallback(() => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,.xmi,.xml';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+
+      const content = await readFileAsText(file);
+      const format = detectFormat(file.name, content);
+
+      let result;
+      if (format === 'json') {
+        result = importJSON(content);
+      } else if (format === 'xmi') {
+        result = importXMI(content);
+      } else {
+        setError('Unknown file format. Supported: .json, .xmi, .xml');
+        return;
+      }
+
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+
+      if (result.objects.length > 0) {
+        setObjects(result.objects);
+        for (const [id, pos] of Object.entries(result.positions)) {
+          savedPositionsRef.current[id] = pos;
+        }
+        setSaveStatus('unsaved');
+        setError('');
+      }
+    };
+    input.click();
+  }, []);
 
   // ─── Loading ─────────────────────────────────────────────────────
   if (loading) {
@@ -1014,6 +1068,7 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
         saveStatus={saveStatus}
         onSave={handleSave}
         onExport={handleExport}
+        onImport={handleImport}
       />
 
       {error && (
@@ -1186,6 +1241,11 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
             )}
           </ReactFlow>
 
+          {/* Empty state when no objects */}
+          {objects.length === 0 && (
+            <EmptyState hasSpec={!!spec} />
+          )}
+
           {/* Inline Editor overlay */}
           <InlineEditor
             state={inlineEditState}
@@ -1225,6 +1285,16 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
         )}
       </div>
 
+      {/* Problems Panel */}
+      <ProblemsPanel
+        diagnostics={validation.diagnostics}
+        errorCount={validation.errorCount}
+        warningCount={validation.warningCount}
+        collapsed={problemsCollapsed}
+        onToggleCollapse={() => setProblemsCollapsed((v) => !v)}
+        onNavigate={handleNavigateToObject}
+      />
+
       {/* Status Bar */}
       <EditorStatusBar
         zoomLevel={zoomLevel}
@@ -1233,8 +1303,8 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
         edgeCount={edges.length}
         selectedName={selectedObject?.attributes?.name as string || null}
         selectedType={selectedObject?.eClass || null}
-        validationErrors={0}
-        validationWarnings={0}
+        validationErrors={validation.errorCount}
+        validationWarnings={validation.warningCount}
         showGrid={showGrid}
         gridSize={gridSize}
       />

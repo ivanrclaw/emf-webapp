@@ -18,6 +18,8 @@ export interface VsmNodeData extends Record<string, unknown> {
   mapping: NodeMapping;
   semanticData: Record<string, unknown>;
   selected: boolean;
+  hasError?: boolean;
+  hasWarning?: boolean;
 }
 
 /* ------------------------------------------------------------------ */
@@ -306,7 +308,7 @@ function NoteShape(props: ShapeProps) {
 
 function VsmNode(props: NodeProps<Node<VsmNodeData>>) {
   const { data } = props;
-  const { mapping, semanticData, selected } = data;
+  const { mapping, semanticData, selected, hasError, hasWarning } = data;
 
   const resolvedStyle = useMemo(
     () => resolveStyle(mapping, semanticData),
@@ -354,8 +356,13 @@ function VsmNode(props: NodeProps<Node<VsmNodeData>>) {
         borderRadius: resolvedStyle.shape === 'ellipse' ? '50%' : 8,
         boxShadow: selected
           ? '0 0 0 3px var(--primary, #6366f1), 0 0 16px rgba(99,102,241,0.4)'
-          : '0 2px 8px rgba(0,0,0,0.15)',
+          : hasError
+            ? '0 0 0 2px #ef4444, 0 0 12px rgba(239,68,68,0.3)'
+            : hasWarning
+              ? '0 0 0 2px #eab308, 0 0 12px rgba(234,179,8,0.3)'
+              : '0 2px 8px rgba(0,0,0,0.15)',
         transition: 'box-shadow 0.15s ease',
+        animation: hasError ? 'pulse-error 2s infinite' : undefined,
       }}
     >
       <Handle type="target" position={Position.Top} id="top" style={{ ...handleStyle, top: -4 }} />

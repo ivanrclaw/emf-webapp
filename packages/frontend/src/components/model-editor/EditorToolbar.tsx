@@ -68,7 +68,8 @@ export interface EditorToolbarProps {
   saving: boolean;
   saveStatus: 'saved' | 'unsaved' | '';
   onSave: () => void;
-  onExport: (format: 'json' | 'xmi' | 'svg') => void;
+  onExport: (format: 'json' | 'xmi' | 'svg' | 'png') => void;
+  onImport?: () => void;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -100,6 +101,7 @@ export function EditorToolbar({
   saveStatus,
   onSave,
   onExport,
+  onImport,
 }: EditorToolbarProps) {
   const [exportOpen, setExportOpen] = useState(false);
   const exportRef = useRef<HTMLDivElement>(null);
@@ -234,6 +236,17 @@ export function EditorToolbar({
             <button style={styles.dropdownItem} onClick={() => { onExport('svg'); setExportOpen(false); }}>
               Export SVG
             </button>
+            <button style={styles.dropdownItem} onClick={() => { onExport('png'); setExportOpen(false); }}>
+              Export PNG
+            </button>
+            {onImport && (
+              <>
+                <div style={{ height: 1, background: 'var(--border, #27272a)', margin: '4px 0' }} />
+                <button style={styles.dropdownItem} onClick={() => { onImport(); setExportOpen(false); }}>
+                  Import JSON/XMI
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
