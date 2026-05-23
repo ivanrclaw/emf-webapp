@@ -41,7 +41,7 @@ import { useCollaboration } from '../../hooks/useCollaboration';
 import { useCollaborativeModel } from '../../hooks/useCollaborativeModel';
 import { useOCLValidation } from '../../hooks/useOCLValidation';
 import { useToast } from '../ToastProvider';
-import { RemoteCursors } from '../collaboration/RemoteCursors';
+import { RemoteCursors, SelectionHighlightsOverlay, PresencePanel } from '../collaboration/RemoteCursors';
 import type { RoomUser } from '../../hooks/useCollaboration';
 import type { AwarenessState } from '../../hooks/useYjsCollaboration';
 import { ErrorBoundary } from '../ErrorBoundary';
@@ -265,7 +265,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
     }
   }, [collab.connected, socketId]);
 
-  // Track mouse position for cursor sharing
+  // Track mouse position for cursor sharing (legacy)
   const mousePosRef = useRef({ x: 0, y: 0 });
   useEffect(() => {
     const handler = (e: MouseEvent) => { mousePosRef.current = { x: e.clientX, y: e.clientY }; };
@@ -310,6 +310,75 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
       // Same as above — gradual migration
     },
   });
+
+  // ── Yjs cursor tracking in CANVAS coordinates ──────────────
+  const canvasCursorRef = useRef<{ x: number; y: number } | null>(null);
+  const onMouseMoveCanvas = useCallback((event: React.MouseEvent) => {
+    if (!reactFlowInstance) return;
+    const pos = reactFlowInstance.screenToFlowPosition({
+      x: event.clientX,
+      y: event.clientY,
+    });
+    canvasCursorRef.current = pos;
+    collaborative.setCursor(pos);
+  }, [reactFlowInstance, collaborative]);
+
+  const onMouseLeaveCanvas = useCallback(() => {
+    canvasCursorRef.current = null;
+    collaborative.setCursor(null);
+  }, [collaborative]);
+
+  // ── Broadcast selection to Yjs awareness ───────────────────
+  const prevSelectionRef = useRef<string>('');
+  useEffect(() => {
+    const selectedNodes = (model.nodes as any[])
+      .filter((n: any) => n.selected)
+      .map((n: any) => n.id);
+    const selectedEdges = (model.edges as any[])
+      .filter((e: any) => e.selected)
+      .map((e: any) => e.id);
+    const key = [...selectedNodes, '|', ...selectedEdges].join(',');
+    if (key !== prevSelectionRef.current) {
+      prevSelectionRef.current = key;
+      collaborative.setSelection(selectedNodes, selectedEdges);
+    }
+  }, [model.nodes, model.edges, collaborative]);
+
+  // ── Broadcast editing state when PropertyInspector is active ─
+  useEffect(() => {
+    if (model.selectedId && model.selectedType && ['class', 'enum', 'dataType'].includes(model.selectedType)) {
+      collaborative.setEditingNode(model.selectedId);
+    } else {
+      collaborative.setEditingNode(null);
+    }
+  }, [model.selectedId, model.selectedType, collaborative]);
+
+  // ── Presence toasts (join/leave) ───────────────────────────
+  const prevRemoteCountRef = useRef(0);
+  const prevRemoteNamesRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const currentNames = new Set<string>();
+    collaborative.remoteStates.forEach((state) => {
+      if (state.user) currentNames.add(state.user.name);
+    });
+
+    // Detect joins
+    currentNames.forEach((name) => {
+      if (!prevRemoteNamesRef.current.has(name)) {
+        addToast(`${name} joined`, 'info');
+      }
+    });
+
+    // Detect leaves
+    prevRemoteNamesRef.current.forEach((name) => {
+      if (!currentNames.has(name)) {
+        addToast(`${name} left`, 'info');
+      }
+    });
+
+    prevRemoteNamesRef.current = currentNames;
+    prevRemoteCountRef.current = currentNames.size;
+  }, [collaborative.remoteStates, addToast]);
 
   // Track initial load complete
   if (fetchedPkg && initialLoad.current) {
@@ -593,7 +662,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
 
   // ── Render ──────────────────────────────────────────────────
   return (
-    <div style={styles.canvas}>
+    <div style={styles.canvas} onMouseMove={onMouseMoveCanvas} onMouseLeave={onMouseLeaveCanvas}>
       {/* ── Left Panel Portal (Toolbox + TreeView) ──────────── */}
       {portalsReady && leftPanelRef.current && createPortal(
         <>
@@ -636,7 +705,12 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
       )}
 
       {/* ── Canvas ─────────────────────────────────────────── */}
-      <RemoteCursors users={collabUsers} currentUserSocketId={socketId} awarenessStates={collaborative.remoteStates} />
+      <RemoteCursors awarenessStates={collaborative.remoteStates} />
+      {/* Selection highlights + editing indicators (viewport-transformed) */}
+      <SelectionHighlightsOverlay
+        awarenessStates={collaborative.remoteStates}
+        nodes={model.nodes as any}
+      />
       <EdgeLayoutProvider>
       <ReactFlow
         nodes={model.nodes as any}
@@ -711,7 +785,13 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
           </div>
         </Panel>
         <Panel position="top-right">
-          <div style={{ display: 'flex', gap: 4 }}>
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <PresencePanel
+              awarenessStates={collaborative.remoteStates}
+              currentUserName="Anonymous"
+              currentUserColor="#6366f1"
+              connected={collaborative.connected}
+            />
             <button
               onClick={() => { model.autoLayout('LR'); setTimeout(() => reactFlowInstance.fitView({ padding: 0.15, duration: 300 }), 50); }}
               title="Auto Layout (Left → Right)"

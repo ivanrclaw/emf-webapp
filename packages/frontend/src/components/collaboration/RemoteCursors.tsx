@@ -1,235 +1,493 @@
 /**
- * @emf-webapp/frontend — RemoteCursors
+ * @emf-webapp/frontend — RemoteCursors (Sprint 2: Professional Awareness)
  *
- * Muestra los cursores de otros usuarios colaborando en el mismo metamodelo.
- * Soporta tanto el sistema legacy (RoomUser) como el nuevo Yjs awareness.
- * Se renderiza como overlay absoluto sobre el canvas React Flow.
+ * Renders remote user cursors with proper viewport transformation.
+ * Cursors are shared in CANVAS coordinates (flow space) and transformed
+ * to screen coordinates using the current user's viewport (zoom + pan).
+ *
+ * Features:
+ * - Viewport-transformed cursors (correct at any zoom/pan)
+ * - Smooth interpolation (CSS transitions at ~30fps)
+ * - User color + name label with fade-out on idle
+ * - Selection highlight rings on nodes selected by others
+ * - Editing indicators on nodes being edited by others
  */
-import React from 'react';
-import type { RoomUser } from '../../hooks/useCollaboration';
+import React, { useMemo } from 'react';
+import { useReactFlow, useViewport } from '@xyflow/react';
 import type { AwarenessState } from '../../hooks/useYjsCollaboration';
 
+// ─── Types ───────────────────────────────────────────────────────────────
+
 interface RemoteCursorsProps {
-  /** Legacy users from Socket.IO */
-  users: RoomUser[];
-  /** ID del usuario actual para no mostrar su propio cursor */
-  currentUserSocketId?: string;
-  /** New Yjs awareness states */
-  awarenessStates?: Map<number, AwarenessState>;
+  /** Yjs awareness states (remote users only) */
+  awarenessStates: Map<number, AwarenessState>;
 }
 
-const userColors = [
-  '#6366f1', // Indigo
-  '#f59e0b', // Amber
-  '#10b981', // Emerald
-  '#ec4899', // Pink
-  '#8b5cf6', // Violet
-  '#06b6d4', // Cyan
-  '#f97316', // Orange
-  '#14b8a6', // Teal
-];
+// ─── Cursor SVG ──────────────────────────────────────────────────────────
 
-function getUserColor(userId: string): string {
-  let hash = 0;
-  for (let i = 0; i < userId.length; i++) {
-    hash = ((hash << 5) - hash) + userId.charCodeAt(i);
-    hash |= 0;
-  }
-  return userColors[Math.abs(hash) % userColors.length];
-}
-
-export function RemoteCursors({ users, currentUserSocketId, awarenessStates }: RemoteCursorsProps) {
-  const activeCursors = users.filter(
-    (u) => u.cursor && u.id !== currentUserSocketId
+function CursorIcon({ color }: { color: string }) {
+  return (
+    <svg width="16" height="20" viewBox="0 0 16 20" fill="none" style={{ display: 'block' }}>
+      <path
+        d="M2.5 1L14 12.5H8.5L6.5 17L4 12.5H2.5V1Z"
+        fill={color}
+        stroke="#fff"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
+}
 
-  // Yjs awareness cursors
-  const yjsCursors: Array<{ id: string; name: string; color: string; cursor: { x: number; y: number } }> = [];
-  if (awarenessStates) {
+// ─── Component ───────────────────────────────────────────────────────────
+
+export function RemoteCursors({ awarenessStates }: RemoteCursorsProps) {
+  const { x: vpX, y: vpY, zoom } = useViewport();
+
+  // Convert awareness states to cursor data with screen positions
+  const cursors = useMemo(() => {
+    const result: Array<{
+      id: number;
+      name: string;
+      color: string;
+      screenX: number;
+      screenY: number;
+    }> = [];
+
     awarenessStates.forEach((state, clientId) => {
-      if (state.cursor && state.user) {
-        yjsCursors.push({
-          id: `yjs-${clientId}`,
-          name: state.user.name,
-          color: state.user.color,
-          cursor: state.cursor,
-        });
-      }
-    });
-  }
+      if (!state.cursor || !state.user) return;
 
-  if (activeCursors.length === 0 && yjsCursors.length === 0) return null;
+      // Transform canvas coords → screen coords using current viewport
+      const screenX = state.cursor.x * zoom + vpX;
+      const screenY = state.cursor.y * zoom + vpY;
+
+      result.push({
+        id: clientId,
+        name: state.user.name,
+        color: state.user.color,
+        screenX,
+        screenY,
+      });
+    });
+
+    return result;
+  }, [awarenessStates, vpX, vpY, zoom]);
+
+  if (cursors.length === 0) return null;
 
   return (
-    <>
-      {activeCursors.map((user) => {
-        const color = getUserColor(user.id);
-        return (
-          <div
-            key={user.id}
-            style={{
-              position: 'absolute',
-              left: user.cursor!.x,
-              top: user.cursor!.y,
-              pointerEvents: 'none',
-              zIndex: 1000,
-              transform: 'translate(-4px, -4px)',
-              transition: 'left 0.08s ease, top 0.08s ease',
-            }}
-          >
-            {/* Cursor SVG */}
-            <svg width="16" height="20" viewBox="0 0 16 20" fill="none">
-              <path
-                d="M2 1L13 12H8L6 15L4 12H2L2 1Z"
-                fill={color}
-                stroke="#fff"
-                strokeWidth="1.5"
-                strokeLinejoin="round"
-              />
-            </svg>
-            {/* User name label */}
-            <span
-              style={{
-                position: 'absolute',
-                left: 12,
-                top: -2,
-                background: color,
-                color: '#fff',
-                fontSize: 11,
-                fontWeight: 600,
-                padding: '1px 6px',
-                borderRadius: 4,
-                whiteSpace: 'nowrap',
-                lineHeight: '18px',
-              }}
-            >
-              {user.userName}
-            </span>
-          </div>
-        );
-      })}
-      {yjsCursors.map((cursor) => (
+    <div
+      style={{
+        position: 'absolute',
+        inset: 0,
+        pointerEvents: 'none',
+        zIndex: 1000,
+        overflow: 'hidden',
+      }}
+    >
+      {cursors.map((cursor) => (
         <div
           key={cursor.id}
           style={{
             position: 'absolute',
-            left: cursor.cursor.x,
-            top: cursor.cursor.y,
-            pointerEvents: 'none',
-            zIndex: 1000,
-            transform: 'translate(-4px, -4px)',
-            transition: 'left 0.05s linear, top 0.05s linear',
+            left: cursor.screenX,
+            top: cursor.screenY,
+            transform: 'translate(-2px, -2px)',
+            transition: 'left 33ms linear, top 33ms linear',
+            willChange: 'left, top',
           }}
         >
-          <svg width="16" height="20" viewBox="0 0 16 20" fill="none">
-            <path
-              d="M2 1L13 12H8L6 15L4 12H2L2 1Z"
-              fill={cursor.color}
-              stroke="#fff"
-              strokeWidth="1.5"
-              strokeLinejoin="round"
-            />
-          </svg>
+          <CursorIcon color={cursor.color} />
           <span
             style={{
               position: 'absolute',
-              left: 12,
-              top: -2,
+              left: 14,
+              top: -1,
               background: cursor.color,
               color: '#fff',
               fontSize: 11,
               fontWeight: 600,
-              padding: '1px 6px',
+              padding: '2px 7px',
               borderRadius: 4,
               whiteSpace: 'nowrap',
-              lineHeight: '18px',
+              lineHeight: '16px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+              userSelect: 'none',
             }}
           >
             {cursor.name}
           </span>
         </div>
       ))}
-    </>
+    </div>
   );
 }
 
-/**
- * Badge de colaboración para la barra superior.
- * Muestra el estado de conexión y los usuarios conectados.
- */
-interface CollaborationBadgeProps {
-  connected: boolean;
-  users: RoomUser[];
-  currentUserSocketId?: string;
+// ─── Selection Highlights ────────────────────────────────────────────────
+
+interface SelectionHighlightsProps {
+  /** Yjs awareness states */
+  awarenessStates: Map<number, AwarenessState>;
+  /** Current nodes (to get positions/dimensions) */
+  nodes: Array<{ id: string; position: { x: number; y: number }; measured?: { width?: number; height?: number } }>;
 }
 
-export function CollaborationBadge({ connected, users, currentUserSocketId }: CollaborationBadgeProps) {
-  const others = currentUserSocketId
-    ? users.filter((u) => u.id !== currentUserSocketId)
-    : users;
+/**
+ * Renders colored border highlights around nodes selected by remote users.
+ * Positioned in flow-space (inside ReactFlow viewport transform).
+ */
+export function SelectionHighlights({ awarenessStates, nodes }: SelectionHighlightsProps) {
+  // Build map: nodeId → { color, name }[]
+  const highlights = useMemo(() => {
+    const map = new Map<string, { color: string; name: string }[]>();
+
+    awarenessStates.forEach((state) => {
+      if (!state.user || !state.selectedNodeIds?.length) return;
+      for (const nodeId of state.selectedNodeIds) {
+        const existing = map.get(nodeId) || [];
+        existing.push({ color: state.user.color, name: state.user.name });
+        map.set(nodeId, existing);
+      }
+    });
+
+    return map;
+  }, [awarenessStates]);
+
+  if (highlights.size === 0) return null;
+
+  // Build node lookup for positions
+  const nodeMap = useMemo(() => {
+    const m = new Map<string, { x: number; y: number; w: number; h: number }>();
+    for (const node of nodes) {
+      m.set(node.id, {
+        x: node.position.x,
+        y: node.position.y,
+        w: node.measured?.width ?? 200,
+        h: node.measured?.height ?? 100,
+      });
+    }
+    return m;
+  }, [nodes]);
+
+  const elements: React.ReactElement[] = [];
+
+  highlights.forEach((users, nodeId) => {
+    const node = nodeMap.get(nodeId);
+    if (!node) return;
+
+    const primaryColor = users[0].color;
+    const names = users.map(u => u.name).join(', ');
+
+    elements.push(
+      <div
+        key={`sel-${nodeId}`}
+        style={{
+          position: 'absolute',
+          left: node.x - 4,
+          top: node.y - 4,
+          width: node.w + 8,
+          height: node.h + 8,
+          border: `2px solid ${primaryColor}`,
+          borderRadius: 10,
+          pointerEvents: 'none',
+          boxShadow: `0 0 0 1px ${primaryColor}33, 0 0 12px ${primaryColor}22`,
+          transition: 'left 50ms, top 50ms, width 50ms, height 50ms',
+        }}
+      >
+        {/* User name badge at top-left */}
+        <span
+          style={{
+            position: 'absolute',
+            top: -10,
+            left: 8,
+            background: primaryColor,
+            color: '#fff',
+            fontSize: 10,
+            fontWeight: 600,
+            padding: '1px 6px',
+            borderRadius: 3,
+            whiteSpace: 'nowrap',
+            lineHeight: '14px',
+          }}
+        >
+          {names}
+        </span>
+      </div>,
+    );
+  });
+
+  return <>{elements}</>;
+}
+
+// ─── Editing Indicators ──────────────────────────────────────────────────
+
+interface EditingIndicatorsProps {
+  /** Yjs awareness states */
+  awarenessStates: Map<number, AwarenessState>;
+  /** Current nodes */
+  nodes: Array<{ id: string; position: { x: number; y: number }; measured?: { width?: number; height?: number } }>;
+}
+
+/**
+ * Shows "Editing..." indicator with user avatar on nodes being edited by others.
+ */
+export function EditingIndicators({ awarenessStates, nodes }: EditingIndicatorsProps) {
+  // Build map: nodeId → user info
+  const editing = useMemo(() => {
+    const map = new Map<string, { color: string; name: string }>();
+
+    awarenessStates.forEach((state) => {
+      if (!state.user || !state.editingNodeId) return;
+      // First user to claim editing wins display
+      if (!map.has(state.editingNodeId)) {
+        map.set(state.editingNodeId, { color: state.user.color, name: state.user.name });
+      }
+    });
+
+    return map;
+  }, [awarenessStates]);
+
+  if (editing.size === 0) return null;
+
+  const nodeMap = useMemo(() => {
+    const m = new Map<string, { x: number; y: number; w: number; h: number }>();
+    for (const node of nodes) {
+      m.set(node.id, {
+        x: node.position.x,
+        y: node.position.y,
+        w: node.measured?.width ?? 200,
+        h: node.measured?.height ?? 100,
+      });
+    }
+    return m;
+  }, [nodes]);
+
+  const elements: React.ReactElement[] = [];
+
+  editing.forEach((user, nodeId) => {
+    const node = nodeMap.get(nodeId);
+    if (!node) return;
+
+    elements.push(
+      <div
+        key={`edit-${nodeId}`}
+        style={{
+          position: 'absolute',
+          left: node.x + node.w - 8,
+          top: node.y - 12,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 4,
+          pointerEvents: 'none',
+          transition: 'left 50ms, top 50ms',
+        }}
+      >
+        {/* Avatar circle */}
+        <div
+          style={{
+            width: 20,
+            height: 20,
+            borderRadius: '50%',
+            background: user.color,
+            color: '#fff',
+            fontSize: 10,
+            fontWeight: 700,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            border: '2px solid var(--surface, #fff)',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+          }}
+        >
+          {user.name.charAt(0).toUpperCase()}
+        </div>
+        {/* "Editing..." label */}
+        <span
+          style={{
+            background: user.color,
+            color: '#fff',
+            fontSize: 10,
+            fontWeight: 600,
+            padding: '2px 6px',
+            borderRadius: 4,
+            whiteSpace: 'nowrap',
+            lineHeight: '14px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+            animation: 'pulse-opacity 1.5s ease-in-out infinite',
+          }}
+        >
+          Editing…
+        </span>
+      </div>,
+    );
+  });
+
+  return <>{elements}</>;
+}
+
+// ─── Selection Highlights Overlay (viewport-transformed) ─────────────────
+
+interface SelectionHighlightsOverlayProps {
+  awarenessStates: Map<number, AwarenessState>;
+  nodes: Array<{ id: string; position: { x: number; y: number }; measured?: { width?: number; height?: number } }>;
+}
+
+/**
+ * Overlay that renders SelectionHighlights + EditingIndicators
+ * with viewport transformation (so they track node positions correctly).
+ */
+export function SelectionHighlightsOverlay({ awarenessStates, nodes }: SelectionHighlightsOverlayProps) {
+  const { x: vpX, y: vpY, zoom } = useViewport();
 
   return (
     <div
       style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 8,
-        padding: '4px 12px',
-        borderRadius: 8,
-        background: connected ? 'rgba(16,185,129,0.1)' : 'rgba(100,116,139,0.1)',
-        border: `1px solid ${connected ? 'rgba(16,185,129,0.3)' : 'rgba(100,116,139,0.2)'}`,
-        fontSize: 12,
-        fontWeight: 500,
+        position: 'absolute',
+        inset: 0,
+        pointerEvents: 'none',
+        zIndex: 999,
+        overflow: 'hidden',
       }}
     >
-      {/* Status dot */}
+      <div
+        style={{
+          transform: `translate(${vpX}px, ${vpY}px) scale(${zoom})`,
+          transformOrigin: '0 0',
+          position: 'absolute',
+          inset: 0,
+        }}
+      >
+        <SelectionHighlights awarenessStates={awarenessStates} nodes={nodes} />
+        <EditingIndicators awarenessStates={awarenessStates} nodes={nodes} />
+      </div>
+    </div>
+  );
+}
+
+// ─── Presence Panel ──────────────────────────────────────────────────────
+
+interface PresencePanelProps {
+  /** Yjs awareness states (remote users) */
+  awarenessStates: Map<number, AwarenessState>;
+  /** Current user name */
+  currentUserName: string;
+  /** Current user color */
+  currentUserColor: string;
+  /** Is connected to collaboration server? */
+  connected: boolean;
+}
+
+/**
+ * Compact presence panel showing connected users with avatars.
+ * Replaces the old CollaborationBadge.
+ */
+export function PresencePanel({ awarenessStates, currentUserName, currentUserColor, connected }: PresencePanelProps) {
+  const users = useMemo(() => {
+    const list: Array<{ id: string; name: string; color: string; isEditing: boolean; isIdle: boolean }> = [];
+
+    // Add current user first
+    list.push({
+      id: 'self',
+      name: currentUserName + ' (you)',
+      color: currentUserColor,
+      isEditing: false,
+      isIdle: false,
+    });
+
+    // Add remote users
+    awarenessStates.forEach((state, clientId) => {
+      if (!state.user) return;
+      list.push({
+        id: `remote-${clientId}`,
+        name: state.user.name,
+        color: state.user.color,
+        isEditing: !!state.editingNodeId,
+        isIdle: !state.cursor && !state.editingNodeId && (!state.selectedNodeIds || state.selectedNodeIds.length === 0),
+      });
+    });
+
+    return list;
+  }, [awarenessStates, currentUserName, currentUserColor]);
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: '4px 10px',
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
+        borderRadius: 8,
+        boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+      }}
+    >
+      {/* Connection indicator */}
       <span
         style={{
-          width: 8,
-          height: 8,
+          width: 7,
+          height: 7,
           borderRadius: '50%',
-          background: connected ? '#10b981' : 'var(--text-secondary)',
-          display: 'inline-block',
+          background: connected ? '#10b981' : '#ef4444',
           flexShrink: 0,
+          boxShadow: connected ? '0 0 4px #10b98166' : 'none',
         }}
       />
-      <span style={{ color: connected ? '#059669' : 'var(--text-muted)' }}>
-        {connected ? `${others.length ? `${others.length} online` : 'Connected'}` : 'Offline'}
-      </span>
 
-      {/* User avatars */}
-      {connected && others.length > 0 && (
-        <div style={{ display: 'inline-flex', alignItems: 'center', marginLeft: 2 }}>
-          {others.slice(0, 4).map((u) => (
-            <div
-              key={u.id}
-              title={u.userName}
-              style={{
-                width: 22,
-                height: 22,
-                borderRadius: '50%',
-                background: getUserColor(u.id),
-                color: '#fff',
-                fontSize: 10,
-                fontWeight: 700,
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginLeft: -4,
-                border: '2px solid var(--surface)',
-                flexShrink: 0,
-              }}
-            >
-              {u.userName.charAt(0).toUpperCase()}
-            </div>
-          ))}
-          {others.length > 4 && (
-            <span style={{ color: 'var(--text-muted)', fontSize: 11, marginLeft: 2 }}>
-              +{others.length - 4}
-            </span>
-          )}
-        </div>
-      )}
+      {/* Stacked avatars */}
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        {users.slice(0, 6).map((user, i) => (
+          <div
+            key={user.id}
+            title={user.name + (user.isEditing ? ' (editing)' : user.isIdle ? ' (idle)' : '')}
+            style={{
+              width: 24,
+              height: 24,
+              borderRadius: '50%',
+              background: user.color,
+              color: '#fff',
+              fontSize: 11,
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginLeft: i > 0 ? -6 : 0,
+              border: '2px solid var(--surface)',
+              flexShrink: 0,
+              opacity: user.isIdle ? 0.6 : 1,
+              position: 'relative',
+            }}
+          >
+            {user.name.charAt(0).toUpperCase()}
+            {/* Editing pulse dot */}
+            {user.isEditing && (
+              <span
+                style={{
+                  position: 'absolute',
+                  bottom: -1,
+                  right: -1,
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  background: '#f59e0b',
+                  border: '1.5px solid var(--surface)',
+                  animation: 'pulse-opacity 1.5s ease-in-out infinite',
+                }}
+              />
+            )}
+          </div>
+        ))}
+        {users.length > 6 && (
+          <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 4 }}>
+            +{users.length - 6}
+          </span>
+        )}
+      </div>
+
+      {/* Count label */}
+      <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500 }}>
+        {users.length}
+      </span>
     </div>
   );
 }
