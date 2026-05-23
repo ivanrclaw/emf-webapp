@@ -28,9 +28,10 @@ import {
   spreadHandlePosition,
   computeGlobalSideAssignment,
   computeSelfLoopPath,
+  detectCrossings,
 } from '../../../lib/edge-routing';
 import { CrossingBridges } from '../../shared/CrossingBridges';
-import type { Side, NodeRect } from '../../../lib/edge-routing';
+import type { Side, NodeRect, CrossingPoint } from '../../../lib/edge-routing';
 
 // ─────────────────────────────────────────────────────────────────
 // Constants
@@ -417,7 +418,67 @@ function useGlobalEdgeLayout() {
       pairGroups.get(pairKey)!.push(e.id);
     });
 
-    return { nodeRects, sideAssignment, portGroups, pairGroups };
+    // ── Compute all edge paths for crossing detection ──
+    const edgePaths: Array<{ edgeId: string; pathD: string }> = [];
+    edgeList.forEach((e) => {
+      const sides = sideAssignment.get(e.id);
+      if (!sides) return;
+      const sRect = nodeRects.get(e.sourceId);
+      const tRect = nodeRects.get(e.targetId);
+      if (!sRect || !tRect) return;
+
+      // Self-loops don't participate in crossing detection
+      if (e.sourceId === e.targetId) return;
+
+      const { sourceSide, targetSide } = sides;
+
+      // Get port indices
+      const sKey = `${e.sourceId}|${sourceSide}`;
+      const sourceGroup = portGroups.get(sKey) ?? [];
+      const sourceIdx = Math.max(0, sourceGroup.indexOf(`${e.id}:source`));
+      const sourceGroupSize = sourceGroup.length;
+
+      const tKey = `${e.targetId}|${targetSide}`;
+      const targetGroup = portGroups.get(tKey) ?? [];
+      const targetIdx = Math.max(0, targetGroup.indexOf(`${e.id}:target`));
+      const targetGroupSize = targetGroup.length;
+
+      const spreadSource = spreadHandlePosition(
+        sourceSide, sourceGroupSize, sourceIdx,
+        sRect.x, sRect.y, sRect.width, sRect.height,
+      );
+      const spreadTarget = spreadHandlePosition(
+        targetSide, targetGroupSize, targetIdx,
+        tRect.x, tRect.y, tRect.width, tRect.height,
+      );
+
+      // Pair channel offset
+      const pairKey = [e.sourceId, e.targetId].sort().join('|');
+      const pairGroup = pairGroups.get(pairKey) ?? [e.id];
+      const pairIdx = Math.max(0, pairGroup.indexOf(e.id));
+      const pairSize = pairGroup.length;
+      let channelOffset = 0;
+      if (pairSize > 1) {
+        const totalSpan = PAIR_EDGE_SPACING * (pairSize - 1);
+        channelOffset = -totalSpan / 2 + PAIR_EDGE_SPACING * pairIdx;
+      }
+
+      const sPos = sideToPosition(sourceSide);
+      const tPos = sideToPosition(targetSide);
+
+      const [pathD] = computeOrthogonalPath(
+        spreadSource.x, spreadSource.y, sPos,
+        spreadTarget.x, spreadTarget.y, tPos,
+        channelOffset, pairIdx, pairSize,
+        nodeRects, e.sourceId, e.targetId,
+      );
+      edgePaths.push({ edgeId: e.id, pathD });
+    });
+
+    // Detect crossings between all edge paths
+    const crossings = detectCrossings(edgePaths);
+
+    return { nodeRects, sideAssignment, portGroups, pairGroups, crossings };
   }, [nodes, edges]);
 }
 
@@ -430,7 +491,7 @@ function useEdgeCoords(
   data: EcoreEdgeData | undefined,
 ) {
   const layout = useGlobalEdgeLayout();
-  const { nodeRects, sideAssignment, portGroups, pairGroups } = layout;
+  const { nodeRects, sideAssignment, portGroups, pairGroups, crossings } = layout;
 
   const sourceId = data?.sourceId;
   const targetId = data?.targetId;
@@ -507,6 +568,7 @@ function useEdgeCoords(
     nodeRects,
     sourceId,
     targetId,
+    crossings,
   };
 }
 
@@ -556,7 +618,7 @@ function ReferenceEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
   const { sourceX: sx, sourceY: sy, sourcePosition: sPos,
     targetX: tx, targetY: ty, targetPosition: tPos,
     channelOffset, pairGroupIndex, pairGroupSize,
-    nodeRects: nRects, sourceId: sId, targetId: tId } = coords as any;
+    nodeRects: nRects, sourceId: sId, targetId: tId, crossings: edgeCrossings } = coords as any;
 
   const [edgePath, labelX, labelY] = computeOrthogonalPath(
     sx, sy, sPos, tx, ty, tPos,
@@ -581,7 +643,7 @@ function ReferenceEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
         }}
         markerEnd={`url(#arrow-${id})`}
       />
-      <CrossingBridges edgeId={id} crossings={[]} />
+      <CrossingBridges edgeId={id} crossings={edgeCrossings ?? []} strokeColor={colors.stroke} />
       {renderCombinedLabel(label, cardinality, labelX, labelY, colors)}
     </>
   );
@@ -632,7 +694,7 @@ function ContainmentEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
   const { sourceX: sx, sourceY: sy, sourcePosition: sPos,
     targetX: tx, targetY: ty, targetPosition: tPos,
     channelOffset, pairGroupIndex, pairGroupSize,
-    nodeRects: nRects, sourceId: sId, targetId: tId } = coords as any;
+    nodeRects: nRects, sourceId: sId, targetId: tId, crossings: edgeCrossings } = coords as any;
 
   const [edgePath, labelX, labelY] = computeOrthogonalPath(
     sx, sy, sPos, tx, ty, tPos,
@@ -661,7 +723,7 @@ function ContainmentEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
         markerStart={`url(#diamond-${id})`}
         markerEnd={`url(#arrow-${id})`}
       />
-      <CrossingBridges edgeId={id} crossings={[]} />
+      <CrossingBridges edgeId={id} crossings={edgeCrossings ?? []} strokeColor={colors.stroke} strokeWidth={2} />
       {renderCombinedLabel(label, cardinality, labelX, labelY, colors)}
     </>
   );
@@ -683,7 +745,7 @@ function InheritanceEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
   const { sourceX: sx, sourceY: sy, sourcePosition: sPos,
     targetX: tx, targetY: ty, targetPosition: tPos,
     channelOffset, pairGroupIndex, pairGroupSize,
-    nodeRects: nRects, sourceId: sId, targetId: tId } = coords as any;
+    nodeRects: nRects, sourceId: sId, targetId: tId, crossings: edgeCrossings } = coords as any;
 
   const [edgePath] = computeOrthogonalPath(
     sx, sy, sPos, tx, ty, tPos,
@@ -706,7 +768,7 @@ function InheritanceEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
         }}
         markerEnd={`url(#hollow-${id})`}
       />
-      <CrossingBridges edgeId={id} crossings={[]} />
+      <CrossingBridges edgeId={id} crossings={edgeCrossings ?? []} strokeColor={color} />
     </>
   );
 }
