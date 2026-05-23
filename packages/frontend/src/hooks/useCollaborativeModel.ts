@@ -3,16 +3,16 @@
  *
  * Bridge between useEcoreModel (local state) and useYjsCollaboration (CRDT sync).
  *
- * Strategy:
- * - Local changes (node moves, adds, deletes) → pushed to Y.Doc as atomic ops
- * - Remote Y.Doc changes → applied to local model state (positions, data)
- * - Awareness (cursors, selection) managed via Yjs awareness protocol
- * - Yjs UndoManager is the PRIMARY undo/redo (per-user scoped)
- *
- * This hook wraps around the existing useEcoreModel return value and
- * adds collaborative sync without modifying the core model hook.
+ * Architecture (v2 — no useEffect watchers):
+ * - Local changes are synced EXPLICITLY via syncLocal() — called by EcoreEditor
+ *   after any local mutation (drag end, add/delete, property change).
+ * - Remote Y.Doc changes → applied to local model state via onRemoteUpdate callback.
+ * - NO useEffect watching nodes/edges — eliminates the echo loop that caused
+ *   React error 310 (infinite re-render).
+ * - Awareness (cursors, selection) managed via Yjs awareness protocol.
+ * - Yjs UndoManager is the PRIMARY undo/redo (per-user scoped).
  */
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useRef, useCallback } from 'react';
 import type { Node, Edge } from '@xyflow/react';
 import { useYjsCollaboration, type AwarenessState } from './useYjsCollaboration';
 
@@ -40,6 +40,8 @@ export interface CollaborativeModelReturn {
   remoteStates: Map<number, AwarenessState>;
   /** True if this client is the save leader (lowest clientID) */
   isLeader: boolean;
+  /** Explicitly sync current local state to Y.Doc — call after local mutations ONLY */
+  syncLocal: (nodes: Node[], edges: Edge[]) => void;
   /** Update cursor position (call on mouse move, throttled) */
   setCursor: (position: { x: number; y: number } | null) => void;
   /** Update selection (call when selection changes) */
@@ -92,102 +94,93 @@ function useThrottle<T extends (...args: any[]) => void>(fn: T, ms: number): T {
 export function useCollaborativeModel(options: CollaborativeModelOptions): CollaborativeModelReturn {
   const { metamodelId, userName, nodes, edges, onRemoteNodesChange, onRemoteEdgesChange } = options;
 
-  // Track whether we're applying remote changes (to avoid echo)
-  const isApplyingRemoteRef = useRef(false);
-  // Track previous state to detect actual changes
-  const prevNodesFingerprintRef = useRef<string>('');
-  const prevEdgesFingerprintRef = useRef<string>('');
-  // Track local nodes/edges for initial sync
+  // Track local nodes/edges for merge logic in onRemoteUpdate
   const localNodesRef = useRef<Node[]>(nodes);
   const localEdgesRef = useRef<Edge[]>(edges);
   localNodesRef.current = nodes;
   localEdgesRef.current = edges;
 
+  // Flag: true while applying remote changes — prevents syncLocal from echoing
+  const isApplyingRemoteRef = useRef(false);
+
   const yjs = useYjsCollaboration({
     roomId: metamodelId,
     userName,
     onRemoteUpdate: (remoteNodes: Node[], remoteEdges: Edge[]) => {
+      // Guard against re-entrant calls
       if (isApplyingRemoteRef.current) return;
-
-      // Apply remote changes to local state
       isApplyingRemoteRef.current = true;
 
-      if (remoteNodes.length > 0) {
-        // Merge remote positions/data into local nodes
-        const localNodes = localNodesRef.current;
-        const remoteNodeMap = new Map(remoteNodes.map(n => [n.id, n]));
+      try {
+        if (remoteNodes.length > 0) {
+          const localNodes = localNodesRef.current;
+          const remoteNodeMap = new Map(remoteNodes.map(n => [n.id, n]));
 
-        const mergedNodes = localNodes.map(localNode => {
-          const remote = remoteNodeMap.get(localNode.id);
-          if (!remote) return localNode;
+          const mergedNodes = localNodes.map(localNode => {
+            const remote = remoteNodeMap.get(localNode.id);
+            if (!remote) return localNode;
 
-          // Update position and data from remote
-          const posChanged = remote.position.x !== localNode.position.x ||
-                            remote.position.y !== localNode.position.y;
-          const dataChanged = JSON.stringify(remote.data) !== JSON.stringify(localNode.data);
+            const posChanged = remote.position.x !== localNode.position.x ||
+                              remote.position.y !== localNode.position.y;
+            const dataChanged = JSON.stringify(remote.data) !== JSON.stringify(localNode.data);
 
-          if (!posChanged && !dataChanged) return localNode;
+            if (!posChanged && !dataChanged) return localNode;
 
-          return {
-            ...localNode,
-            position: posChanged ? remote.position : localNode.position,
-            data: dataChanged ? remote.data : localNode.data,
-          };
-        });
+            return {
+              ...localNode,
+              position: posChanged ? remote.position : localNode.position,
+              data: dataChanged ? remote.data : localNode.data,
+            };
+          });
 
-        // Add nodes that exist remotely but not locally
-        for (const [id, remote] of remoteNodeMap) {
-          if (!localNodes.find(n => n.id === id)) {
-            mergedNodes.push(remote);
+          // Add nodes that exist remotely but not locally
+          for (const [id, remote] of remoteNodeMap) {
+            if (!localNodes.find(n => n.id === id)) {
+              mergedNodes.push(remote);
+            }
           }
+
+          // Remove nodes that were deleted remotely
+          const finalNodes = mergedNodes.filter(n => remoteNodeMap.has(n.id));
+
+          onRemoteNodesChange?.(finalNodes);
         }
 
-        // Remove nodes that were deleted remotely
-        const finalNodes = mergedNodes.filter(n => remoteNodeMap.has(n.id));
+        if (remoteEdges.length > 0) {
+          const localEdges = localEdgesRef.current;
+          const remoteEdgeMap = new Map(remoteEdges.map(e => [e.id, e]));
 
-        // Pre-update fingerprint BEFORE setting state so the useEffect won't echo back
-        prevNodesFingerprintRef.current = finalNodes.map(n =>
-          `${n.id}:${n.position.x}:${n.position.y}:${JSON.stringify(n.data?.name || '')}`
-        ).join('|');
+          const mergedEdges = localEdges.map(localEdge => {
+            const remote = remoteEdgeMap.get(localEdge.id);
+            if (!remote) return localEdge;
 
-        onRemoteNodesChange?.(finalNodes);
-      }
+            const dataChanged = JSON.stringify(remote.data) !== JSON.stringify(localEdge.data);
+            if (!dataChanged) return localEdge;
 
-      if (remoteEdges.length > 0) {
-        const localEdges = localEdgesRef.current;
-        const remoteEdgeMap = new Map(remoteEdges.map(e => [e.id, e]));
+            return { ...localEdge, data: remote.data };
+          });
 
-        const mergedEdges = localEdges.map(localEdge => {
-          const remote = remoteEdgeMap.get(localEdge.id);
-          if (!remote) return localEdge;
-
-          const dataChanged = JSON.stringify(remote.data) !== JSON.stringify(localEdge.data);
-          if (!dataChanged) return localEdge;
-
-          return { ...localEdge, data: remote.data };
-        });
-
-        // Add edges that exist remotely but not locally
-        for (const [id, remote] of remoteEdgeMap) {
-          if (!localEdges.find(e => e.id === id)) {
-            mergedEdges.push(remote);
+          // Add edges that exist remotely but not locally
+          for (const [id, remote] of remoteEdgeMap) {
+            if (!localEdges.find(e => e.id === id)) {
+              mergedEdges.push(remote);
+            }
           }
+
+          // Remove edges deleted remotely
+          const finalEdges = mergedEdges.filter(e => remoteEdgeMap.has(e.id));
+
+          onRemoteEdgesChange?.(finalEdges);
         }
-
-        // Remove edges deleted remotely
-        const finalEdges = mergedEdges.filter(e => remoteEdgeMap.has(e.id));
-
-        // Pre-update edge fingerprint (must match useEffect format)
-        prevEdgesFingerprintRef.current = finalEdges.map(e =>
-          `${e.id}:${e.source}:${e.target}`
-        ).join('|');
-
-        onRemoteEdgesChange?.(finalEdges);
+      } finally {
+        // Reset after a full React render cycle — use double rAF to ensure
+        // React has committed the state update before we allow local syncs again
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            isApplyingRemoteRef.current = false;
+          });
+        });
       }
-
-      // Use queueMicrotask for tighter timing — resets after React processes
-      // the state update but before the next macrotask
-      queueMicrotask(() => { isApplyingRemoteRef.current = false; });
     },
     onConnectionChange: (connected: boolean) => {
       if (connected) {
@@ -201,45 +194,22 @@ export function useCollaborativeModel(options: CollaborativeModelOptions): Colla
     },
   });
 
-  // ── Sync local changes to Y.Doc ──────────────────────────────────────
+  // ── Explicit sync (called by EcoreEditor after local mutations) ────────
 
-  // Throttled sync to avoid flooding during drag operations
   const throttledSyncNodes = useThrottle((n: Node[]) => {
-    if (!isApplyingRemoteRef.current && yjs.connected) {
-      yjs.syncNodes(n);
-    }
+    if (yjs.connected) yjs.syncNodes(n);
   }, 50); // 50ms = ~20fps for drag operations
 
   const throttledSyncEdges = useThrottle((e: Edge[]) => {
-    if (!isApplyingRemoteRef.current && yjs.connected) {
-      yjs.syncEdges(e);
-    }
+    if (yjs.connected) yjs.syncEdges(e);
   }, 100);
 
-  // Watch for node changes
-  useEffect(() => {
+  const syncLocal = useCallback((currentNodes: Node[], currentEdges: Edge[]) => {
+    // Never echo back remote changes
     if (isApplyingRemoteRef.current) return;
-
-    // Quick fingerprint to avoid unnecessary syncs
-    const fingerprint = nodes.map(n =>
-      `${n.id}:${n.position.x}:${n.position.y}:${JSON.stringify(n.data?.name || '')}`
-    ).join('|');
-    if (fingerprint === prevNodesFingerprintRef.current) return;
-    prevNodesFingerprintRef.current = fingerprint;
-
-    throttledSyncNodes(nodes);
-  }, [nodes, throttledSyncNodes]);
-
-  // Watch for edge changes
-  useEffect(() => {
-    if (isApplyingRemoteRef.current) return;
-
-    const fingerprint = edges.map((e: any) => `${e.id}:${e.source}:${e.target}`).join('|');
-    if (fingerprint === prevEdgesFingerprintRef.current) return;
-    prevEdgesFingerprintRef.current = fingerprint;
-
-    throttledSyncEdges(edges);
-  }, [edges, throttledSyncEdges]);
+    throttledSyncNodes(currentNodes);
+    throttledSyncEdges(currentEdges);
+  }, [throttledSyncNodes, throttledSyncEdges]);
 
   // ── Throttled cursor ─────────────────────────────────────────────────
 
@@ -251,6 +221,7 @@ export function useCollaborativeModel(options: CollaborativeModelOptions): Colla
     connected: yjs.connected,
     remoteStates: yjs.remoteStates,
     isLeader: yjs.isLeader,
+    syncLocal,
     setCursor: throttledSetCursor,
     setSelection: yjs.setSelection,
     setEditingNode: yjs.setEditingNode,

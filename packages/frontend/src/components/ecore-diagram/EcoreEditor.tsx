@@ -244,13 +244,17 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
 
   // ── Yjs CRDT Collaboration ───────────────────────────────────
   // Single collaboration system — stable identity managed by useYjsCollaboration
+  // Flag to prevent syncing remote changes back to Y.Doc
+  const isRemoteUpdateRef = useRef(false);
+
   const collaborative = useCollaborativeModel({
     metamodelId,
     userName: 'Anonymous', // Stable session name assigned internally by the hook
     nodes: model.nodes as any,
     edges: model.edges as any,
     onRemoteNodesChange: (remoteNodes) => {
-      // Apply remote node positions/data to local state
+      // Set flag BEFORE calling onNodesChange so the wrapped handler won't sync back
+      isRemoteUpdateRef.current = true;
       model.onNodesChange(
         remoteNodes.map(n => ({
           type: 'position' as const,
@@ -259,12 +263,42 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
           dragging: false,
         }))
       );
+      // Reset after React processes the update
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          isRemoteUpdateRef.current = false;
+        });
+      });
     },
     onRemoteEdgesChange: (remoteEdges) => {
-      // Remote edge changes — for now edges are structural (add/remove)
-      // which goes through the pkg layer. Data updates handled here.
+      // Remote edge changes — structural changes go through pkg layer
     },
   });
+
+  // Wrapped onNodesChange: applies changes locally AND syncs to Y.Doc (only for local changes)
+  const wrappedOnNodesChange = useCallback((changes: any[]) => {
+    model.onNodesChange(changes);
+  }, [model]);
+
+  // Sync local node/edge changes to Y.Doc — fires after React commits state updates
+  // Safe because useCollaborativeModel no longer has its own useEffect watchers
+  const prevSyncFingerprintRef = useRef('');
+  useEffect(() => {
+    // Quick fingerprint to detect actual changes
+    const fp = (model.nodes as any[]).map((n: any) =>
+      `${n.id}:${n.position?.x}:${n.position?.y}:${n.data?.name || ''}`
+    ).join('|') + '||' + (model.edges as any[]).map((e: any) =>
+      `${e.id}:${e.source}:${e.target}`
+    ).join('|');
+    if (fp === prevSyncFingerprintRef.current) return;
+    prevSyncFingerprintRef.current = fp;
+
+    // Skip sync if this render was triggered by a remote update
+    if (isRemoteUpdateRef.current) return;
+    if (!collaborative.connected) return;
+
+    collaborative.syncLocal(model.nodes as any, model.edges as any);
+  }, [model.nodes, model.edges, collaborative]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Yjs cursor tracking in CANVAS coordinates ──────────────
   const canvasCursorRef = useRef<{ x: number; y: number } | null>(null);
@@ -389,6 +423,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
   }, [collaborative.remoteStates, addToast]);
 
   // ── Leader-gated autosave (only the client with lowest clientID persists) ──
+  // 300ms debounce — fast enough for concurrency, avoids hammering on every keystroke
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (model.isDirty && collaborative.isLeader) {
@@ -397,7 +432,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
         model.save().catch((err) => {
           console.error('[Autosave] Failed:', err);
         });
-      }, 2000);
+      }, 300);
     }
     return () => {
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
@@ -765,7 +800,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
       <ReactFlow
         nodes={model.nodes as any}
         edges={model.edges as any}
-        onNodesChange={model.onNodesChange}
+        onNodesChange={wrappedOnNodesChange}
         onEdgesChange={model.onEdgesChange}
         onConnect={model.onConnect}
         onNodeClick={onNodeClick}
