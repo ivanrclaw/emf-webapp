@@ -283,7 +283,8 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
           case MSG_SYNC: {
             const encoder = encoding.createEncoder();
             encoding.writeVarUint(encoder, MSG_SYNC);
-            syncProtocol.readSyncMessage(decoder, encoder, doc, null);
+            // Use 'remote' as origin so onDocUpdate won't echo it back
+            syncProtocol.readSyncMessage(decoder, encoder, doc, 'remote');
             if (encoding.length(encoder) > 1) {
               ws.send(encoding.toUint8Array(encoder));
             }

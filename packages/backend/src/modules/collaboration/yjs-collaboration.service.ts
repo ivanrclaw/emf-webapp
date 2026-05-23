@@ -221,7 +221,7 @@ export class YjsCollaborationService implements OnModuleInit, OnModuleDestroy {
       case MSG_SYNC: {
         const encoder = encoding.createEncoder();
         encoding.writeVarUint(encoder, MSG_SYNC);
-        syncProtocol.readSyncMessage(decoder, encoder, room.doc, null);
+        syncProtocol.readSyncMessage(decoder, encoder, room.doc, ws);
 
         // If encoder has content (sync step 2 response), send back
         if (encoding.length(encoder) > 1) {
