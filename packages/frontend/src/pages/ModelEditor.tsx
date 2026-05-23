@@ -24,6 +24,7 @@ import {
   MarkerType,
   ConnectionMode,
   useReactFlow,
+  SelectionMode,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import {
@@ -44,7 +45,11 @@ import { VsmPalette } from '../components/model-editor/VsmPalette';
 import { VsmPropertyInspector } from '../components/model-editor/VsmPropertyInspector';
 import { EditorToolbar } from '../components/model-editor/EditorToolbar';
 import { EditorStatusBar } from '../components/model-editor/EditorStatusBar';
+import { InlineEditor, type InlineEditorState } from '../components/model-editor/InlineEditor';
+import { ContextMenu, type ContextMenuTarget } from '../components/model-editor/ContextMenu';
 import { useModelHistory } from '../components/model-editor/hooks/useModelHistory';
+import { useClipboard } from '../components/model-editor/hooks/useClipboard';
+import { useKeyboardShortcuts } from '../components/model-editor/hooks/useKeyboardShortcuts';
 import {
   collectActiveToolSections,
   collectActiveMappings,
@@ -111,8 +116,15 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
 
   // Selection & tools
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(new Set());
   const [activeTool, setActiveTool] = useState<string | null>(null);
   const [connectMode, setConnectMode] = useState(false);
+
+  // Inline editing
+  const [inlineEditState, setInlineEditState] = useState<InlineEditorState | null>(null);
+
+  // Context menu
+  const [contextMenuTarget, setContextMenuTarget] = useState<ContextMenuTarget | null>(null);
 
   // View state
   const [zoomLevel, setZoomLevel] = useState(1);
@@ -122,6 +134,9 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
 
   // History (undo/redo)
   const history = useModelHistory(null);
+
+  // Clipboard
+  const clipboard = useClipboard();
 
   // ReactFlow instance
   const reactFlowInstance = useReactFlow();
@@ -410,25 +425,32 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
 
   // ─── Delete selected ─────────────────────────────────────────────
   const handleDelete = useCallback(() => {
-    if (!selectedNodeId) return;
-    const obj = objects.find((o) => o.id === selectedNodeId);
-    if (!obj) return;
+    const idsToDelete = selectedNodeIds.size > 0
+      ? Array.from(selectedNodeIds)
+      : selectedNodeId ? [selectedNodeId] : [];
+    if (idsToDelete.length === 0) return;
 
-    const mapping = mappings.nodeMappings.find((m) => m.domainClass === obj.eClass);
-    if (mapping && !canDelete(mapping.id, allTools)) return; // No delete tool
+    // Check delete permission for each
+    for (const id of idsToDelete) {
+      const obj = objects.find((o) => o.id === id);
+      if (!obj) continue;
+      const mapping = mappings.nodeMappings.find((m) => m.domainClass === obj.eClass);
+      if (mapping && !canDelete(mapping.id, allTools)) return;
+    }
 
-    setObjects((prev) => prev.filter((o) => o.id !== selectedNodeId));
-    // Also remove references pointing to deleted object
+    setObjects((prev) => prev.filter((o) => !idsToDelete.includes(o.id)));
+    // Also remove references pointing to deleted objects
     setObjects((prev) => prev.map((o) => {
       const refs = { ...o.references };
       for (const [key, targets] of Object.entries(refs)) {
-        refs[key] = targets.filter((t) => t !== selectedNodeId);
+        refs[key] = targets.filter((t) => !idsToDelete.includes(t));
       }
       return { ...o, references: refs };
     }));
     setSelectedNodeId(null);
+    setSelectedNodeIds(new Set());
     setSaveStatus('unsaved');
-  }, [selectedNodeId, objects, mappings, allTools]);
+  }, [selectedNodeId, selectedNodeIds, objects, mappings, allTools]);
 
   // ─── Update attribute ────────────────────────────────────────────
   const handleUpdateAttribute = useCallback((key: string, value: unknown) => {
@@ -511,33 +533,177 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
 
   // ─── Duplicate selected ─────────────────────────────────────────
   const handleDuplicate = useCallback(() => {
-    if (!selectedNodeId) return;
-    const obj = objects.find((o) => o.id === selectedNodeId);
-    if (!obj) return;
+    const ids = selectedNodeIds.size > 0
+      ? Array.from(selectedNodeIds)
+      : selectedNodeId ? [selectedNodeId] : [];
+    if (ids.length === 0) return;
 
-    const newObj: SemanticObject = {
-      id: uid(),
-      eClass: obj.eClass,
-      attributes: { ...obj.attributes, name: `${obj.attributes.name || obj.eClass}_copy` },
-      references: { ...obj.references },
-    };
-    setObjects((prev) => [...prev, newObj]);
-    // Offset position for the duplicate
-    const pos = savedPositionsRef.current[selectedNodeId];
-    if (pos) {
-      savedPositionsRef.current[newObj.id] = { x: pos.x + 30, y: pos.y + 30 };
+    const newObjs: SemanticObject[] = [];
+    for (const id of ids) {
+      const obj = objects.find((o) => o.id === id);
+      if (!obj) continue;
+      const newObj: SemanticObject = {
+        id: uid(),
+        eClass: obj.eClass,
+        attributes: { ...obj.attributes, name: `${obj.attributes.name || obj.eClass}_copy` },
+        references: { ...obj.references },
+      };
+      // Offset position for the duplicate
+      const pos = savedPositionsRef.current[id];
+      if (pos) {
+        savedPositionsRef.current[newObj.id] = { x: pos.x + 30, y: pos.y + 30 };
+      }
+      newObjs.push(newObj);
     }
-    setSelectedNodeId(newObj.id);
+    setObjects((prev) => [...prev, ...newObjs]);
+    if (newObjs.length === 1) {
+      setSelectedNodeId(newObjs[0].id);
+      setSelectedNodeIds(new Set());
+    } else {
+      setSelectedNodeId(newObjs[0].id);
+      setSelectedNodeIds(new Set(newObjs.map((o) => o.id)));
+    }
     setSaveStatus('unsaved');
-  }, [selectedNodeId, objects]);
+  }, [selectedNodeId, selectedNodeIds, objects]);
 
   // ─── Select all ─────────────────────────────────────────────────
   const handleSelectAll = useCallback(() => {
-    // Select first node (multi-select will come in Sprint 3)
-    if (objects.length > 0) {
-      setSelectedNodeId(objects[0].id);
-    }
+    if (objects.length === 0) return;
+    const allIds = new Set(objects.map((o) => o.id));
+    setSelectedNodeIds(allIds);
+    setSelectedNodeId(objects[0].id);
   }, [objects]);
+
+  // ─── Copy / Paste ───────────────────────────────────────────────
+  const handleCopy = useCallback(() => {
+    const ids = selectedNodeIds.size > 0
+      ? Array.from(selectedNodeIds)
+      : selectedNodeId ? [selectedNodeId] : [];
+    if (ids.length === 0) return;
+    clipboard.copy(ids, objects, savedPositionsRef.current);
+  }, [selectedNodeId, selectedNodeIds, objects, clipboard]);
+
+  const handlePaste = useCallback(() => {
+    const result = clipboard.paste();
+    if (!result) return;
+    // Add pasted objects
+    for (const [id, pos] of Object.entries(result.positions)) {
+      savedPositionsRef.current[id] = pos;
+    }
+    setObjects((prev) => [...prev, ...result.objects]);
+    // Select pasted objects
+    const pastedIds = new Set(result.objects.map((o) => o.id));
+    setSelectedNodeIds(pastedIds);
+    setSelectedNodeId(result.objects[0]?.id || null);
+    setSaveStatus('unsaved');
+  }, [clipboard]);
+
+  // ─── Inline editing ─────────────────────────────────────────────
+  const handleStartInlineEdit = useCallback((nodeId?: string) => {
+    const targetId = nodeId || selectedNodeId;
+    if (!targetId) return;
+    const obj = objects.find((o) => o.id === targetId);
+    if (!obj) return;
+
+    // Find the node's screen position
+    const node = nodes.find((n) => n.id === targetId);
+    if (!node) return;
+
+    // Get the DOM element for the node to position the editor
+    const nodeEl = document.querySelector(`[data-id="${targetId}"]`);
+    if (nodeEl) {
+      const rect = nodeEl.getBoundingClientRect();
+      const canvasEl = nodeEl.closest('.react-flow');
+      const canvasRect = canvasEl?.getBoundingClientRect() || { left: 0, top: 0 };
+      setInlineEditState({
+        nodeId: targetId,
+        initialValue: (obj.attributes.name as string) || '',
+        position: {
+          x: rect.left - canvasRect.left + rect.width / 2 - 60,
+          y: rect.top - canvasRect.top + rect.height / 2 - 15,
+        },
+        width: Math.max(rect.width, 120),
+      });
+    }
+  }, [selectedNodeId, objects, nodes]);
+
+  const handleConfirmInlineEdit = useCallback((nodeId: string, value: string) => {
+    setObjects((prev) => prev.map((obj) =>
+      obj.id === nodeId
+        ? { ...obj, attributes: { ...obj.attributes, name: value } }
+        : obj,
+    ));
+    setInlineEditState(null);
+    setSaveStatus('unsaved');
+  }, []);
+
+  const handleCancelInlineEdit = useCallback(() => {
+    setInlineEditState(null);
+  }, []);
+
+  // ─── Context menu ───────────────────────────────────────────────
+  const handleContextMenuAction = useCallback((actionId: string, target: ContextMenuTarget) => {
+    switch (actionId) {
+      case 'rename':
+        if (target.type === 'node') handleStartInlineEdit(target.nodeId);
+        break;
+      case 'delete':
+      case 'delete-all':
+        handleDelete();
+        break;
+      case 'duplicate':
+        handleDuplicate();
+        break;
+      case 'copy':
+        handleCopy();
+        break;
+      case 'paste':
+        handlePaste();
+        break;
+      case 'select-all':
+        handleSelectAll();
+        break;
+      case 'fit-view':
+        reactFlowInstance.fitView();
+        break;
+      case 'toggle-grid':
+        setShowGrid((v) => !v);
+        break;
+      case 'toggle-minimap':
+        setShowMinimap((v) => !v);
+        break;
+      case 'reverse-edge':
+        if (target.type === 'edge') {
+          // Reverse the edge direction
+          const edgeId = target.edgeId;
+          const parts = edgeId.split('-');
+          // Edge id format: sourceId-refName-targetId
+          if (parts.length >= 3) {
+            const sourceId = parts[0];
+            const refName = parts.slice(1, -1).join('-');
+            const targetId = parts[parts.length - 1];
+            // Remove from source, add to target
+            setObjects((prev) => prev.map((obj) => {
+              if (obj.id === sourceId) {
+                const refs = { ...obj.references };
+                refs[refName] = (refs[refName] || []).filter((t) => t !== targetId);
+                if (refs[refName].length === 0) delete refs[refName];
+                return { ...obj, references: refs };
+              }
+              if (obj.id === targetId) {
+                const refs = { ...obj.references };
+                refs[refName] = [...(refs[refName] || []), sourceId];
+                return { ...obj, references: refs };
+              }
+              return obj;
+            }));
+            setSaveStatus('unsaved');
+          }
+        }
+        break;
+    }
+    setContextMenuTarget(null);
+  }, [handleDelete, handleDuplicate, handleCopy, handlePaste, handleSelectAll, handleStartInlineEdit, reactFlowInstance]);
 
   // ─── Layer toggle ────────────────────────────────────────────────
   const handleToggleLayer = useCallback((layerId: string) => {
@@ -558,51 +724,109 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
 
   // ─── Canvas interactions ─────────────────────────────────────────
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
-    setSelectedNodeId(node.id);
+    // Shift+click for multi-select
+    if (_.shiftKey) {
+      setSelectedNodeIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(node.id)) {
+          next.delete(node.id);
+        } else {
+          next.add(node.id);
+        }
+        return next;
+      });
+      setSelectedNodeId(node.id);
+    } else {
+      setSelectedNodeId(node.id);
+      setSelectedNodeIds(new Set());
+    }
+    setContextMenuTarget(null);
+  }, []);
+
+  const onNodeDoubleClick = useCallback((_: React.MouseEvent, node: Node) => {
+    handleStartInlineEdit(node.id);
+  }, [handleStartInlineEdit]);
+
+  const onNodeContextMenu = useCallback((e: React.MouseEvent, node: Node) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Select the node if not already selected
+    if (!selectedNodeIds.has(node.id)) {
+      setSelectedNodeId(node.id);
+      setSelectedNodeIds(new Set());
+    }
+    setContextMenuTarget({
+      type: 'node',
+      nodeId: node.id,
+      position: { x: e.clientX, y: e.clientY },
+    });
+  }, [selectedNodeIds]);
+
+  const onEdgeContextMenu = useCallback((e: React.MouseEvent, edge: Edge) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenuTarget({
+      type: 'edge',
+      edgeId: edge.id,
+      position: { x: e.clientX, y: e.clientY },
+    });
   }, []);
 
   const onPaneClick = useCallback(() => {
     setSelectedNodeId(null);
+    setSelectedNodeIds(new Set());
+    setContextMenuTarget(null);
+    setInlineEditState(null);
   }, []);
 
-  // ─── Keyboard shortcuts ──────────────────────────────────────────
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      const isInput = document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA';
-      if (isInput) return;
+  const onPaneContextMenu = useCallback((e: React.MouseEvent | MouseEvent) => {
+    e.preventDefault();
+    // Get flow position for potential paste
+    const bounds = (e.target as HTMLElement).closest('.react-flow')?.getBoundingClientRect();
+    const flowPos = reactFlowInstance.screenToFlowPosition({
+      x: (e as React.MouseEvent).clientX - (bounds?.left || 0),
+      y: (e as React.MouseEvent).clientY - (bounds?.top || 0),
+    });
+    setContextMenuTarget({
+      type: 'canvas',
+      position: { x: (e as React.MouseEvent).clientX, y: (e as React.MouseEvent).clientY },
+      flowPosition: flowPos || { x: 0, y: 0 },
+    });
+  }, [reactFlowInstance]);
 
-      // Delete
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (selectedNodeId) handleDelete();
-        return;
-      }
+  // Multi-select via selection box (rubber-band)
+  const onSelectionChange = useCallback(({ nodes: selectedNodes }: { nodes: Node[]; edges: Edge[] }) => {
+    if (selectedNodes.length > 1) {
+      setSelectedNodeIds(new Set(selectedNodes.map((n) => n.id)));
+      setSelectedNodeId(selectedNodes[0]?.id || null);
+    }
+  }, []);
 
-      // Ctrl/Cmd shortcuts
-      if (e.ctrlKey || e.metaKey) {
-        switch (e.key) {
-          case 'z':
-            e.preventDefault();
-            if (e.shiftKey) handleRedo();
-            else handleUndo();
-            break;
-          case 'd':
-            e.preventDefault();
-            handleDuplicate();
-            break;
-          case 'a':
-            e.preventDefault();
-            handleSelectAll();
-            break;
-          case 's':
-            e.preventDefault();
-            handleSave();
-            break;
-        }
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [selectedNodeId, handleDelete, handleUndo, handleRedo, handleDuplicate, handleSelectAll, handleSave]);
+  // ─── Keyboard shortcuts (centralized hook) ─────────────────────
+  useKeyboardShortcuts(
+    {
+      onDelete: handleDelete,
+      onUndo: handleUndo,
+      onRedo: handleRedo,
+      onDuplicate: handleDuplicate,
+      onSelectAll: handleSelectAll,
+      onSave: handleSave,
+      onCopy: handleCopy,
+      onPaste: handlePaste,
+      onRename: () => handleStartInlineEdit(),
+      onEscape: () => {
+        setSelectedNodeId(null);
+        setSelectedNodeIds(new Set());
+        setInlineEditState(null);
+        setContextMenuTarget(null);
+      },
+      onFitView: () => reactFlowInstance.fitView(),
+    },
+    {
+      hasSelection: !!selectedNodeId || selectedNodeIds.size > 0,
+      isEditing: !!inlineEditState,
+    },
+  );
 
   // ─── Export ──────────────────────────────────────────────────────
   const handleExport = useCallback((format: 'json' | 'xmi' | 'svg') => {
@@ -666,7 +890,7 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
         canRedo={history.canRedo}
         onUndo={handleUndo}
         onRedo={handleRedo}
-        hasSelection={!!selectedNodeId}
+        hasSelection={!!selectedNodeId || selectedNodeIds.size > 0}
         onDelete={handleDelete}
         onDuplicate={handleDuplicate}
         onSelectAll={handleSelectAll}
@@ -706,7 +930,7 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
             onSelectTool={handleSelectTool}
             onCreateNode={handleCreateNode}
             connectMode={connectMode}
-            hasSelection={!!selectedNodeId}
+            hasSelection={!!selectedNodeId || selectedNodeIds.size > 0}
           />
         </div>
 
@@ -719,11 +943,19 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             onNodeClick={onNodeClick}
+            onNodeDoubleClick={onNodeDoubleClick}
+            onNodeContextMenu={onNodeContextMenu}
+            onEdgeContextMenu={onEdgeContextMenu}
             onPaneClick={onPaneClick}
+            onPaneContextMenu={onPaneContextMenu}
+            onSelectionChange={onSelectionChange}
             onMoveEnd={(_, viewport) => setZoomLevel(viewport.zoom)}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             connectionMode={connectMode ? ConnectionMode.Loose : ConnectionMode.Strict}
+            selectionMode={SelectionMode.Partial}
+            selectionOnDrag
+            panOnDrag={[1]}
             fitView
             minZoom={0.3}
             maxZoom={2}
@@ -744,6 +976,13 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
               </Panel>
             )}
           </ReactFlow>
+
+          {/* Inline Editor overlay */}
+          <InlineEditor
+            state={inlineEditState}
+            onConfirm={handleConfirmInlineEdit}
+            onCancel={handleCancelInlineEdit}
+          />
         </div>
 
         {/* Right — Property Inspector */}
@@ -780,6 +1019,16 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
         validationWarnings={0}
         showGrid={showGrid}
         gridSize={gridSize}
+      />
+
+      {/* Context Menu */}
+      <ContextMenu
+        target={contextMenuTarget}
+        onClose={() => setContextMenuTarget(null)}
+        onAction={handleContextMenuAction}
+        hasClipboard={clipboard.hasClipboard}
+        hasSelection={!!selectedNodeId || selectedNodeIds.size > 0}
+        multiSelectCount={selectedNodeIds.size}
       />
     </div>
   );
