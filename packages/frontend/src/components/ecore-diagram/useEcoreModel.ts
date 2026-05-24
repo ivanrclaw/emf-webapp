@@ -389,6 +389,13 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg, violationsMa
     if (initialPkg && !initialLoadDone.current) {
       initialLoadDone.current = true;
       const pos = new Map<string, { x: number; y: number }>();
+      // Populate posMap from loaded classifier positions
+      for (const c of initialPkg.eClassifiers ?? []) {
+        const p = (c as any).position;
+        if (p && typeof p.x === 'number' && typeof p.y === 'number') {
+          pos.set(c.id, { x: p.x, y: p.y });
+        }
+      }
       setNodes(pkgToNodes(initialPkg, pos, violationsMap));
       setEdges(pkgToEdges(initialPkg, pos));
       posMap.current = pos;
@@ -645,9 +652,6 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg, violationsMa
     setLoading(true);
     try {
       const content = buildContent(pkgRef.current, posMap.current);
-      console.log('[Save] posMap size:', posMap.current.size);
-      console.log('[Save] pkgRef classifiers:', pkgRef.current.eClassifiers.length);
-      console.log('[Save] content.eClassifiers positions:', content.eClassifiers?.map((c: any) => ({ id: c.id?.slice(0,8), name: c.name, pos: c.position })));
       await updateMetamodelContent(projectId, metamodelId, content);
       setIsDirty(false);
     } finally {
@@ -810,10 +814,11 @@ function buildContent(pkg: SerializableEPackage, posMap: Map<string, { x: number
       if (isEnum(c)) {
         return {
           ...c,
+          position: pos,
           eLiterals: (c.eLiterals || []).map((l) => ({ ...l })),
         };
       }
-      return { ...c };
+      return { ...c, position: pos };
     }),
   };
 }
