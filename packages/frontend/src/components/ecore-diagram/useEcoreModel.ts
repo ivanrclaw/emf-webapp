@@ -408,16 +408,23 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg, violationsMa
     setSelectedType(type);
   }, []);
 
+  // ── Track locally-dragging nodes (prevents remote updates mid-drag) ──
+  const draggingNodesRef = useRef<Set<string>>(new Set());
+
   // ── React Flow handlers ────────────────────────────────────
   const onNodesChange: OnNodesChange = useCallback(
     (changes: NodeChange[]) => {
       setNodes((cur) => {
-        // Track positions
+        // Track positions + dragging state
         for (const ch of changes) {
           if (ch.type === 'position' && 'position' in ch && ch.position) {
             posMap.current.set(ch.id, { ...ch.position });
           }
+          if (ch.type === 'position' && ch.dragging === true) {
+            draggingNodesRef.current.add(ch.id);
+          }
           if (ch.type === 'position' && ch.dragging === false) {
+            draggingNodesRef.current.delete(ch.id);
             setIsDirty(true);
           }
         }
@@ -650,10 +657,16 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg, violationsMa
   // ── Remote state application (no undo, no dirty, no auto-save) ──
   // Updates pkgRef (source of truth for save) from remote node data,
   // then resync() regenerates nodes with proper callbacks.
+  // Skips position updates for nodes the local user is currently dragging.
+  // Applies CSS transition for smooth remote movement (Figma-style).
   const applyRemoteNodes = useCallback((remoteNodes: AppNode[]) => {
-    // 1. Update posMap from remote positions
+    const dragging = draggingNodesRef.current;
+
+    // 1. Update posMap from remote positions (skip dragging nodes)
     for (const n of remoteNodes) {
-      if (n.position) posMap.current.set(n.id, { ...n.position });
+      if (n.position && !dragging.has(n.id)) {
+        posMap.current.set(n.id, { ...n.position });
+      }
     }
 
     // 2. Rebuild eClassifiers from remote node data
@@ -665,11 +678,17 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg, violationsMa
       // No classifier data in remote nodes — just update positions visually
       setNodes((cur) =>
         cur.map((node) => {
+          // Never override position of a node the user is actively dragging
+          if (dragging.has(node.id)) return node;
           const remote = remoteNodes.find((r) => r.id === node.id);
           if (!remote) return node;
           const posChanged = remote.position.x !== node.position.x ||
                             remote.position.y !== node.position.y;
-          return posChanged ? { ...node, position: { ...remote.position } } : node;
+          if (!posChanged) return node;
+          return {
+            ...node,
+            position: { ...remote.position },
+          };
         }),
       );
       return;

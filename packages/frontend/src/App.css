@@ -1032,6 +1032,14 @@ tbody td {
 .react-flow__edge-path { stroke: var(--text-muted) !important; }
 .react-flow__node.selected > div { box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 40%, transparent) !important; }
 
+/* ── Remote node movement smoothing (Figma-style) ──────── */
+/* Smooth transition on all nodes EXCEPT when being dragged locally.
+   React Flow adds .dragging class during active drag, so local drag stays instant.
+   200ms with Figma's ease curve gives fluid remote movement without feeling sluggish. */
+.react-flow__node:not(.dragging) {
+  transition: transform 200ms cubic-bezier(0.2, 0, 0, 1);
+}
+
 /* ── Workspace ─────────────────────────────────────────────── */
 
 /* Hide scrollbar on tab bar but allow scroll */
