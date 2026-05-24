@@ -529,7 +529,7 @@ function parseNodeMapping(el: XmlElement): ParsedNodeMapping {
   const id = el.attrs['name'] || '';
   const domainClass = extractClassName(el.attrs['domainClass']);
   const semanticCandidatesExpression = stripAqlPrefix(el.attrs['semanticCandidatesExpression']);
-  const labelExpression = stripAqlPrefix(el.attrs['labelExpression'] || 'feature:name');
+  let labelExpression = stripAqlPrefix(el.attrs['labelExpression'] || '');
 
   // Find style child
   let defaultStyle: NodeStyle = {
@@ -550,8 +550,16 @@ function parseNodeMapping(el: XmlElement): ParsedNodeMapping {
     if (childType === 'style' || childType.endsWith('Description') ||
         child.attrs['xsi:type']?.includes('Description')) {
       defaultStyle = parseNodeStyle(child);
+      // Extract labelExpression from style if not on the mapping element
+      if (!labelExpression && child.attrs['labelExpression']) {
+        labelExpression = stripAqlPrefix(child.attrs['labelExpression']);
+      }
       break;
     }
+  }
+
+  if (!labelExpression) {
+    labelExpression = 'feature:name';
   }
 
   return {

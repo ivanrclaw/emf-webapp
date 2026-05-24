@@ -36,7 +36,7 @@ import { useEcoreModel } from './useEcoreModel';
 import { nodeTypes } from './nodes/nodeTypes';
 import { edgeTypes } from './edges/CustomEdges';
 import { EdgeLayoutProvider } from './edges/EdgeLayoutContext';
-import { getMetamodel, getProject, exportEcore, exportGenmodel, exportXmiZip } from '../../api/client';
+import { getMetamodel, getProject, exportEcore, exportGenmodel, exportXmiZip, exportProjectAsEclipse } from '../../api/client';
 import { useCollaborativeModel } from '../../hooks/useCollaborativeModel';
 import { useOCLValidation } from '../../hooks/useOCLValidation';
 import { useToast } from '../ToastProvider';
@@ -473,7 +473,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
           }
         },
         exportEcore: () => exportEcore(projectId, metamodelId),
-        exportZip: () => exportXmiZip(projectId, metamodelId),
+        exportZip: () => exportProjectAsEclipse(projectId),
         exportGenmodel: () => exportGenmodel(projectId, metamodelId),
         autoLayout: (direction?: 'TB' | 'LR') => {
           model.autoLayout(direction);
@@ -513,17 +513,14 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
             const file = input.files?.[0];
             if (!file) return;
             try {
-              const formData = new FormData();
-              formData.append('file', file);
-              const resp = await fetch(`/api/projects/${projectId}/xmi/${metamodelId}/import-eclipse-zip`, {
-                method: 'POST',
-                body: formData,
-              });
-              const data = await resp.json();
-              if (data.success) {
+              addToast('Importing Eclipse project...', 'info');
+              const { importEclipseProject } = await import('../../api/client');
+              const result = await importEclipseProject(file);
+              if (result.projectId) {
+                addToast(`Imported: ${result.metamodels?.length || 0} metamodels, ${result.constraints || 0} constraints, ${result.specs || 0} specs`, 'success');
                 window.location.reload();
               } else {
-                addToast('Import failed: ' + (data.message || 'Unknown error'), 'error');
+                addToast('Import failed: ' + (result.error || 'Unknown error'), 'error');
               }
             } catch (err: any) {
               addToast('Error importing Eclipse project: ' + err.message, 'error');

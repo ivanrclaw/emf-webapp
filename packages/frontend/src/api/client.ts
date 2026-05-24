@@ -219,6 +219,25 @@ export function exportProjectAsZip(projectId: string): void {
   window.open(`${BASE_URL}/projects/${projectId}/export/zip`, '_blank');
 }
 
+export function exportProjectAsEclipse(projectId: string): void {
+  window.open(`${BASE_URL}/projects/${projectId}/export/eclipse`, '_blank');
+}
+
+export async function importEclipseProject(file: File, name?: string): Promise<any> {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (name) formData.append('name', name);
+
+  const res = await fetch(`${BASE_URL}/projects/import/eclipse`, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!res.ok) {
+    throw new Error(`Import failed: ${res.statusText}`);
+  }
+  return res.json();
+}
+
 // ── Metamodels ────────────────────────────────────────────────────
 
 export function getMetamodels(projectId: string): Promise<Metamodel[]> {
