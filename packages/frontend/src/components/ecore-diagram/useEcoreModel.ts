@@ -395,8 +395,22 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg, violationsMa
   }, [initialPkg]);
 
   // ── Re-sync from pkg (recompute nodes/edges preserving positions) ─
+  // Preserves React Flow internal state (measured dimensions, internals)
+  // to avoid "node not initialized" warning (#015) after remote updates.
   const resync = useCallback(() => {
-    setNodes(pkgToNodes(pkgRef.current, posMap.current, violationsMapRef.current));
+    setNodes((currentNodes) => {
+      const freshNodes = pkgToNodes(pkgRef.current, posMap.current, violationsMapRef.current);
+      // Preserve measured dimensions from current nodes so React Flow
+      // doesn't lose track of node sizes (which causes error #015 on drag)
+      const currentMap = new Map(currentNodes.map(n => [n.id, n]));
+      return freshNodes.map(fresh => {
+        const existing = currentMap.get(fresh.id);
+        if (existing?.measured) {
+          return { ...fresh, measured: existing.measured };
+        }
+        return fresh;
+      });
+    });
     setEdges(pkgToEdges(pkgRef.current, posMap.current));
   }, []);
 
