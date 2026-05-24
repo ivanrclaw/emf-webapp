@@ -444,16 +444,10 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
   // 300ms debounce — fast enough for concurrency, avoids hammering on every keystroke
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    console.log('[Autosave] isDirty changed:', model.isDirty);
     if (model.isDirty) {
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
       autoSaveTimerRef.current = setTimeout(() => {
-        console.log('[Autosave] Calling save()...');
-        model.save().then(() => {
-          console.log('[Autosave] Save succeeded');
-        }).catch((err) => {
-          console.error('[Autosave] Failed:', err);
-        });
+        model.save();
       }, 300);
     }
     return () => {

@@ -640,21 +640,6 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg, violationsMa
     [],
   );
 
-  // ── Auto Layout ─────────────────────────────────────────────
-  const autoLayout = useCallback((direction: 'TB' | 'LR' = 'TB') => {
-    const currentNodes = nodesRef.current;
-    const currentEdges = pkgToEdges(pkgRef.current, posMap.current);
-    const positions = computeAutoLayout(currentNodes, currentEdges, { direction });
-    // Apply positions to posMap and trigger resync
-    positions.forEach((pos, id) => {
-      posMap.current.set(id, pos);
-    });
-    console.log('[AutoLayout] Applied positions to posMap:', positions.size, 'nodes');
-    resync();
-    setIsDirty(true);
-    console.log('[AutoLayout] isDirty set to true');
-  }, [resync]);
-
   // ── Save ───────────────────────────────────────────────────
   const save = useCallback(async () => {
     setLoading(true);
@@ -666,6 +651,20 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg, violationsMa
       setLoading(false);
     }
   }, [projectId, metamodelId]);
+
+  // ── Auto Layout ─────────────────────────────────────────────
+  const autoLayout = useCallback(async (direction: 'TB' | 'LR' = 'TB') => {
+    const currentNodes = nodesRef.current;
+    const currentEdges = pkgToEdges(pkgRef.current, posMap.current);
+    const positions = computeAutoLayout(currentNodes, currentEdges, { direction });
+    // Apply positions to posMap and trigger resync
+    positions.forEach((pos, id) => {
+      posMap.current.set(id, pos);
+    });
+    resync();
+    // Save immediately to persist positions before remote echo can overwrite posMap
+    await save();
+  }, [resync, save]);
 
   // ── Re-sync when pkg changes ────────────────────────────────
   useEffect(() => {
