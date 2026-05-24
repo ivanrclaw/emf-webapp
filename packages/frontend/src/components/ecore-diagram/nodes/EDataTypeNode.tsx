@@ -4,7 +4,7 @@
  * Nodo React Flow que representa un EDataType del metamodelo Ecore.
  * Muestra el nombre y el instanceClassName en un nodo compacto.
  */
-import { useCallback, useState, type KeyboardEvent } from 'react';
+import { memo, useCallback, useState, type KeyboardEvent } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { EcoreNodeData, SerializableEDataType } from '../types';
 import styles from './EDataTypeNode.module.css';
@@ -22,7 +22,7 @@ function isEDataType(c: unknown): c is SerializableEDataType {
 }
 
 // ── Componente ────────────────────────────────────────────────
-export default function EDataTypeNode(props: NodeProps) {
+const EDataTypeNode = memo(function EDataTypeNode(props: NodeProps) {
   const data = props.data as EcoreNodeData;
   const classifier = data.classifier;
 
@@ -88,4 +88,6 @@ export default function EDataTypeNode(props: NodeProps) {
       </div>
     </div>
   );
-}
+});
+
+export default EDataTypeNode;

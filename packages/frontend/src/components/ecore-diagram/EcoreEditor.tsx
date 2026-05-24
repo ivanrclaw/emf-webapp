@@ -98,6 +98,20 @@ const styles = {
   },
 };
 
+const DEFAULT_EDGE_OPTIONS = {
+  animated: false,
+  style: { stroke: 'var(--text-secondary)', strokeWidth: 2 },
+};
+
+function minimapNodeColor(n: any): string {
+  switch (n.type) {
+    case 'eClassNode': return '#6366f1';
+    case 'eEnumNode': return '#f97316';
+    case 'eDataTypeNode': return '#6b7280';
+    default: return '#94a3b8';
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Inner component (needs ReactFlowProvider context)
 // ═══════════════════════════════════════════════════════════════
@@ -282,10 +296,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
     collaborativeRef.current.syncLocal(model.nodes as any, model.edges as any);
   }, [model.nodes, model.edges]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Wrapped onNodesChange: applies changes locally (sync happens via useEffect above)
-  const wrappedOnNodesChange = useCallback((changes: any[]) => {
-    model.onNodesChange(changes);
-  }, [model]);
+
 
   // ── Update cursor during node drag (pointer capture prevents onMouseMove) ──
   const onNodeDrag = useCallback((_event: any, node: any) => {
@@ -346,10 +357,16 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
 
   // ── Broadcast viewport for follow mode ─────────────────────
   const viewportBroadcastRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const prevViewportRef = useRef<{ x: number; y: number; zoom: number } | null>(null);
   useEffect(() => {
     if (!collaborative.connected) return;
     viewportBroadcastRef.current = setInterval(() => {
       const vp = reactFlowInstance.getViewport();
+      const prev = prevViewportRef.current;
+      if (prev && prev.x === vp.x && prev.y === vp.y && prev.zoom === vp.zoom) {
+        return; // viewport unchanged, skip broadcast
+      }
+      prevViewportRef.current = { x: vp.x, y: vp.y, zoom: vp.zoom };
       collaborativeRef.current.setViewport(vp);
     }, 200); // 5fps for viewport — enough for smooth follow
     return () => {
@@ -801,7 +818,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
       <ReactFlow
         nodes={model.nodes as any}
         edges={model.edges as any}
-        onNodesChange={wrappedOnNodesChange}
+        onNodesChange={model.onNodesChange}
         onEdgesChange={model.onEdgesChange}
         onConnect={model.onConnect}
         onNodeClick={onNodeClick}
@@ -820,10 +837,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
         panOnScroll
         minZoom={0.1}
         maxZoom={4}
-        defaultEdgeOptions={{
-          animated: false,
-          style: { stroke: 'var(--text-secondary)', strokeWidth: 2 },
-        }}
+        defaultEdgeOptions={DEFAULT_EDGE_OPTIONS}
         style={{ background: 'var(--bg)' }}
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="var(--border)" />
@@ -842,14 +856,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
             border: '1px solid var(--border)',
             boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
           }}
-          nodeColor={(n: any) => {
-            switch (n.type) {
-              case 'eClassNode': return '#6366f1';
-              case 'eEnumNode': return '#f97316';
-              case 'eDataTypeNode': return '#6b7280';
-              default: return '#94a3b8';
-            }
-          }}
+          nodeColor={minimapNodeColor}
           maskColor="rgba(15,23,42,0.7)"
           pannable
           zoomable

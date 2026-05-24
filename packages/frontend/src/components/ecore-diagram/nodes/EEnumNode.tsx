@@ -4,7 +4,7 @@
  * Nodo React Flow que representa un EEnum del metamodelo Ecore.
  * Muestra el nombre y la lista de literales con sus valores.
  */
-import { useCallback, useState, type KeyboardEvent } from 'react';
+import { memo, useCallback, useState, type KeyboardEvent } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { EcoreNodeData, SerializableEEnum } from '../types';
 import styles from './EEnumNode.module.css';
@@ -20,7 +20,7 @@ function isEEnum(c: unknown): c is SerializableEEnum {
 }
 
 // ── Componente ────────────────────────────────────────────────
-export default function EEnumNode(props: NodeProps) {
+const EEnumNode = memo(function EEnumNode(props: NodeProps) {
   const data = props.data as EcoreNodeData;
   const classifier = data.classifier;
 
@@ -113,4 +113,6 @@ export default function EEnumNode(props: NodeProps) {
       </div>
     </div>
   );
-}
+});
+
+export default EEnumNode;

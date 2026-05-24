@@ -238,6 +238,7 @@ function bestHandleForEdge(
 
 function pkgToEdges(pkg: SerializableEPackage, _posMap?: Map<string, { x: number; y: number }>): AppEdge[] {
   const out: AppEdge[] = [];
+  const seenIds = new Set<string>();
   for (const c of pkg.eClassifiers ?? []) {
     if (!isClass(c)) continue;
 
@@ -247,7 +248,8 @@ function pkgToEdges(pkg: SerializableEPackage, _posMap?: Map<string, { x: number
         if (!superTypeId) continue;
         const edgeId = `inh_${c.id}_${superTypeId}`;
         // Avoid duplicates (when both classes declare the same super type)
-        if (out.some((e) => e.id === edgeId)) continue;
+        if (seenIds.has(edgeId)) continue;
+        seenIds.add(edgeId);
         const handles = bestHandleForEdge(c.id, superTypeId, _posMap);
         out.push({
           id: edgeId,
@@ -331,7 +333,7 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg, violationsMa
         const next = typeof updater === 'function' ? updater(prev) : updater;
         if (next === prev) return prev;
         setUndoStack((stack) => {
-          const nextStack = [...stack, JSON.parse(JSON.stringify(prev))];
+          const nextStack = [...stack, structuredClone(prev)];
           return nextStack.length > 50 ? nextStack.slice(-50) : nextStack;
         });
         setRedoStack([]);
@@ -347,7 +349,7 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg, violationsMa
       const prev = stack[stack.length - 1];
       const rest = stack.slice(0, -1);
       setPkg((current) => {
-        setRedoStack((rstack) => [...rstack, JSON.parse(JSON.stringify(current))]);
+        setRedoStack((rstack) => [...rstack, structuredClone(current)]);
         return prev;
       });
       setIsDirty(true);
@@ -361,7 +363,7 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg, violationsMa
       const next = stack[stack.length - 1];
       const rest = stack.slice(0, -1);
       setPkg((current) => {
-        setUndoStack((ustack) => [...ustack, JSON.parse(JSON.stringify(current))]);
+        setUndoStack((ustack) => [...ustack, structuredClone(current)]);
         return next;
       });
       setIsDirty(true);
@@ -690,11 +692,12 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg, violationsMa
 
     if (remoteClassifiers.length === 0) {
       // No classifier data in remote nodes — just update positions visually
+      const remoteMap = new Map(remoteNodes.map(n => [n.id, n]));
       setNodes((cur) =>
         cur.map((node) => {
           // Never override position of a node the user is actively dragging
           if (dragging.has(node.id)) return node;
-          const remote = remoteNodes.find((r) => r.id === node.id);
+          const remote = remoteMap.get(node.id);
           if (!remote) return node;
           const posChanged = remote.position.x !== node.position.x ||
                             remote.position.y !== node.position.y;
@@ -723,7 +726,7 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg, violationsMa
     // (currently all edges ARE derived from pkg, so this is a no-op).
   }, []);
 
-  return {
+  return useMemo(() => ({
     nodes,
     edges,
     onNodesChange,
@@ -750,7 +753,34 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg, violationsMa
     autoLayout,
     applyRemoteNodes,
     applyRemoteEdges,
-  };
+  }), [
+    nodes,
+    edges,
+    onNodesChange,
+    onEdgesChange,
+    onConnect,
+    onDropNode,
+    pkg,
+    selectedId,
+    selectedType,
+    setSelected,
+    addClassifier,
+    deleteSelected,
+    addAttribute,
+    addReference,
+    deleteFeature,
+    handleClassifierChange,
+    isDirty,
+    save,
+    loading,
+    undo,
+    redoFn,
+    canUndo,
+    canRedo,
+    autoLayout,
+    applyRemoteNodes,
+    applyRemoteEdges,
+  ]);
 }
 
 // ═══════════════════════════════════════════════════════════════

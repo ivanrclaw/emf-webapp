@@ -12,7 +12,7 @@
  * - Awareness (cursors, selection) managed via Yjs awareness protocol.
  * - Yjs UndoManager is the PRIMARY undo/redo (per-user scoped).
  */
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useMemo } from 'react';
 import type { Node, Edge } from '@xyflow/react';
 import { useYjsCollaboration, type AwarenessState } from './useYjsCollaboration';
 
@@ -122,7 +122,7 @@ export function useCollaborativeModel(options: CollaborativeModelOptions): Colla
 
             const posChanged = remote.position.x !== localNode.position.x ||
                               remote.position.y !== localNode.position.y;
-            const dataChanged = JSON.stringify(remote.data) !== JSON.stringify(localNode.data);
+            const dataChanged = remote.data !== localNode.data && JSON.stringify(remote.data) !== JSON.stringify(localNode.data);
 
             if (!posChanged && !dataChanged) return localNode;
 
@@ -134,8 +134,9 @@ export function useCollaborativeModel(options: CollaborativeModelOptions): Colla
           });
 
           // Add nodes that exist remotely but not locally
+          const localIds = new Set(localNodes.map(n => n.id));
           for (const [id, remote] of remoteNodeMap) {
-            if (!localNodes.find(n => n.id === id)) {
+            if (!localIds.has(id)) {
               // Ensure new remote nodes have measured dimensions so React Flow
               // doesn't warn about "dragging a node that is not initialized"
               mergedNodes.push({
@@ -159,15 +160,16 @@ export function useCollaborativeModel(options: CollaborativeModelOptions): Colla
             const remote = remoteEdgeMap.get(localEdge.id);
             if (!remote) return localEdge;
 
-            const dataChanged = JSON.stringify(remote.data) !== JSON.stringify(localEdge.data);
+            const dataChanged = remote.data !== localEdge.data && JSON.stringify(remote.data) !== JSON.stringify(localEdge.data);
             if (!dataChanged) return localEdge;
 
             return { ...localEdge, data: remote.data };
           });
 
           // Add edges that exist remotely but not locally
+          const localEdgeIds = new Set(localEdges.map(e => e.id));
           for (const [id, remote] of remoteEdgeMap) {
-            if (!localEdges.find(e => e.id === id)) {
+            if (!localEdgeIds.has(id)) {
               mergedEdges.push(remote);
             }
           }
@@ -222,7 +224,7 @@ export function useCollaborativeModel(options: CollaborativeModelOptions): Colla
     yjs.setCursor(pos);
   }, 33); // ~30fps
 
-  return {
+  return useMemo(() => ({
     connected: yjs.connected,
     remoteStates: yjs.remoteStates,
     isLeader: yjs.isLeader,
@@ -237,5 +239,20 @@ export function useCollaborativeModel(options: CollaborativeModelOptions): Colla
     redo: yjs.redo,
     canUndo: yjs.canUndo,
     canRedo: yjs.canRedo,
-  };
+  }), [
+    yjs.connected,
+    yjs.remoteStates,
+    yjs.isLeader,
+    syncLocal,
+    throttledSetCursor,
+    yjs.setSelection,
+    yjs.setEditingNode,
+    yjs.setEditingField,
+    yjs.setViewport,
+    yjs.setCursorMessage,
+    yjs.undo,
+    yjs.redo,
+    yjs.canUndo,
+    yjs.canRedo,
+  ]);
 }

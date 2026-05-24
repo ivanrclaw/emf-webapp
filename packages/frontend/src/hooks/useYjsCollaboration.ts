@@ -423,36 +423,41 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
     };
     awareness.on('change', onAwarenessChange);
 
-    // Listen for remote Y.Doc changes → notify React
+    // Listen for remote Y.Doc changes → notify React (debounced to batch rapid changes)
+    let docObserveTimer: ReturnType<typeof setTimeout> | null = null;
     const onDocObserve = () => {
       if (isLocalUpdateRef.current) return;
-      // Convert Y.Doc state to React Flow format
-      const nodesMap = doc.getMap('nodes') as Y.Map<Y.Map<any>>;
-      const edgesMap = doc.getMap('edges') as Y.Map<Y.Map<any>>;
+      if (docObserveTimer) return;
+      docObserveTimer = setTimeout(() => {
+        docObserveTimer = null;
+        // Convert Y.Doc state to React Flow format
+        const nodesMap = doc.getMap('nodes') as Y.Map<Y.Map<any>>;
+        const edgesMap = doc.getMap('edges') as Y.Map<Y.Map<any>>;
 
-      const nodes: Node[] = [];
-      nodesMap.forEach((yNode) => {
-        nodes.push({
-          id: yNode.get('id'),
-          type: yNode.get('type'),
-          position: yNode.get('position'),
-          data: yNode.get('data'),
-          measured: yNode.get('measured'),
-        } as Node);
-      });
+        const nodes: Node[] = [];
+        nodesMap.forEach((yNode) => {
+          nodes.push({
+            id: yNode.get('id'),
+            type: yNode.get('type'),
+            position: yNode.get('position'),
+            data: yNode.get('data'),
+            measured: yNode.get('measured'),
+          } as Node);
+        });
 
-      const edges: Edge[] = [];
-      edgesMap.forEach((yEdge) => {
-        edges.push({
-          id: yEdge.get('id'),
-          source: yEdge.get('source'),
-          target: yEdge.get('target'),
-          type: yEdge.get('type'),
-          data: yEdge.get('data'),
-        } as Edge);
-      });
+        const edges: Edge[] = [];
+        edgesMap.forEach((yEdge) => {
+          edges.push({
+            id: yEdge.get('id'),
+            source: yEdge.get('source'),
+            target: yEdge.get('target'),
+            type: yEdge.get('type'),
+            data: yEdge.get('data'),
+          } as Edge);
+        });
 
-      optionsRef.current.onRemoteUpdate?.(nodes, edges);
+        optionsRef.current.onRemoteUpdate?.(nodes, edges);
+      }, 16);
     };
 
     const nodesMap = doc.getMap('nodes');
@@ -466,6 +471,10 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
       if (heartbeatTimerRef.current) {
         clearInterval(heartbeatTimerRef.current);
         heartbeatTimerRef.current = null;
+      }
+      if (docObserveTimer) {
+        clearTimeout(docObserveTimer);
+        docObserveTimer = null;
       }
       window.removeEventListener('beforeunload', onBeforeUnload);
       document.removeEventListener('visibilitychange', onVisibilityChange);
@@ -520,7 +529,7 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
             existing.set('position', { x: node.position.x, y: node.position.y });
           }
           const storedData = existing.get('data');
-          if (JSON.stringify(storedData) !== JSON.stringify(serializableData)) {
+          if (storedData !== serializableData && JSON.stringify(storedData) !== JSON.stringify(serializableData)) {
             existing.set('data', serializableData);
           }
           if (node.measured) {
@@ -564,7 +573,7 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
         const existing = edgesMap.get(edge.id);
         if (existing) {
           const data = existing.get('data');
-          if (JSON.stringify(data) !== JSON.stringify(edge.data)) {
+          if (data !== edge.data && JSON.stringify(data) !== JSON.stringify(edge.data)) {
             existing.set('data', edge.data);
           }
         } else {
@@ -619,12 +628,18 @@ export function useYjsCollaboration(options: YjsCollaborationOptions): YjsCollab
     undoManagerRef.current?.redo();
   }, []);
 
-  // Compute isLeader as a stable value (only changes when connected or remoteStates change)
+  // Stable representation of connected client IDs — only changes when clients join/leave,
+  // not on every cursor move or awareness field update
+  const connectedClientIds = useMemo(() => {
+    return Array.from(remoteStates.keys()).sort().join(',');
+  }, [remoteStates]);
+
+  // Compute isLeader as a stable value (only changes when connected clients change)
   const isLeader = useMemo(() => {
     if (!connected) return false;
     const allClientIds = Array.from(awareness.getStates().keys());
     return allClientIds.length === 0 || Math.min(...allClientIds) === doc.clientID;
-  }, [connected, remoteStates, awareness, doc.clientID]);
+  }, [connected, connectedClientIds, awareness, doc.clientID]);
 
   // Memoize the return object to prevent unnecessary re-renders in consumers
   return useMemo(() => ({

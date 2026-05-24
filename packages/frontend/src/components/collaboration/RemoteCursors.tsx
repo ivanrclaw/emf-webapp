@@ -12,7 +12,7 @@
  * - Selection highlight rings on nodes selected by others
  * - Editing indicators on nodes being edited by others
  */
-import React, { useMemo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { useReactFlow, useViewport } from '@xyflow/react';
 import type { AwarenessState } from '../../hooks/useYjsCollaboration';
 import { CursorMessages } from './PremiumFeatures';
@@ -26,7 +26,7 @@ interface RemoteCursorsProps {
 
 // ─── Cursor SVG ──────────────────────────────────────────────────────────
 
-function CursorIcon({ color }: { color: string }) {
+const CursorIcon = memo(function CursorIcon({ color }: { color: string }) {
   return (
     <svg width="16" height="20" viewBox="0 0 16 20" fill="none" style={{ display: 'block' }}>
       <path
@@ -38,7 +38,7 @@ function CursorIcon({ color }: { color: string }) {
       />
     </svg>
   );
-}
+});
 
 // ─── Component ───────────────────────────────────────────────────────────
 
@@ -144,7 +144,7 @@ interface SelectionHighlightsProps {
  * Renders colored border highlights around nodes selected by remote users.
  * Positioned in flow-space (inside ReactFlow viewport transform).
  */
-export function SelectionHighlights({ awarenessStates, nodes }: SelectionHighlightsProps) {
+export const SelectionHighlights = memo(function SelectionHighlights({ awarenessStates, nodes }: SelectionHighlightsProps) {
   // Build map: nodeId → { color, name }[]
   const highlights = useMemo(() => {
     const map = new Map<string, { color: string; name: string }[]>();
@@ -225,7 +225,7 @@ export function SelectionHighlights({ awarenessStates, nodes }: SelectionHighlig
   });
 
   return <>{elements}</>;
-}
+});
 
 // ─── Editing Indicators ──────────────────────────────────────────────────
 
@@ -239,7 +239,7 @@ interface EditingIndicatorsProps {
 /**
  * Shows "Editing..." indicator with user avatar on nodes being edited by others.
  */
-export function EditingIndicators({ awarenessStates, nodes }: EditingIndicatorsProps) {
+export const EditingIndicators = memo(function EditingIndicators({ awarenessStates, nodes }: EditingIndicatorsProps) {
   // Build map: nodeId → user info
   const editing = useMemo(() => {
     const map = new Map<string, { color: string; name: string }>();
@@ -332,7 +332,7 @@ export function EditingIndicators({ awarenessStates, nodes }: EditingIndicatorsP
   });
 
   return <>{elements}</>;
-}
+});
 
 // ─── Selection Highlights Overlay (viewport-transformed) ─────────────────
 
@@ -347,6 +347,15 @@ interface SelectionHighlightsOverlayProps {
  */
 export function SelectionHighlightsOverlay({ awarenessStates, nodes }: SelectionHighlightsOverlayProps) {
   const { x: vpX, y: vpY, zoom } = useViewport();
+
+  // Memoize children so they don't re-render when only the viewport transform changes
+  const children = useMemo(() => (
+    <>
+      <SelectionHighlights awarenessStates={awarenessStates} nodes={nodes} />
+      <EditingIndicators awarenessStates={awarenessStates} nodes={nodes} />
+      <CursorMessages awarenessStates={awarenessStates} />
+    </>
+  ), [awarenessStates, nodes]);
 
   return (
     <div
@@ -366,9 +375,7 @@ export function SelectionHighlightsOverlay({ awarenessStates, nodes }: Selection
           inset: 0,
         }}
       >
-        <SelectionHighlights awarenessStates={awarenessStates} nodes={nodes} />
-        <EditingIndicators awarenessStates={awarenessStates} nodes={nodes} />
-        <CursorMessages awarenessStates={awarenessStates} />
+        {children}
       </div>
     </div>
   );

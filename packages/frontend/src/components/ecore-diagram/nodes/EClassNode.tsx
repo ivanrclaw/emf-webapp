@@ -6,7 +6,7 @@
  *
  * Los atributos y referencias son clicables → seleccionan el feature en PropertyInspector.
  */
-import { useCallback, useState, type KeyboardEvent } from 'react';
+import { memo, useCallback, useState, type KeyboardEvent } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { EcoreNodeData, SerializableEClass, SerializableEAttribute, SerializableEReference } from '../types';
 import styles from './EClassNode.module.css';
@@ -32,7 +32,7 @@ function cardinalityLabel(lower: number, upper: number): string {
 }
 
 // ── Componente ────────────────────────────────────────────────
-export default function EClassNode(props: NodeProps) {
+const EClassNode = memo(function EClassNode(props: NodeProps) {
   const data = props.data as EcoreNodeData;
   const classifier = data.classifier;
 
@@ -196,4 +196,6 @@ export default function EClassNode(props: NodeProps) {
       </div>
     </div>
   );
-}
+});
+
+export default EClassNode;
