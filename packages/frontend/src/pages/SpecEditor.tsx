@@ -41,6 +41,8 @@ import { validateSpec, type ValidationIssue } from '../components/spec-editor/ho
 import { STYLE_TEMPLATES, applyTemplate } from '../components/spec-editor/hooks/styleTemplates';
 import { Save, Wand2, Undo2, Redo2, Download, Upload, Copy, Palette, AlertTriangle, ChevronRight } from '../components/icons';
 import ErrorPanel from '../components/feedback/ErrorPanel';
+import { useRoomPresence } from '../hooks/useRoomPresence';
+import { CollaborationBar } from '../components/collaboration/CollaborationBar';
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -59,6 +61,9 @@ function SpecEditorInner({ projectId: propPid, metamodelId: propMmid }: { projec
   const projectId = propPid || pid || '';
   const metamodelId = propMmid || mmid || '';
 
+  // ─── Collaboration Presence ─────────────────────────────────────
+  const presence = useRoomPresence({ roomId: `spec-${metamodelId}` });
+
   // ─── State ───────────────────────────────────────────────────────
   const [metamodel, setMetamodel] = useState<Metamodel | null>(null);
   const [activeSpec, setActiveSpec] = useState<GraphicalSpec | null>(null);
@@ -71,6 +76,11 @@ function SpecEditorInner({ projectId: propPid, metamodelId: propMmid }: { projec
 
   // Selection
   const [selection, setSelection] = useState<MappingSelection | null>(null);
+
+  // Sync selection to presence
+  useEffect(() => {
+    presence.setActiveElement(selection?.id ?? null);
+  }, [selection, presence]);
 
   // History (undo/redo)
   const history = useSpecHistory(null);
@@ -585,6 +595,14 @@ function SpecEditorInner({ projectId: propPid, metamodelId: propMmid }: { projec
 
         <div style={{ flex: 1 }} />
 
+        {/* Collaboration presence */}
+        <CollaborationBar
+          connected={presence.connected}
+          remoteStates={presence.remoteStates}
+          currentUserName={presence.userName}
+          currentUserColor={presence.userColor}
+        />
+
         {/* Validation indicator */}
         {(errorCount > 0 || warnCount > 0) && (
           <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, color: errorCount > 0 ? 'var(--error, #ef4444)' : 'var(--warning, #f59e0b)' }} title={`${errorCount} error(s), ${warnCount} warning(s)`}>
@@ -681,6 +699,7 @@ function SpecEditorInner({ projectId: propPid, metamodelId: propMmid }: { projec
               onDeleteMapping={handleDeleteMapping}
               onDuplicateMapping={handleDuplicateMapping}
               onSelectLayer={setActiveLayerId}
+              remotePresence={presence.remoteStates}
             />
           )}
         </div>
@@ -697,6 +716,7 @@ function SpecEditorInner({ projectId: propPid, metamodelId: propMmid }: { projec
               onUpdateContainerMapping={handleUpdateContainerMapping}
               onUpdateEdgeMapping={handleUpdateEdgeMapping}
               onUpdateToolSections={handleUpdateToolSections}
+              onEditingField={presence.setEditingField}
             />
           )}
         </div>

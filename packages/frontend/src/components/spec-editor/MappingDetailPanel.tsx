@@ -41,6 +41,7 @@ interface MappingDetailPanelProps {
   onUpdateContainerMapping: (id: string, patch: Partial<ContainerMapping>) => void;
   onUpdateEdgeMapping: (id: string, patch: Partial<EdgeMapping>) => void;
   onUpdateToolSections: (sections: ToolSection[]) => void;
+  onEditingField?: (field: string | null) => void;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -54,6 +55,7 @@ export function MappingDetailPanel({
   onUpdateContainerMapping,
   onUpdateEdgeMapping,
   onUpdateToolSections,
+  onEditingField,
 }: MappingDetailPanelProps) {
   const [activeTab, setActiveTab] = useState('general');
 
@@ -66,63 +68,83 @@ export function MappingDetailPanel({
     return <EmptyState />;
   }
 
+  // Wrap in a container that tracks field focus for collaboration presence
+  const handleFieldFocus = (e: React.FocusEvent) => {
+    const target = e.target as HTMLElement;
+    const fieldName = target.getAttribute('name') || target.getAttribute('data-field') || target.closest('[data-field]')?.getAttribute('data-field');
+    if (fieldName && onEditingField) {
+      onEditingField(fieldName);
+    }
+  };
+  const handleFieldBlur = () => {
+    if (onEditingField) {
+      onEditingField(null);
+    }
+  };
+
   switch (selection.type) {
     case 'node': {
       const mapping = layer.nodeMappings.find((m) => m.id === selection.id);
       if (!mapping) return <EmptyState />;
       return (
-        <NodeMappingDetail
-          mapping={mapping}
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-          onUpdate={(patch) => onUpdateNodeMapping(selection.id, patch)}
-          toolSections={layer.toolSections}
-          onUpdateToolSections={onUpdateToolSections}
-          eclasses={eclasses}
-        />
+        <div onFocus={handleFieldFocus} onBlur={handleFieldBlur} style={{ height: '100%' }}>
+          <NodeMappingDetail
+            mapping={mapping}
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            onUpdate={(patch) => onUpdateNodeMapping(selection.id, patch)}
+            toolSections={layer.toolSections}
+            onUpdateToolSections={onUpdateToolSections}
+            eclasses={eclasses}
+          />
+        </div>
       );
     }
     case 'container': {
       const mapping = layer.containerMappings.find((m) => m.id === selection.id);
       if (!mapping) return <EmptyState />;
       return (
-        <ContainerMappingDetail
-          mapping={mapping}
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-          onUpdate={(patch) => onUpdateContainerMapping(selection.id, patch)}
-          toolSections={layer.toolSections}
-          onUpdateToolSections={onUpdateToolSections}
-          layer={layer}
-          eclasses={eclasses}
-        />
+        <div onFocus={handleFieldFocus} onBlur={handleFieldBlur} style={{ height: '100%' }}>
+          <ContainerMappingDetail
+            mapping={mapping}
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            onUpdate={(patch) => onUpdateContainerMapping(selection.id, patch)}
+            toolSections={layer.toolSections}
+            onUpdateToolSections={onUpdateToolSections}
+            layer={layer}
+            eclasses={eclasses}
+          />
+        </div>
       );
     }
     case 'edge': {
       const mapping = layer.edgeMappings.find((m) => m.id === selection.id);
       if (!mapping) return <EmptyState />;
       return (
-        <EdgeMappingDetail
-          mapping={mapping}
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-          onUpdate={(patch) => onUpdateEdgeMapping(selection.id, patch)}
-          toolSections={layer.toolSections}
-          onUpdateToolSections={onUpdateToolSections}
-          layer={layer}
-          eclasses={eclasses}
-        />
+        <div onFocus={handleFieldFocus} onBlur={handleFieldBlur} style={{ height: '100%' }}>
+          <EdgeMappingDetail
+            mapping={mapping}
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            onUpdate={(patch) => onUpdateEdgeMapping(selection.id, patch)}
+            toolSections={layer.toolSections}
+            onUpdateToolSections={onUpdateToolSections}
+            layer={layer}
+            eclasses={eclasses}
+          />
+        </div>
       );
     }
     case 'tool-section': {
       const section = layer.toolSections.find((s) => s.id === selection.id);
       if (!section) return <EmptyState />;
-      return <ToolSectionDetail section={section} allSections={layer.toolSections} onUpdate={onUpdateToolSections} />;
+      return <div onFocus={handleFieldFocus} onBlur={handleFieldBlur} style={{ height: '100%' }}><ToolSectionDetail section={section} allSections={layer.toolSections} onUpdate={onUpdateToolSections} /></div>;
     }
     case 'layer': {
       const l = allLayers.find((ly) => ly.id === selection.id);
       if (!l) return <EmptyState />;
-      return <LayerDetail layer={l} />;
+      return <div onFocus={handleFieldFocus} onBlur={handleFieldBlur} style={{ height: '100%' }}><LayerDetail layer={l} /></div>;
     }
     default:
       return <EmptyState />;

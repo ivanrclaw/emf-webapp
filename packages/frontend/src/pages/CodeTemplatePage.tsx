@@ -1,6 +1,7 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import Editor, { OnMount, BeforeMount } from '@monaco-editor/react';
+import type * as monacoTypes from 'monaco-editor';
 import {
   getMetamodel,
   getCodeTemplates,
@@ -17,6 +18,10 @@ import {
 } from '../api/client';
 import { Save, Plus, FileText, FileCode, Trash2 } from '../components/icons';
 import ErrorPanel from '../components/feedback/ErrorPanel';
+import { useRoomPresence } from '../hooks/useRoomPresence';
+import { useMonacoCursorSync } from '../hooks/useMonacoCursorSync';
+import { CollaborationBar } from '../components/collaboration/CollaborationBar';
+import { MonacoRemoteCursors } from '../components/collaboration/MonacoRemoteCursors';
 
 /* ------------------------------------------------------------------ */
 /*  Code Generator Page                                                 */
@@ -40,6 +45,12 @@ export default function CodeTemplatePage(props: CodeTemplatePageProps) {
   const params = useParams<{ pid: string; mmid: string }>();
   const projectId = props.projectId || params.pid || '';
   const metamodelId = props.metamodelId || params.mmid || '';
+
+  // ── Collaboration ────────────────────────────────────────────────
+  const editorRef = useRef<monacoTypes.editor.IStandaloneCodeEditor | null>(null);
+  const presence = useRoomPresence({ roomId: `codegen-${metamodelId}` });
+  useMonacoCursorSync(editorRef.current, presence.setCursor as (cursor: { line: number; column: number } | null) => void);
+
   const [monacoTheme, setMonacoTheme] = useState(() =>
     document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'vs-dark'
   );
@@ -200,6 +211,7 @@ export default function CodeTemplatePage(props: CodeTemplatePageProps) {
   // ── Editor mount ──────────────────────────────────────────────────
 
   const handleEditorMount: OnMount = (editor) => {
+    editorRef.current = editor;
     setTimeout(() => editor.getAction('editor.action.formatDocument')?.run(), 500);
   };
 
@@ -260,6 +272,7 @@ export default function CodeTemplatePage(props: CodeTemplatePageProps) {
     setFormName(t.name);
     setFormLang(t.language);
     setFormContent(t.template);
+    presence.setActiveElement(t.id);
   };
 
   const handleDelete = async (id: string) => {
@@ -278,6 +291,7 @@ export default function CodeTemplatePage(props: CodeTemplatePageProps) {
     setFormName('');
     setFormLang('html');
     setFormContent('');
+    presence.setActiveElement(null);
   };
 
   if (loading) {
@@ -311,6 +325,12 @@ export default function CodeTemplatePage(props: CodeTemplatePageProps) {
             </p>
           </div>
         </div>
+        <CollaborationBar
+          connected={presence.connected}
+          remoteStates={presence.remoteStates}
+          currentUserName={presence.userName}
+          currentUserColor={presence.userColor}
+        />
       </div>
 
       {error && <ErrorPanel title="Error" message={error} compact />}
@@ -326,6 +346,8 @@ export default function CodeTemplatePage(props: CodeTemplatePageProps) {
             <input
               value={formName}
               onChange={(e) => setFormName(e.target.value)}
+              onFocus={() => presence.setEditingField('name')}
+              onBlur={() => presence.setEditingField(null)}
               placeholder="e.g., GenerateHTML"
               style={{
                 width: '100%', padding: '8px 12px', borderRadius: 6,
@@ -339,6 +361,8 @@ export default function CodeTemplatePage(props: CodeTemplatePageProps) {
             <select
               value={formLang}
               onChange={(e) => setFormLang(e.target.value)}
+              onFocus={() => presence.setEditingField('language')}
+              onBlur={() => presence.setEditingField(null)}
               style={{
                 width: '100%', padding: '8px 12px', borderRadius: 6,
                 border: '1px solid var(--border)', fontSize: '.8125rem',
@@ -372,6 +396,7 @@ export default function CodeTemplatePage(props: CodeTemplatePageProps) {
                 scrollBeyondLastLine: false,
               }}
             />
+            <MonacoRemoteCursors monacoEditor={editorRef.current} remoteStates={presence.remoteStates as any} />
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>

@@ -35,6 +35,11 @@ import {
   offsetToLineColumn,
   runStatusFromResult,
 } from '../components/ocl/types';
+import { useRoomPresence } from '../hooks/useRoomPresence';
+import { useMonacoCursorSync } from '../hooks/useMonacoCursorSync';
+import { CollaborationBar } from '../components/collaboration/CollaborationBar';
+import { MonacoRemoteCursors } from '../components/collaboration/MonacoRemoteCursors';
+import type { editor as MonacoEditorNS } from 'monaco-editor';
 
 interface OCLConstraintPageProps {
   projectId?: string;
@@ -56,6 +61,11 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
   const params = useParams<{ pid: string; mmid: string }>();
   const projectId = props.projectId || params.pid || '';
   const metamodelId = props.metamodelId || params.mmid || '';
+
+  // ── Collaboration ──────────────────────────────────────────
+  const presence = useRoomPresence({ roomId: `ocl-${metamodelId}` });
+  const monacoEditorRef = useRef<MonacoEditorNS.IStandaloneCodeEditor | null>(null);
+  useMonacoCursorSync(monacoEditorRef.current, presence.setCursor);
 
   // ── Theme sync ─────────────────────────────────────────────
   const [theme, setTheme] = useState<'light' | 'dark'>(() =>
@@ -272,13 +282,14 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
         expression: c.expression,
         severity: c.severity,
       });
+      presence.setActiveElement(id);
       try {
         localStorage.setItem(`ocl-ide.last:${metamodelId}`, id);
       } catch {
         /* noop */
       }
     },
-    [constraints, metamodelId],
+    [constraints, metamodelId, presence],
   );
 
   const handleNew = useCallback(
@@ -440,7 +451,12 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
   // ── Form change ──────────────────────────────────────────
   const updateForm = useCallback((patch: Partial<ConstraintFormState>) => {
     setForm((f) => ({ ...f, ...patch }));
-  }, []);
+    // Notify collaboration which field is being edited
+    const fields = Object.keys(patch);
+    if (fields.length > 0) {
+      presence.setEditingField(fields[0]);
+    }
+  }, [presence]);
 
   // ── Jump to problem ──────────────────────────────────────
   const handleJumpTo = useCallback(
@@ -596,6 +612,7 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
         background: 'var(--bg)',
         color: 'var(--text)',
         overflow: 'hidden',
+        position: 'relative',
       }}
     >
       {/* Optional back-link header for standalone route */}
@@ -634,6 +651,16 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
         onValidateExpression={handleValidateExpression}
         onValidateAll={handleValidateAll}
       />
+
+      {/* Collaboration bar */}
+      <div style={{ position: 'absolute', top: 8, right: 12, zIndex: 10 }}>
+        <CollaborationBar
+          connected={presence.connected}
+          remoteStates={presence.remoteStates}
+          currentUserName={presence.userName}
+          currentUserColor={presence.userColor}
+        />
+      </div>
 
       {error && (
         <div style={{ padding: 8 }}>
@@ -700,8 +727,10 @@ export default function OCLConstraintPage(props: OCLConstraintPageProps) {
               onFormat={handleFormat}
               onNew={() => handleNew()}
               registerEditorAPI={registerEditorAPI}
+              onEditorInstance={(editor) => { monacoEditorRef.current = editor; }}
             />
           )}
+          <MonacoRemoteCursors monacoEditor={monacoEditorRef.current} remoteStates={presence.remoteStates} />
 
           {problemsVisible && (
             <ResizablePanelV

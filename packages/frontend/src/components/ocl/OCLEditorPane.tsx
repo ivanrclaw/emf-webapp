@@ -18,6 +18,8 @@ interface OCLEditorPaneProps {
   onNew: () => void;
   /** Imperative API for jumping to an offset in the editor. */
   registerEditorAPI?: (api: { revealOffset: (offset: number) => void }) => void;
+  /** Callback to expose the Monaco editor instance to the parent. */
+  onEditorInstance?: (editor: MonacoEditor.IStandaloneCodeEditor) => void;
 }
 
 const EMF_DARK = 'emf-ocl-dark';
@@ -114,6 +116,7 @@ export function OCLEditorPane({
   onFormat,
   onNew,
   registerEditorAPI,
+  onEditorInstance,
 }: OCLEditorPaneProps) {
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<any>(null);
@@ -133,6 +136,9 @@ export function OCLEditorPane({
   const handleMount: OnMount = (editor, monaco) => {
     editorRef.current = editor;
     monacoRef.current = monaco;
+
+    // Expose editor instance to parent
+    onEditorInstance?.(editor);
 
     // Register API
     registerEditorAPI?.({

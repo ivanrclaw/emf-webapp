@@ -25,6 +25,7 @@ import {
   ConnectionMode,
   useReactFlow,
   SelectionMode,
+  useViewport,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import {
@@ -62,6 +63,9 @@ import { AlignmentToolbar } from '../components/model-editor/AlignmentToolbar';
 import { SnapGuides, useSnapGuides } from '../components/model-editor/SnapGuides';
 import { exportJSON, exportXMI, exportSVG, exportPNG, downloadBlob } from '../lib/model-export';
 import { importJSON, importXMI, readFileAsText, detectFormat } from '../lib/model-import';
+import { useRoomPresence } from '../hooks/useRoomPresence';
+import type { PresenceState } from '../hooks/useRoomPresence';
+import { CollaborationBar } from '../components/collaboration/CollaborationBar';
 import {
   collectActiveToolSections,
   collectActiveMappings,
@@ -103,6 +107,83 @@ const edgeTypes = { vsmEdge: VsmEdge } as any;
 
 function uid(): string {
   return `obj_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Remote Cursors Canvas (inline — presence-based)                     */
+/* ------------------------------------------------------------------ */
+
+function RemoteCursorsCanvas({ remoteStates }: { remoteStates: Map<number, PresenceState> }) {
+  const viewport = useViewport();
+
+  const cursors = useMemo(() => {
+    const result: Array<{ id: number; x: number; y: number; name: string; color: string }> = [];
+    remoteStates.forEach((state, clientId) => {
+      if (!state.cursor || !state.user) return;
+      if (!('x' in state.cursor)) return; // skip line/column cursors
+      // Transform flow coords → screen coords
+      const screenX = state.cursor.x * viewport.zoom + viewport.x;
+      const screenY = state.cursor.y * viewport.zoom + viewport.y;
+      result.push({ id: clientId, x: screenX, y: screenY, name: state.user.name, color: state.user.color });
+    });
+    return result;
+  }, [remoteStates, viewport]);
+
+  if (cursors.length === 0) return null;
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        inset: 0,
+        pointerEvents: 'none',
+        zIndex: 1000,
+        overflow: 'hidden',
+      }}
+    >
+      {cursors.map((c) => (
+        <div
+          key={c.id}
+          style={{
+            position: 'absolute',
+            left: c.x,
+            top: c.y,
+            transition: 'left 120ms ease-out, top 120ms ease-out',
+            pointerEvents: 'none',
+          }}
+        >
+          {/* Cursor arrow SVG */}
+          <svg width="16" height="20" viewBox="0 0 16 20" fill="none" style={{ display: 'block' }}>
+            <path
+              d="M0.5 0.5L15 10.5L8 11.5L5 19L0.5 0.5Z"
+              fill={c.color}
+              stroke="#fff"
+              strokeWidth="1"
+            />
+          </svg>
+          {/* Name label */}
+          <span
+            style={{
+              position: 'absolute',
+              left: 14,
+              top: 12,
+              background: c.color,
+              color: '#fff',
+              fontSize: 10,
+              fontWeight: 600,
+              padding: '1px 5px',
+              borderRadius: 3,
+              whiteSpace: 'nowrap',
+              lineHeight: '14px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+            }}
+          >
+            {c.name}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -167,6 +248,28 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   // Stores loaded positions so nodes keep their place on re-render
   const savedPositionsRef = useRef<Record<string, { x: number; y: number }>>({}); 
+
+  // ─── Collaboration (presence-only) ──────────────────────────────
+  const presence = useRoomPresence({ roomId: `model-${modelId}` });
+
+  // Broadcast selection changes to presence
+  useEffect(() => {
+    presence.setActiveElement(selectedNodeId);
+  }, [selectedNodeId, presence]);
+
+  // Mouse move handler for cursor broadcasting
+  const handleCanvasMouseMove = useCallback((e: React.MouseEvent) => {
+    try {
+      const flowPos = reactFlowInstance.screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      presence.setCursor({ x: flowPos.x, y: flowPos.y });
+    } catch {
+      // screenToFlowPosition may throw if instance not ready
+    }
+  }, [reactFlowInstance, presence]);
+
+  const handleCanvasMouseLeave = useCallback(() => {
+    presence.setCursor(null);
+  }, [presence]);
 
   // ─── Derived from spec + active layers ───────────────────────────
   const toolSections = useMemo(() => {
@@ -1088,35 +1191,47 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg)' }}>
       {/* Toolbar */}
-      <EditorToolbar
-        projectId={pid || ''}
-        metamodelId={mmid || ''}
-        modelName={m1Model?.name || 'Model Editor'}
-        canUndo={history.canUndo}
-        canRedo={history.canRedo}
-        onUndo={handleUndo}
-        onRedo={handleRedo}
-        hasSelection={!!selectedNodeId || selectedNodeIds.size > 0}
-        onDelete={handleDelete}
-        onDuplicate={handleDuplicate}
-        onSelectAll={handleSelectAll}
-        zoomLevel={zoomLevel}
-        onZoomIn={() => reactFlowInstance.zoomIn()}
-        onZoomOut={() => reactFlowInstance.zoomOut()}
-        onFitView={() => reactFlowInstance.fitView()}
-        showGrid={showGrid}
-        onToggleGrid={() => setShowGrid((v) => !v)}
-        showMinimap={showMinimap}
-        onToggleMinimap={() => setShowMinimap((v) => !v)}
-        layers={allLayers}
-        activeLayers={activeLayers}
-        onToggleLayer={handleToggleLayer}
-        saving={saving}
-        saveStatus={saveStatus}
-        onSave={handleSave}
-        onExport={handleExport}
-        onImport={handleImport}
-      />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
+        <div style={{ flex: 1 }}>
+          <EditorToolbar
+            projectId={pid || ''}
+            metamodelId={mmid || ''}
+            modelName={m1Model?.name || 'Model Editor'}
+            canUndo={history.canUndo}
+            canRedo={history.canRedo}
+            onUndo={handleUndo}
+            onRedo={handleRedo}
+            hasSelection={!!selectedNodeId || selectedNodeIds.size > 0}
+            onDelete={handleDelete}
+            onDuplicate={handleDuplicate}
+            onSelectAll={handleSelectAll}
+            zoomLevel={zoomLevel}
+            onZoomIn={() => reactFlowInstance.zoomIn()}
+            onZoomOut={() => reactFlowInstance.zoomOut()}
+            onFitView={() => reactFlowInstance.fitView()}
+            showGrid={showGrid}
+            onToggleGrid={() => setShowGrid((v) => !v)}
+            showMinimap={showMinimap}
+            onToggleMinimap={() => setShowMinimap((v) => !v)}
+            layers={allLayers}
+            activeLayers={activeLayers}
+            onToggleLayer={handleToggleLayer}
+            saving={saving}
+            saveStatus={saveStatus}
+            onSave={handleSave}
+            onExport={handleExport}
+            onImport={handleImport}
+          />
+        </div>
+        <div style={{ padding: '4px 10px', flexShrink: 0 }}>
+          <CollaborationBar
+            connected={presence.connected}
+            remoteStates={presence.remoteStates}
+            currentUserName={presence.userName}
+            currentUserColor={presence.userColor}
+          />
+        </div>
+      </div>
 
       {/* Alignment toolbar — visible when multi-select */}
       <AlignmentToolbar
@@ -1233,6 +1348,8 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
           style={{ flex: 1, position: 'relative', cursor: canvasCursor }}
           onDragOver={handleCanvasDragOver}
           onDrop={handleCanvasDrop}
+          onMouseMove={handleCanvasMouseMove}
+          onMouseLeave={handleCanvasMouseLeave}
         >
           {/* Tool state banner */}
           {toolBannerText && (
@@ -1315,6 +1432,9 @@ function ModelEditorInner(props: { projectId?: string; metamodelId?: string; mod
             onCreateNode={handleCreateNode}
             instanceCounts={instanceCounts}
           />
+
+          {/* Remote cursors overlay */}
+          <RemoteCursorsCanvas remoteStates={presence.remoteStates} />
         </div>
 
         {/* Right — Property Inspector */}

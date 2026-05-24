@@ -16,6 +16,7 @@ import type {
   EdgeMapping,
   ToolSection,
 } from '../spec-diagram/types';
+import type { PresenceState } from '../../hooks/useRoomPresence';
 import {
   Box,
   Link2,
@@ -57,6 +58,7 @@ export interface MappingNavigatorProps {
   onDeleteMapping: (type: SelectionType, id: string) => void;
   onDuplicateMapping: (type: SelectionType, id: string) => void;
   onSelectLayer: (layerId: string) => void;
+  remotePresence?: Map<number, PresenceState>;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -74,6 +76,7 @@ export function MappingNavigator({
   onDeleteMapping,
   onDuplicateMapping,
   onSelectLayer,
+  remotePresence,
 }: MappingNavigatorProps) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     new Set(['nodes', 'containers', 'edges', 'tools', 'layers'])
@@ -119,6 +122,20 @@ export function MappingNavigator({
     });
   };
 
+  // Compute which mapping IDs have remote users viewing them
+  const remoteViewers = useMemo(() => {
+    const map = new Map<string, string[]>(); // mappingId -> colors[]
+    if (!remotePresence) return map;
+    remotePresence.forEach((state) => {
+      if (state.activeElementId) {
+        const existing = map.get(state.activeElementId) || [];
+        existing.push(state.user.color);
+        map.set(state.activeElementId, existing);
+      }
+    });
+    return map;
+  }, [remotePresence]);
+
   const isSelected = (type: SelectionType, id: string) =>
     selection?.type === type && selection?.id === id;
 
@@ -145,6 +162,7 @@ export function MappingNavigator({
               onClick={() => onSelect({ type: 'node', id: nm.id })}
               onDelete={() => onDeleteMapping('node', nm.id)}
               onDuplicate={() => onDuplicateMapping('node', nm.id)}
+              remoteColors={remoteViewers.get(nm.id)}
             />
           ))}
           {layer.nodeMappings.length === 0 && (
@@ -182,6 +200,7 @@ export function MappingNavigator({
               onClick={() => onSelect({ type: 'container', id: cm.id })}
               onDelete={() => onDeleteMapping('container', cm.id)}
               onDuplicate={() => onDuplicateMapping('container', cm.id)}
+              remoteColors={remoteViewers.get(cm.id)}
             />
           ))}
           {layer.containerMappings.length === 0 && (
@@ -220,6 +239,7 @@ export function MappingNavigator({
               onDelete={() => onDeleteMapping('edge', em.id)}
               onDuplicate={() => onDuplicateMapping('edge', em.id)}
               isEdge
+              remoteColors={remoteViewers.get(em.id)}
             />
           ))}
           {layer.edgeMappings.length === 0 && (
@@ -357,6 +377,7 @@ function MappingItem({
   onDelete,
   onDuplicate,
   isEdge,
+  remoteColors,
 }: {
   label: string;
   sublabel: string;
@@ -366,6 +387,7 @@ function MappingItem({
   onDelete: () => void;
   onDuplicate: () => void;
   isEdge?: boolean;
+  remoteColors?: string[];
 }) {
   const [hovered, setHovered] = useState(false);
 
@@ -397,7 +419,27 @@ function MappingItem({
       />
       {/* Label */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={styles.itemLabel}>{label}</div>
+        <div style={styles.itemLabel}>
+          {label}
+          {remoteColors && remoteColors.length > 0 && (
+            <span style={{ display: 'inline-flex', gap: 2, marginLeft: 4, verticalAlign: 'middle' }}>
+              {remoteColors.slice(0, 3).map((c, i) => (
+                <span
+                  key={i}
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: '50%',
+                    background: c,
+                    display: 'inline-block',
+                    flexShrink: 0,
+                    boxShadow: `0 0 3px ${c}66`,
+                  }}
+                />
+              ))}
+            </span>
+          )}
+        </div>
         <div style={styles.itemSublabel}>{sublabel}</div>
       </div>
       {/* Actions (visible on hover/selected) */}
