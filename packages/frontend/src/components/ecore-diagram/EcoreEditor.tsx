@@ -421,10 +421,13 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
   }, [collaborative.remoteStates, addToast]);
 
   // ── Leader-gated autosave (only the client with lowest clientID persists) ──
+  // When not connected to collaboration, save directly (single-user fallback).
   // 300ms debounce — fast enough for concurrency, avoids hammering on every keystroke
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (model.isDirty && collaborative.isLeader) {
+    // Save if dirty AND either: (a) we're the leader, or (b) not connected (solo mode)
+    const shouldSave = model.isDirty && (collaborative.isLeader || !collaborative.connected);
+    if (shouldSave) {
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
       autoSaveTimerRef.current = setTimeout(() => {
         model.save().catch((err) => {
@@ -435,7 +438,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
     return () => {
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     };
-  }, [model.isDirty, collaborative.isLeader]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [model.isDirty, collaborative.isLeader, collaborative.connected]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Track initial load complete
   if (fetchedPkg && initialLoad.current) {
