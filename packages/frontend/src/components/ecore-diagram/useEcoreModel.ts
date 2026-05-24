@@ -649,8 +649,10 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg, violationsMa
     positions.forEach((pos, id) => {
       posMap.current.set(id, pos);
     });
+    console.log('[AutoLayout] Applied positions to posMap:', positions.size, 'nodes');
     resync();
     setIsDirty(true);
+    console.log('[AutoLayout] isDirty set to true');
   }, [resync]);
 
   // ── Save ───────────────────────────────────────────────────
