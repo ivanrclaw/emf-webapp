@@ -14,4 +14,7 @@ export { generateOdesign } from './SiriusOdesignGenerator.js';
 export { generateAird } from './SiriusAirdGenerator.js';
 export { generateEuGENiaAnnotations, viewpointSpecToEuGENia, serializeEuGENiaAnnotationXml, } from './EuGENiaAnnotationGenerator.js';
 export { generateAcceleoModule, generateAcceleoSingleTemplate } from './AcceleoMtlGenerator.js';
+export { parseCompleteOCL } from './CompleteOCLParser.js';
+export { parseOdesign } from './SiriusOdesignParser.js';
+export { serializeToEmfatic, parseEmfatic } from './EmfaticSerializer.js';
 //# sourceMappingURL=index.js.map

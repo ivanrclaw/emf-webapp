@@ -74,3 +74,17 @@ export type {
 } from './EuGENiaAnnotationGenerator.js';
 export { generateAcceleoModule, generateAcceleoSingleTemplate } from './AcceleoMtlGenerator.js';
 export type { CodeTemplateInput, AcceleoModuleOptions } from './AcceleoMtlGenerator.js';
+export { parseCompleteOCL } from './CompleteOCLParser.js';
+export type { CompleteOCLParseResult } from './CompleteOCLParser.js';
+export { parseOdesign } from './SiriusOdesignParser.js';
+export type {
+  OdesignParseResult,
+  ParsedViewpoint,
+  ParsedLayer,
+  ParsedNodeMapping,
+  ParsedContainerMapping,
+  ParsedEdgeMapping,
+  ParsedToolSection,
+  ParsedTool,
+} from './SiriusOdesignParser.js';
+export { serializeToEmfatic, parseEmfatic } from './EmfaticSerializer.js';

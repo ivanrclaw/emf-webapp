@@ -47,6 +47,7 @@ import {
   generateAird,
   generateAcceleoModule,
   exportXmiInstance,
+  serializeToEmfatic,
   type SerializableEPackage,
   type OCLConstraintInput,
   type OdesignViewpointSpec,
@@ -191,10 +192,20 @@ export class ProjectExportService {
     const ecoreXmi = this.ecoreTransformer.export(content, nsURI, nsPrefix, 'xmi');
     zip.addFile(`${projectDir}${ecoreFilePath}`, Buffer.from(ecoreXmi));
 
+    // Build serializable representation (used by multiple generators)
+    const serializable = this.contentToSerializable(content, nsURI, nsPrefix, pkgName);
+
+    // ─── 2b. .emf (Emfatic textual format) ────────────────────
+    try {
+      const emfaticContent = serializeToEmfatic(serializable);
+      zip.addFile(`${projectDir}model/${pkgName}.emf`, Buffer.from(emfaticContent));
+    } catch {
+      // Emfatic serialization is best-effort
+    }
+
     // ─── 3. .genmodel ─────────────────────────────────────────
     const genmodelFileName = `${pkgName}.genmodel`;
     const genmodelFilePath = `model/${genmodelFileName}`;
-    const serializable = this.contentToSerializable(content, nsURI, nsPrefix, pkgName);
     const genmodel = generateGenmodel(serializable, {
       ecoreFilePath: ecoreFileName,
       basePackage: `org.example`,

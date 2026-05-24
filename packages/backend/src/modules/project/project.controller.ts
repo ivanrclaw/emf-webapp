@@ -19,16 +19,21 @@ import {
   Body,
   Query,
   Res,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
 import { ProjectService } from './project.service.js';
 import { ProjectExportService } from './project-export.service.js';
+import { ProjectImportService } from './project-import.service.js';
 
 @Controller('projects')
 export class ProjectController {
   constructor(
     private readonly service: ProjectService,
     private readonly exportService: ProjectExportService,
+    private readonly importService: ProjectImportService,
   ) {}
 
   @Get()
@@ -93,5 +98,17 @@ export class ProjectController {
     } catch (err) {
       res.status(500).json({ error: 'Failed to export project as Eclipse bundle', details: (err as Error).message });
     }
+  }
+
+  @Post('import/eclipse')
+  @UseInterceptors(FileInterceptor('file'))
+  async importEclipse(
+    @UploadedFile() file: Express.Multer.File,
+    @Body('name') name?: string,
+  ) {
+    if (!file) {
+      return { error: 'No file uploaded' };
+    }
+    return this.importService.importEclipseProject(file.buffer, name);
   }
 }
