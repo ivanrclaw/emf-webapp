@@ -645,6 +645,9 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg, violationsMa
     setLoading(true);
     try {
       const content = buildContent(pkgRef.current, posMap.current);
+      console.log('[Save] posMap size:', posMap.current.size);
+      console.log('[Save] pkgRef classifiers:', pkgRef.current.eClassifiers.length);
+      console.log('[Save] content.eClassifiers positions:', content.eClassifiers?.map((c: any) => ({ id: c.id?.slice(0,8), name: c.name, pos: c.position })));
       await updateMetamodelContent(projectId, metamodelId, content);
       setIsDirty(false);
     } finally {
