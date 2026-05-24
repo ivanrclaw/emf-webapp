@@ -8,6 +8,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ProjectController } from './project.controller.js';
 import { ProjectService } from './project.service.js';
 import { ProjectExportService } from './project-export.service.js';
+import { EcoreTransformer } from '../../common/ecore-transformer.js';
 import { Project } from './project.entity.js';
 import { Metamodel } from '../metamodel/metamodel.entity.js';
 import { M1Model } from '../m1model/m1model.entity.js';
@@ -18,7 +19,7 @@ import { CodeTemplate } from '../codetemplate/codetemplate.entity.js';
 @Module({
   imports: [TypeOrmModule.forFeature([Project, Metamodel, M1Model, GraphicalSpec, OCLConstraint, CodeTemplate])],
   controllers: [ProjectController],
-  providers: [ProjectService, ProjectExportService],
+  providers: [ProjectService, ProjectExportService, EcoreTransformer],
   exports: [ProjectService, ProjectExportService],
 })
 export class ProjectModule {}
