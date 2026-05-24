@@ -27,8 +27,11 @@ import ResizablePanel from '../components/workspace/ResizablePanel';
 import { OnboardingTour } from '../components/workspace/OnboardingTour';
 import { EditorProvider, useEditorContext } from '../contexts/EditorContext';
 import { PanelPortalProvider, usePanelPortals } from '../contexts/PanelPortalContext';
-import { getProjects, createProject } from '../api/client';
+import { getProjects, createProject, exportProjectAsEclipse, importEclipseProject } from '../api/client';
 import type { Project } from '../api/client';
+import { ExportFormatModal } from '../components/workspace/ExportFormatModal';
+import { ProgressOverlay } from '../components/workspace/ProgressOverlay';
+import { ZipPreviewModal } from '../components/workspace/ZipPreviewModal';
 
 // Tab content components
 import { DiagramTab, OCLTab, CodeGenTab, ModelsTab, ModelEditorTab, SpecTab, ProjectInfoTab } from '../components/workspace/tabs';
@@ -495,6 +498,10 @@ function WorkspaceInner() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [showImportEcore, setShowImportEcore] = useState(false);
+  const [showExportFormat, setShowExportFormat] = useState(false);
+  const [showZipPreview, setShowZipPreview] = useState(false);
+  const [zipPreviewFile, setZipPreviewFile] = useState<File | null>(null);
+  const [progressState, setProgressState] = useState<{ visible: boolean; message: string; progress?: number }>({ visible: false, message: '' });
   const [projectRefreshKey, setProjectRefreshKey] = useState(0);
 
   // Responsive sidebar: auto-collapse < 1024px, restore >= 1024px
@@ -566,15 +573,25 @@ function WorkspaceInner() {
           editor.actions.importEcore();
           break;
         case 'import-eclipse-zip':
-          editor.actions.importEclipseZip();
+          {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.zip';
+            input.onchange = () => {
+              const file = input.files?.[0];
+              if (!file) return;
+              setZipPreviewFile(file);
+              setShowZipPreview(true);
+            };
+            input.click();
+          }
           break;
         case 'export-ecore':
           addToast('Exporting .ecore file...', 'info');
           editor.actions.exportEcore();
           break;
         case 'export-zip':
-          addToast('Exporting .zip file...', 'info');
-          editor.actions.exportZip();
+          setShowExportFormat(true);
           break;
         case 'validate':
           editor.actions.validate();
@@ -799,6 +816,76 @@ function WorkspaceInner() {
           });
         }}
       />}
+
+      {/* Export Format Selector */}
+      <ExportFormatModal
+        open={showExportFormat}
+        onClose={() => setShowExportFormat(false)}
+        onSelect={(format) => {
+          setShowExportFormat(false);
+          if (format === 'json') {
+            setProgressState({ visible: true, message: 'Exporting JSON...' });
+            editor.actions.exportZip();
+            setTimeout(() => setProgressState({ visible: false, message: '' }), 1500);
+          } else {
+            setProgressState({ visible: true, message: 'Generating Eclipse project...' });
+            const projectId = workspace.currentProjectId;
+            if (projectId) {
+              exportProjectAsEclipse(projectId);
+            }
+            setTimeout(() => setProgressState({ visible: false, message: '' }), 2000);
+          }
+        }}
+      />
+
+      {/* ZIP Preview before Import */}
+      <ZipPreviewModal
+        open={showZipPreview}
+        file={zipPreviewFile}
+        onClose={() => {
+          setShowZipPreview(false);
+          setZipPreviewFile(null);
+        }}
+        onConfirm={async () => {
+          setShowZipPreview(false);
+          if (!zipPreviewFile) return;
+          setProgressState({ visible: true, message: 'Importing Eclipse project...', progress: 0 });
+          try {
+            setProgressState({ visible: true, message: 'Parsing ZIP contents...', progress: 20 });
+            const result = await importEclipseProject(zipPreviewFile);
+            setProgressState({ visible: true, message: 'Creating project...', progress: 80 });
+            if (result.projectId) {
+              setProgressState({ visible: true, message: 'Import complete!', progress: 100 });
+              addToast(`Imported: ${result.metamodels?.length || 0} metamodels, ${result.constraints || 0} constraints, ${result.specs || 0} specs`, 'success');
+              setProjectRefreshKey((k) => k + 1);
+              workspace.setContext(result.projectId);
+              workspace.openTab({
+                type: 'project-info',
+                title: result.name || 'Imported Project',
+                projectId: result.projectId,
+                metamodelId: null,
+                dirty: false,
+                closable: true,
+              });
+            } else {
+              addToast('Import failed: ' + (result.error || 'Unknown error'), 'error');
+            }
+          } catch (err: any) {
+            addToast('Error importing Eclipse project: ' + err.message, 'error');
+          } finally {
+            setTimeout(() => setProgressState({ visible: false, message: '' }), 1000);
+            setZipPreviewFile(null);
+          }
+        }}
+      />
+
+      {/* Progress Overlay */}
+      <ProgressOverlay
+        visible={progressState.visible}
+        message={progressState.message}
+        progress={progressState.progress}
+        indeterminate={progressState.progress === undefined}
+      />
     </div>
   );
 }

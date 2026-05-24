@@ -75,7 +75,7 @@ function getButtonsForTab(tabType: string | null): ToolbarButton[] {
         { action: 'import-ecore', label: 'Import .ecore', icon: <Upload size={14} />, group: 1, shortcut: null },
         { action: 'import-eclipse-zip', label: 'Import Eclipse ZIP', icon: <Upload size={14} />, group: 1, shortcut: null },
         { action: 'export-ecore', label: 'Export .ecore', icon: <Download size={14} />, group: 1, shortcut: null },
-        { action: 'export-zip', label: 'Eclipse Project', icon: <Archive size={14} />, group: 1, shortcut: null },
+        { action: 'export-zip', label: 'Export Project', icon: <Archive size={14} />, group: 1, shortcut: null },
         { action: 'validate', label: 'Validate', icon: <CircleCheck size={14} />, group: 2, shortcut: 'Ctrl+Shift+V' },
         { action: 'undo', label: 'Undo', icon: <Undo2 size={14} />, group: 3, shortcut: 'Ctrl+Z' },
         { action: 'redo', label: 'Redo', icon: <Redo2 size={14} />, group: 3, shortcut: 'Ctrl+Shift+Z' },

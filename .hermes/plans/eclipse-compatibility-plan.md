@@ -23,16 +23,25 @@ Commit: `2a191ef` — Desplegado en producción.
 
 ---
 
-## Sprint 2 — Importación Eclipse → webapp
-Parsers para importar proyectos Eclipse existentes.
+## Sprint 2 — Importación Eclipse + Emfatic + Frontend (COMPLETADO ✓)
+Commits: `cb96719`, `e9aa345` — Desplegado en producción.
 
-### Tareas:
-1. Parser .ecore XMI → SerializableEPackage (mejorar existente `parseEcoreXmi`)
-2. Parser Complete OCL (.ocl) → OCLConstraint[]
-3. Parser .odesign → ViewpointSpec JSON
-4. Parser .xmi instances → M1Model content
-5. Parser Eclipse project ZIP → crear proyecto completo
-6. Endpoint `POST /api/projects/import/eclipse` (multipart upload)
+### Parsers implementados:
+1. **CompleteOCLParser** → .ocl → OCLConstraintInput[]
+2. **SiriusOdesignParser** → .odesign XML → ViewpointSpec JSON
+3. **EmfaticSerializer** → bidireccional .emf ↔ SerializableEPackage
+
+### Import service:
+- `ProjectImportService` — detecta y parsea .ecore, .emf, .ocl, .odesign, .xmi, .mtl
+- `POST /api/projects/import/eclipse` (multipart upload)
+
+### Frontend:
+- `exportProjectAsEclipse()` — descarga ZIP Eclipse completo
+- `importEclipseProject()` — upload ZIP con feedback
+- Toolbar "Eclipse Project" → export Eclipse (no el ZIP interno)
+- Toolbar "Import Eclipse ZIP" → import con parsers
+
+### Tests: 18 nuevos (1417 total)
 
 ---
 
