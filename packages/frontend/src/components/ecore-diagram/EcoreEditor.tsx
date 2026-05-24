@@ -158,6 +158,7 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
         if (cancelled) return;
         setProjectName(proj.name);
         const content = mm.content as any;
+        console.log('[Load] Raw content from API, first 3 classifiers:', content?.eClassifiers?.slice(0, 3).map((c: any) => ({ id: c.id?.slice(0,8), name: c.name, pos: c.position })));
 
         // Ensure legacy classifiers without IDs get auto-generated IDs
         if (content && typeof content === 'object') {
