@@ -174,7 +174,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
         {/* Version */}
         <div style={dividerStyle} />
         <div style={{ ...sectionItemStyle, color: 'rgba(255, 255, 255, 0.5)' }}>
-          <span>v0.5.5</span>
+          <span>v0.5.6</span>
         </div>
       </div>
     </div>
