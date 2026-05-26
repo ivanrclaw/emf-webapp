@@ -350,7 +350,8 @@ function computeEdgePath(
       const r = 8;
 
       // Stub X: short horizontal segment out from source/target before turning vertical
-      const stubLen = 20;
+      // Different stub lengths per edge so vertical segments don't overlap
+      const stubLen = 20 + pairIndex * PAIR_OFFSET_SPACING;
       const dirX = tgt.x > src.x ? 1 : -1;
       const stubSrcX = src.x + dirX * stubLen;
       const stubTgtX = tgt.x - dirX * stubLen;
@@ -395,7 +396,8 @@ function computeEdgePath(
       const bypassX = ((src.x + tgt.x) / 2) + bypassOffset;
       const r = 8;
 
-      const stubLen = 20;
+      // Different stub lengths per edge so horizontal segments don't overlap
+      const stubLen = 20 + pairIndex * PAIR_OFFSET_SPACING;
       const dirY = tgt.y > src.y ? 1 : -1;
       const stubSrcY = src.y + dirY * stubLen;
       const stubTgtY = tgt.y - dirY * stubLen;
