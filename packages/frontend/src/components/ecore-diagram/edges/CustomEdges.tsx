@@ -267,8 +267,9 @@ function computeEdgePath(
     // Both corridors must be on the SAME side of the midpoint to avoid crossings.
     // When edges go in opposite directions (R→L and L→R), corridors on opposite
     // sides cause horizontal segments to cross the other edge's vertical segment.
-    // Placing both corridors on the same side eliminates all crossings.
-    const corridorOffset = -PAIR_OFFSET_SPACING * (pairIndex + 0.5);
+    // Spread symmetrically around midpoint — port spreading on endpoints ensures
+    // the corridors don't intersect even when symmetric.
+    const corridorOffset = PAIR_OFFSET_SPACING * ((pairTotal - 1) / 2 - pairIndex);
     return customSmoothStepPath(
       src.x, src.y, sourcePosition,
       tgt.x, tgt.y, targetPosition,
