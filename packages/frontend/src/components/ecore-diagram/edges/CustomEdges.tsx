@@ -261,22 +261,18 @@ function computeEdgePath(
     tgt = applySpread(targetX, targetY, targetPosition, data?.targetPortIndex ?? 0, data?.targetPortTotal ?? 1);
   }
 
-  // For paired edges (bidirectional), use React Flow's getSmoothStepPath
-  // with the already-spread source/target points. Each edge gets its own
-  // natural routing based on its unique start/end positions, avoiding crossings.
-  // The custom H→V→H path with corridor offset causes crossings because
-  // edges going in opposite directions get corridors on opposite sides.
+  // For paired edges (bidirectional), use simple straight lines.
+  // H→V→H routing with corridor offset causes crossings because the edges
+  // go in opposite directions. With port spreading already separating the
+  // start/end points vertically, straight lines are naturally parallel.
   if (pairTotal > 1) {
-    const result = getSmoothStepPath({
-      sourceX: src.x, sourceY: src.y,
-      targetX: tgt.x, targetY: tgt.y,
-      sourcePosition, targetPosition,
-      borderRadius: 8,
-    });
-    return [result[0], result[1], result[2]] as [string, number, number];
+    const midX = (src.x + tgt.x) / 2;
+    const midY = (src.y + tgt.y) / 2;
+    const path = `M ${src.x} ${src.y} C ${midX} ${src.y}, ${midX} ${tgt.y}, ${tgt.x} ${tgt.y}`;
+    return [path, midX, midY] as [string, number, number];
   }
 
-  // Single edges: use custom path (no corridor offset needed)
+  // Single edges: use custom H→V→H path
   return customSmoothStepPath(
     src.x, src.y, sourcePosition,
     tgt.x, tgt.y, targetPosition,
