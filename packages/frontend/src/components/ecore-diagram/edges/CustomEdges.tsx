@@ -262,11 +262,10 @@ function computeEdgePath(
   }
 
   // Corridor offset: separate the vertical mid-segments of paired edges horizontally
-  let corridorOffset = 0;
-  if (pairTotal > 1) {
-    const span = PAIR_OFFSET_SPACING * (pairTotal - 1);
-    corridorOffset = -span / 2 + pairIndex * PAIR_OFFSET_SPACING;
-  }
+  // When port spreading is active (pairTotal > 1), we do NOT apply corridor offset
+  // because the start/end points are already separated — adding corridor offset
+  // would cause the lines to cross in an X pattern.
+  const corridorOffset = 0;
 
   return customSmoothStepPath(
     src.x, src.y, sourcePosition,
