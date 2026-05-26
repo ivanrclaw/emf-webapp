@@ -343,20 +343,23 @@ function computeEdgePath(
 
     if (isHorizontal) {
       // H→V→H: each edge gets its own corridor X, offset from midpoint
-      // so vertical segments don't overlap visually
+      // Assign corridor based on DIRECTION: edge going right uses right corridor,
+      // edge going left uses left corridor. This prevents crossing regardless
+      // of which node is on which side.
       const baseCorridor = (midSrc.x + midTgt.x) / 2;
-      const corridorOffset = PAIR_OFFSET_SPACING * (pairIndex - (pairTotal - 1) / 2);
-      const corridorX = baseCorridor + corridorOffset;
+      const dirSign = src.x < tgt.x ? 1 : -1;
+      const corridorX = baseCorridor + (PAIR_OFFSET_SPACING / 2) * dirSign;
       const path = buildParallelHVH(src.x, src.y, corridorX, tgt.x, tgt.y, 8);
       const lx = baseCorridor;
       const ly = (src.y + tgt.y) / 2;
       return [path, lx, ly] as [string, number, number];
     } else {
       // V→H→V: each edge gets its own corridor Y, offset from midpoint
-      // so horizontal segments don't overlap visually
+      // Assign corridor based on DIRECTION: edge going down uses lower corridor,
+      // edge going up uses upper corridor.
       const baseCorridor = (midSrc.y + midTgt.y) / 2;
-      const corridorOffset = PAIR_OFFSET_SPACING * (pairIndex - (pairTotal - 1) / 2);
-      const corridorY = baseCorridor + corridorOffset;
+      const dirSign = src.y < tgt.y ? 1 : -1;
+      const corridorY = baseCorridor + (PAIR_OFFSET_SPACING / 2) * dirSign;
       const path = buildParallelVHV(src.x, src.y, corridorY, tgt.x, tgt.y, 8);
       const lx = (src.x + tgt.x) / 2;
       const ly = baseCorridor;
