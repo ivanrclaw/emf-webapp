@@ -264,7 +264,11 @@ function computeEdgePath(
   // For paired edges, use H→V→H routing with different corridor offsets
   // so each edge has its own vertical segment and they don't overlap.
   if (pairTotal > 1) {
-    const corridorOffset = PAIR_OFFSET_SPACING * (pairIndex - (pairTotal - 1) / 2);
+    // Both corridors must be on the SAME side of the midpoint to avoid crossings.
+    // When edges go in opposite directions (R→L and L→R), corridors on opposite
+    // sides cause horizontal segments to cross the other edge's vertical segment.
+    // Placing both corridors on the same side eliminates all crossings.
+    const corridorOffset = -PAIR_OFFSET_SPACING * (pairIndex + 0.5);
     return customSmoothStepPath(
       src.x, src.y, sourcePosition,
       tgt.x, tgt.y, targetPosition,
