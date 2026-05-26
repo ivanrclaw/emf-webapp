@@ -360,11 +360,11 @@ function computeEdgePath(
       const stubTgtX = tgt.x - dirX * stubLen;
 
       const rr = Math.min(r,
-        Math.abs(stubSrcX - src.x),
-        Math.abs(bypassY - src.y),
-        Math.abs(stubTgtX - stubSrcX),
-        Math.abs(tgt.y - bypassY),
-        Math.abs(tgt.x - stubTgtX),
+        Math.abs(stubSrcX - src.x) / 2,
+        Math.abs(bypassY - src.y) / 2,
+        Math.abs(stubTgtX - stubSrcX) / 2,
+        Math.abs(tgt.y - bypassY) / 2,
+        Math.abs(tgt.x - stubTgtX) / 2,
       ) || 0;
 
       if (rr < 0.5) {
@@ -410,11 +410,11 @@ function computeEdgePath(
       const stubTgtY = tgt.y - dirY * stubLen;
 
       const rr = Math.min(r,
-        Math.abs(stubSrcY - src.y),
-        Math.abs(bypassX - src.x),
-        Math.abs(stubTgtY - stubSrcY),
-        Math.abs(tgt.x - bypassX),
-        Math.abs(tgt.y - stubTgtY),
+        Math.abs(stubSrcY - src.y) / 2,
+        Math.abs(bypassX - src.x) / 2,
+        Math.abs(stubTgtY - stubSrcY) / 2,
+        Math.abs(tgt.x - bypassX) / 2,
+        Math.abs(tgt.y - stubTgtY) / 2,
       ) || 0;
 
       if (rr < 0.5) {
