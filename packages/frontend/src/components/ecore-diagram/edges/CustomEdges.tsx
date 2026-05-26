@@ -342,104 +342,72 @@ function computeEdgePath(
     const isHorizontal = (sourcePosition === Position.Left || sourcePosition === Position.Right);
 
     if (isHorizontal) {
-      // For paired bidirectional edges in horizontal layout:
-      // Route as H→V→H→V→H (5 segments) so lines leave/arrive horizontally.
-      // BOTH edges go the SAME direction (ABOVE) at different distances.
-      // This guarantees parallel non-crossing paths.
-      const baseOffset = PAIR_OFFSET_SPACING * 1.5;
-      const bypassY = Math.min(src.y, tgt.y) - baseOffset - pairIndex * PAIR_OFFSET_SPACING;
+      // Simple H→V→H: corridor at midpoint with small offset per edge
+      const midX = (src.x + tgt.x) / 2;
+      const offset = PAIR_OFFSET_SPACING / 2 * (pairIndex - (pairTotal - 1) / 2);
+      const corridorX = midX + offset;
       const r = 8;
 
-      // Different stub lengths per edge so vertical segments don't overlap
-      // Use different fractions of the gap per pairIndex to guarantee separation
-      const gap = Math.abs(tgt.x - src.x);
-      const fraction = pairIndex === 0 ? 0.15 : 0.35;
-      const stubLen = Math.max(8, gap * fraction);
-      const dirX = tgt.x > src.x ? 1 : -1;
-      const stubSrcX = src.x + dirX * stubLen;
-      const stubTgtX = tgt.x - dirX * stubLen;
-
       const rr = Math.min(r,
-        Math.abs(stubSrcX - src.x) / 2,
-        Math.abs(bypassY - src.y) / 2,
-        Math.abs(stubTgtX - stubSrcX) / 2,
-        Math.abs(tgt.y - bypassY) / 2,
-        Math.abs(tgt.x - stubTgtX) / 2,
+        Math.abs(corridorX - src.x) / 2,
+        Math.abs(tgt.x - corridorX) / 2,
+        Math.abs(tgt.y - src.y) / 2,
       ) || 0;
 
       if (rr < 0.5) {
-        const path = `M ${src.x} ${src.y} L ${stubSrcX} ${src.y} L ${stubSrcX} ${bypassY} L ${stubTgtX} ${bypassY} L ${stubTgtX} ${tgt.y} L ${tgt.x} ${tgt.y}`;
-        return [path, (src.x + tgt.x) / 2, bypassY] as [string, number, number];
+        const path = `M ${src.x} ${src.y} L ${corridorX} ${src.y} L ${corridorX} ${tgt.y} L ${tgt.x} ${tgt.y}`;
+        return [path, corridorX, (src.y + tgt.y) / 2] as [string, number, number];
       }
 
-      const dy1 = bypassY > src.y ? 1 : -1;
-      const dy2 = tgt.y > bypassY ? 1 : -1;
+      const dirX1 = corridorX > src.x ? 1 : -1;
+      const dirY = tgt.y > src.y ? 1 : -1;
+      const dirX2 = tgt.x > corridorX ? 1 : -1;
 
       const path = [
         `M ${src.x} ${src.y}`,
-        `L ${stubSrcX - dirX * rr} ${src.y}`,
-        `Q ${stubSrcX} ${src.y} ${stubSrcX} ${src.y + dy1 * rr}`,
-        `L ${stubSrcX} ${bypassY - dy1 * rr}`,
-        `Q ${stubSrcX} ${bypassY} ${stubSrcX + dirX * rr} ${bypassY}`,
-        `L ${stubTgtX - dirX * rr} ${bypassY}`,
-        `Q ${stubTgtX} ${bypassY} ${stubTgtX} ${bypassY + dy2 * rr}`,
-        `L ${stubTgtX} ${tgt.y - dy2 * rr}`,
-        `Q ${stubTgtX} ${tgt.y} ${stubTgtX + dirX * rr} ${tgt.y}`,
+        `L ${corridorX - dirX1 * rr} ${src.y}`,
+        `Q ${corridorX} ${src.y} ${corridorX} ${src.y + dirY * rr}`,
+        `L ${corridorX} ${tgt.y - dirY * rr}`,
+        `Q ${corridorX} ${tgt.y} ${corridorX + dirX2 * rr} ${tgt.y}`,
+        `L ${tgt.x} ${tgt.y}`,
+      ].join(' ');
+
+      const lx = corridorX;
+      const ly = (src.y + tgt.y) / 2;
+      return [path, lx, ly] as [string, number, number];
+    } else {
+      // Simple V→H→V: corridor at midpoint with small offset per edge
+      const midY = (src.y + tgt.y) / 2;
+      const offset = PAIR_OFFSET_SPACING / 2 * (pairIndex - (pairTotal - 1) / 2);
+      const corridorY = midY + offset;
+      const r = 8;
+
+      const rr = Math.min(r,
+        Math.abs(corridorY - src.y) / 2,
+        Math.abs(tgt.y - corridorY) / 2,
+        Math.abs(tgt.x - src.x) / 2,
+      ) || 0;
+
+      if (rr < 0.5) {
+        const path = `M ${src.x} ${src.y} L ${src.x} ${corridorY} L ${tgt.x} ${corridorY} L ${tgt.x} ${tgt.y}`;
+        return [path, (src.x + tgt.x) / 2, corridorY] as [string, number, number];
+      }
+
+      const dirY1 = corridorY > src.y ? 1 : -1;
+      const dirX = tgt.x > src.x ? 1 : -1;
+      const dirY2 = tgt.y > corridorY ? 1 : -1;
+
+      const path = [
+        `M ${src.x} ${src.y}`,
+        `L ${src.x} ${corridorY - dirY1 * rr}`,
+        `Q ${src.x} ${corridorY} ${src.x + dirX * rr} ${corridorY}`,
+        `L ${tgt.x - dirX * rr} ${corridorY}`,
+        `Q ${tgt.x} ${corridorY} ${tgt.x} ${corridorY + dirY2 * rr}`,
         `L ${tgt.x} ${tgt.y}`,
       ].join(' ');
 
       const lx = (src.x + tgt.x) / 2;
-      const ly = bypassY;
-      return [path, lx, ly] as [string, number, number];
-    } else {
-      // For paired bidirectional edges in vertical layout:
-      // Route as V→H→V→H→V (5 segments) so lines leave/arrive vertically.
-      // BOTH edges go the SAME direction (LEFT) at different distances.
-      // This guarantees parallel non-crossing paths.
-      const baseOffset = PAIR_OFFSET_SPACING * 1.5;
-      const bypassX = Math.min(src.x, tgt.x) - baseOffset - pairIndex * PAIR_OFFSET_SPACING;
-      const r = 8;
-
-      // Different stub lengths per edge so horizontal segments don't overlap
-      // Use different fractions of the gap per pairIndex to guarantee separation
-      const gap = Math.abs(tgt.y - src.y);
-      const fraction = pairIndex === 0 ? 0.15 : 0.35;
-      const stubLen = Math.max(8, gap * fraction);
-      const dirY = tgt.y > src.y ? 1 : -1;
-      const stubSrcY = src.y + dirY * stubLen;
-      const stubTgtY = tgt.y - dirY * stubLen;
-
-      const rr = Math.min(r,
-        Math.abs(stubSrcY - src.y) / 2,
-        Math.abs(bypassX - src.x) / 2,
-        Math.abs(stubTgtY - stubSrcY) / 2,
-        Math.abs(tgt.x - bypassX) / 2,
-        Math.abs(tgt.y - stubTgtY) / 2,
-      ) || 0;
-
-      if (rr < 0.5) {
-        const path = `M ${src.x} ${src.y} L ${src.x} ${stubSrcY} L ${bypassX} ${stubSrcY} L ${bypassX} ${stubTgtY} L ${tgt.x} ${stubTgtY} L ${tgt.x} ${tgt.y}`;
-        return [path, bypassX, (src.y + tgt.y) / 2] as [string, number, number];
-      }
-
-      const dx1 = bypassX > src.x ? 1 : -1;
-      const dx2 = tgt.x > bypassX ? 1 : -1;
-
-      const path = [
-        `M ${src.x} ${src.y}`,
-        `L ${src.x} ${stubSrcY - dirY * rr}`,
-        `Q ${src.x} ${stubSrcY} ${src.x + dx1 * rr} ${stubSrcY}`,
-        `L ${bypassX - dx1 * rr} ${stubSrcY}`,
-        `Q ${bypassX} ${stubSrcY} ${bypassX} ${stubSrcY + dirY * rr}`,
-        `L ${bypassX} ${stubTgtY - dirY * rr}`,
-        `Q ${bypassX} ${stubTgtY} ${bypassX + dx2 * rr} ${stubTgtY}`,
-        `L ${tgt.x - dx2 * rr} ${stubTgtY}`,
-        `Q ${tgt.x} ${stubTgtY} ${tgt.x} ${stubTgtY + dirY * rr}`,
-        `L ${tgt.x} ${tgt.y}`,
-      ].join(' ');
-
-      const lx = bypassX;
-      const ly = (src.y + tgt.y) / 2;
+      const ly = corridorY;
       return [path, lx, ly] as [string, number, number];
     }
   }
