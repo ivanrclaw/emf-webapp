@@ -245,10 +245,21 @@ function computeEdgePath(
   const pairTotal = data?.pairTotal ?? 1;
   const pairIndex = data?.pairIndex ?? 0;
 
-  // Always apply port spreading so edges sharing the same (node, side)
-  // get separated at their connection points — whether paired or not.
-  const src = applySpread(sourceX, sourceY, sourcePosition, data?.sourcePortIndex ?? 0, data?.sourcePortTotal ?? 1);
-  const tgt = applySpread(targetX, targetY, targetPosition, data?.targetPortIndex ?? 0, data?.targetPortTotal ?? 1);
+  let src: { x: number; y: number };
+  let tgt: { x: number; y: number };
+
+  if (pairTotal > 1) {
+    // Paired edges (bidirectional between same nodes):
+    // Use pairIndex as port index on BOTH sides to keep lines parallel.
+    // Independent sourcePortIndex/targetPortIndex would cause X-crossings
+    // because the edges are registered in different order on each side.
+    src = applySpread(sourceX, sourceY, sourcePosition, pairIndex, pairTotal);
+    tgt = applySpread(targetX, targetY, targetPosition, pairIndex, pairTotal);
+  } else {
+    // Single edge: use normal port spreading
+    src = applySpread(sourceX, sourceY, sourcePosition, data?.sourcePortIndex ?? 0, data?.sourcePortTotal ?? 1);
+    tgt = applySpread(targetX, targetY, targetPosition, data?.targetPortIndex ?? 0, data?.targetPortTotal ?? 1);
+  }
 
   // Corridor offset: separate the vertical mid-segments of paired edges horizontally
   let corridorOffset = 0;
