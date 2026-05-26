@@ -344,12 +344,12 @@ function computeEdgePath(
     if (isHorizontal) {
       // For paired bidirectional edges in horizontal layout:
       // Route as H→V→H→V→H (5 segments) so lines leave/arrive horizontally.
-      // One edge goes ABOVE, the other BELOW to avoid crossing.
-      const bypassOffset = PAIR_OFFSET_SPACING * 1.5 * (pairIndex === 0 ? -1 : 1);
-      const bypassY = ((src.y + tgt.y) / 2) + bypassOffset;
+      // BOTH edges go the SAME direction (ABOVE) at different distances.
+      // This guarantees parallel non-crossing paths.
+      const baseOffset = PAIR_OFFSET_SPACING * 1.5;
+      const bypassY = Math.min(src.y, tgt.y) - baseOffset - pairIndex * PAIR_OFFSET_SPACING;
       const r = 8;
 
-      // Stub X: short horizontal segment out from source/target before turning vertical
       // Different stub lengths per edge so vertical segments don't overlap
       const stubLen = 20 + pairIndex * PAIR_OFFSET_SPACING;
       const dirX = tgt.x > src.x ? 1 : -1;
@@ -391,9 +391,10 @@ function computeEdgePath(
     } else {
       // For paired bidirectional edges in vertical layout:
       // Route as V→H→V→H→V (5 segments) so lines leave/arrive vertically.
-      // One edge goes LEFT, the other RIGHT to avoid crossing.
-      const bypassOffset = PAIR_OFFSET_SPACING * 1.5 * (pairIndex === 0 ? -1 : 1);
-      const bypassX = ((src.x + tgt.x) / 2) + bypassOffset;
+      // BOTH edges go the SAME direction (LEFT) at different distances.
+      // This guarantees parallel non-crossing paths.
+      const baseOffset = PAIR_OFFSET_SPACING * 1.5;
+      const bypassX = Math.min(src.x, tgt.x) - baseOffset - pairIndex * PAIR_OFFSET_SPACING;
       const r = 8;
 
       // Different stub lengths per edge so horizontal segments don't overlap
