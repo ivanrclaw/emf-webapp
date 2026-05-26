@@ -342,27 +342,25 @@ function computeEdgePath(
     const isHorizontal = (sourcePosition === Position.Left || sourcePosition === Position.Right);
 
     if (isHorizontal) {
-      // H→V→H: each edge gets its own corridor X, offset from midpoint
-      // Assign corridor based on DIRECTION: edge going right uses right corridor,
-      // edge going left uses left corridor. This prevents crossing regardless
-      // of which node is on which side.
-      const baseCorridor = (midSrc.x + midTgt.x) / 2;
-      const dirSign = src.x < tgt.x ? 1 : -1;
-      const corridorX = baseCorridor + (PAIR_OFFSET_SPACING / 2) * dirSign;
-      const path = buildParallelHVH(src.x, src.y, corridorX, tgt.x, tgt.y, 8);
-      const lx = baseCorridor;
+      // H→V→H: Use a SINGLE shared corridor X but offset the vertical segments
+      // slightly (+/- half spacing) so they don't visually overlap.
+      // Using separate corridors causes crossing (H of one edge crosses V of other).
+      const corridorX = (midSrc.x + midTgt.x) / 2;
+      // Offset the vertical segment slightly based on pairIndex
+      const vOffset = (PAIR_OFFSET_SPACING / 2) * (pairIndex - (pairTotal - 1) / 2);
+      const myCorridorX = corridorX + vOffset;
+      const path = buildParallelHVH(src.x, src.y, myCorridorX, tgt.x, tgt.y, 8);
+      const lx = corridorX;
       const ly = (src.y + tgt.y) / 2;
       return [path, lx, ly] as [string, number, number];
     } else {
-      // V→H→V: each edge gets its own corridor Y, offset from midpoint
-      // Assign corridor based on DIRECTION: edge going down uses lower corridor,
-      // edge going up uses upper corridor.
-      const baseCorridor = (midSrc.y + midTgt.y) / 2;
-      const dirSign = src.y < tgt.y ? 1 : -1;
-      const corridorY = baseCorridor + (PAIR_OFFSET_SPACING / 2) * dirSign;
-      const path = buildParallelVHV(src.x, src.y, corridorY, tgt.x, tgt.y, 8);
+      // V→H→V: Same approach - shared corridor Y with slight offset
+      const corridorY = (midSrc.y + midTgt.y) / 2;
+      const hOffset = (PAIR_OFFSET_SPACING / 2) * (pairIndex - (pairTotal - 1) / 2);
+      const myCorridorY = corridorY + hOffset;
+      const path = buildParallelVHV(src.x, src.y, myCorridorY, tgt.x, tgt.y, 8);
       const lx = (src.x + tgt.x) / 2;
-      const ly = baseCorridor;
+      const ly = corridorY;
       return [path, lx, ly] as [string, number, number];
     }
   }
