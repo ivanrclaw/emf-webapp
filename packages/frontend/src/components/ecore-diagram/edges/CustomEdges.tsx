@@ -261,16 +261,15 @@ function computeEdgePath(
     tgt = applySpread(targetX, targetY, targetPosition, data?.targetPortIndex ?? 0, data?.targetPortTotal ?? 1);
   }
 
-  // For paired edges (bidirectional), use straight lines.
-  // Any routing with intermediate segments (H→V→H, bezier) causes crossings
-  // because the edges travel in opposite directions. Straight lines with
-  // port-spread endpoints are guaranteed parallel since pairIndex is
-  // consistent on both sides.
+  // For paired edges, use H→V→H routing with different corridor offsets
+  // so each edge has its own vertical segment and they don't overlap.
   if (pairTotal > 1) {
-    const midX = (src.x + tgt.x) / 2;
-    const midY = (src.y + tgt.y) / 2;
-    const path = `M ${src.x} ${src.y} L ${tgt.x} ${tgt.y}`;
-    return [path, midX, midY] as [string, number, number];
+    const corridorOffset = PAIR_OFFSET_SPACING * (pairIndex - (pairTotal - 1) / 2);
+    return customSmoothStepPath(
+      src.x, src.y, sourcePosition,
+      tgt.x, tgt.y, targetPosition,
+      corridorOffset, 8,
+    );
   }
 
   // Single edges: use custom H→V→H path
