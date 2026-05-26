@@ -344,7 +344,7 @@ function computeEdgePath(
     if (isHorizontal) {
       // Simple H→V→H: corridor at midpoint with small offset per edge
       const midX = (src.x + tgt.x) / 2;
-      const offset = PAIR_OFFSET_SPACING / 2 * (pairIndex - (pairTotal - 1) / 2);
+      const offset = PAIR_OFFSET_SPACING * (pairIndex - (pairTotal - 1) / 2);
       const corridorX = midX + offset;
       const r = 8;
 
@@ -378,7 +378,7 @@ function computeEdgePath(
     } else {
       // Simple V→H→V: corridor at midpoint with small offset per edge
       const midY = (src.y + tgt.y) / 2;
-      const offset = PAIR_OFFSET_SPACING / 2 * (pairIndex - (pairTotal - 1) / 2);
+      const offset = PAIR_OFFSET_SPACING * (pairIndex - (pairTotal - 1) / 2);
       const corridorY = midY + offset;
       const r = 8;
 
