@@ -237,6 +237,60 @@ function buildSmoothStepV(
   ].join(' ');
 }
 
+/**
+ * Build H→V→H path for paired edges sharing the same corridor X.
+ * Since endpoints are at different Y (port spreading), horizontal segments
+ * are parallel and the shared vertical corridor doesn't cause crossing.
+ */
+function buildParallelHVH(
+  sx: number, sy: number, mx: number, tx: number, ty: number, r: number,
+): string {
+  const rr = Math.min(r, Math.abs(mx - sx), Math.abs(ty - sy), Math.abs(tx - mx)) || 0;
+  const dy = ty > sy ? 1 : -1;
+  if (rr < 0.5) {
+    return `M ${sx} ${sy} L ${mx} ${sy} L ${mx} ${ty} L ${tx} ${ty}`;
+  }
+  const c1x = mx - (mx > sx ? rr : -rr);
+  const c1y = sy + dy * rr;
+  const c2x = mx + (tx > mx ? rr : -rr);
+  const c2y = ty - dy * rr;
+  return [
+    `M ${sx} ${sy}`,
+    `L ${c1x} ${sy}`,
+    `Q ${mx} ${sy} ${mx} ${c1y}`,
+    `L ${mx} ${c2y}`,
+    `Q ${mx} ${ty} ${c2x} ${ty}`,
+    `L ${tx} ${ty}`,
+  ].join(' ');
+}
+
+/**
+ * Build V→H→V path for paired edges sharing the same corridor Y.
+ * Since endpoints are at different X (port spreading), vertical segments
+ * are parallel and the shared horizontal corridor doesn't cause crossing.
+ */
+function buildParallelVHV(
+  sx: number, sy: number, my: number, tx: number, ty: number, r: number,
+): string {
+  const rr = Math.min(r, Math.abs(my - sy), Math.abs(tx - sx), Math.abs(ty - my)) || 0;
+  const dx = tx > sx ? 1 : -1;
+  if (rr < 0.5) {
+    return `M ${sx} ${sy} L ${sx} ${my} L ${tx} ${my} L ${tx} ${ty}`;
+  }
+  const c1x = sx + dx * rr;
+  const c1y = my - (my > sy ? rr : -rr);
+  const c2x = tx - dx * rr;
+  const c2y = my + (ty > my ? rr : -rr);
+  return [
+    `M ${sx} ${sy}`,
+    `L ${sx} ${c1y}`,
+    `Q ${sx} ${my} ${c1x} ${my}`,
+    `L ${c2x} ${my}`,
+    `Q ${tx} ${my} ${tx} ${c2y}`,
+    `L ${tx} ${ty}`,
+  ].join(' ');
+}
+
 function computeEdgePath(
   sourceX: number, sourceY: number, sourcePosition: Position,
   targetX: number, targetY: number, targetPosition: Position,
@@ -261,23 +315,50 @@ function computeEdgePath(
     tgt = applySpread(targetX, targetY, targetPosition, data?.targetPortIndex ?? 0, data?.targetPortTotal ?? 1);
   }
 
-  // For paired edges, use H→V→H routing with different corridor offsets
-  // so each edge has its own vertical segment and they don't overlap.
+  // For paired edges, compute a single canonical path and offset each edge
+  // perpendicularly. This guarantees parallel non-crossing lines regardless
+  // of node orientation (horizontal or vertical layout).
   if (pairTotal > 1) {
-    // Strategy depends on orientation:
-    // - Horizontal (Left/Right): corridors on SAME side to prevent H-segment
-    //   of one edge crossing V-segment of the other.
-    // - Vertical (Top/Bottom): symmetric offsets work because the paths
-    //   naturally diverge to opposite sides and don't share segments.
-    const isHorizontal = (sourcePosition === Position.Left || sourcePosition === Position.Right);
-    const corridorOffset = isHorizontal
-      ? -PAIR_OFFSET_SPACING * (pairIndex + 0.5)
-      : PAIR_OFFSET_SPACING * ((pairTotal - 1) / 2 - pairIndex);
-    return customSmoothStepPath(
-      src.x, src.y, sourcePosition,
-      tgt.x, tgt.y, targetPosition,
-      corridorOffset, 8,
+    // Canonical path uses the midpoint between the two spread endpoints
+    const src0 = applySpread(sourceX, sourceY, sourcePosition, 0, pairTotal);
+    const src1 = applySpread(sourceX, sourceY, sourcePosition, pairTotal - 1, pairTotal);
+    const tgt0 = applySpread(targetX, targetY, targetPosition, 0, pairTotal);
+    const tgt1 = applySpread(targetX, targetY, targetPosition, pairTotal - 1, pairTotal);
+    const midSrc = { x: (src0.x + src1.x) / 2, y: (src0.y + src1.y) / 2 };
+    const midTgt = { x: (tgt0.x + tgt1.x) / 2, y: (tgt0.y + tgt1.y) / 2 };
+
+    // Compute the canonical H→V→H or V→H→V path segments
+    const [canonPath, labelX, labelY] = customSmoothStepPath(
+      midSrc.x, midSrc.y, sourcePosition,
+      midTgt.x, midTgt.y, targetPosition,
+      0, 0, // no offset, no rounding for the canonical reference
     );
+
+    // Offset perpendicular to each segment
+    const gap = PORT_SPACING;
+    const offset = gap * (pairIndex - (pairTotal - 1) / 2);
+
+    // Determine perpendicular direction based on orientation
+    const isHorizontal = (sourcePosition === Position.Left || sourcePosition === Position.Right);
+
+    if (isHorizontal) {
+      // H→V→H: offset horizontal segments in Y, vertical segment in X (but same X for both)
+      // Actually simpler: just use the already-spread src/tgt endpoints with a shared corridor
+      // The key insight: use the SAME corridor X for both edges, but different Y endpoints
+      // This makes them parallel horizontal lines that share the same vertical corridor
+      const corridorX = (midSrc.x + midTgt.x) / 2;
+      const path = buildParallelHVH(src.x, src.y, corridorX, tgt.x, tgt.y, 8);
+      const lx = corridorX;
+      const ly = (src.y + tgt.y) / 2;
+      return [path, lx, ly] as [string, number, number];
+    } else {
+      // V→H→V: offset vertical segments in X, horizontal segment in Y (but same Y for both)
+      const corridorY = (midSrc.y + midTgt.y) / 2;
+      const path = buildParallelVHV(src.x, src.y, corridorY, tgt.x, tgt.y, 8);
+      const lx = (src.x + tgt.x) / 2;
+      const ly = corridorY;
+      return [path, lx, ly] as [string, number, number];
+    }
   }
 
   // Single edges: use custom H→V→H path
