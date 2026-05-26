@@ -343,33 +343,44 @@ function computeEdgePath(
 
     if (isHorizontal) {
       // For paired bidirectional edges in horizontal layout:
-      // Route each edge as a "C-shape" going above or below to avoid crossing.
-      // Edge with pairIndex=0 goes ABOVE (negative Y offset)
-      // Edge with pairIndex=1 goes BELOW (positive Y offset)
-      // Path: H(short) → V(to bypass Y) → H(long, at bypass Y) → V(to target Y) → H(short)
+      // Route as H→V→H→V→H (5 segments) so lines leave/arrive horizontally.
+      // One edge goes ABOVE, the other BELOW to avoid crossing.
       const bypassOffset = PAIR_OFFSET_SPACING * 1.5 * (pairIndex === 0 ? -1 : 1);
       const bypassY = ((src.y + tgt.y) / 2) + bypassOffset;
       const r = 8;
 
-      // 5-segment path: src→V→H(bypass)→V→tgt
-      // Actually simpler: V from src.y to bypassY, H from src.x to tgt.x, V from bypassY to tgt.y
-      const rr = Math.min(r, Math.abs(bypassY - src.y), Math.abs(tgt.x - src.x), Math.abs(tgt.y - bypassY)) || 0;
+      // Stub X: short horizontal segment out from source/target before turning vertical
+      const stubLen = 20;
+      const dirX = tgt.x > src.x ? 1 : -1;
+      const stubSrcX = src.x + dirX * stubLen;
+      const stubTgtX = tgt.x - dirX * stubLen;
+
+      const rr = Math.min(r,
+        Math.abs(stubSrcX - src.x),
+        Math.abs(bypassY - src.y),
+        Math.abs(stubTgtX - stubSrcX),
+        Math.abs(tgt.y - bypassY),
+        Math.abs(tgt.x - stubTgtX),
+      ) || 0;
 
       if (rr < 0.5) {
-        const path = `M ${src.x} ${src.y} L ${src.x} ${bypassY} L ${tgt.x} ${bypassY} L ${tgt.x} ${tgt.y}`;
+        const path = `M ${src.x} ${src.y} L ${stubSrcX} ${src.y} L ${stubSrcX} ${bypassY} L ${stubTgtX} ${bypassY} L ${stubTgtX} ${tgt.y} L ${tgt.x} ${tgt.y}`;
         return [path, (src.x + tgt.x) / 2, bypassY] as [string, number, number];
       }
 
-      const dx = tgt.x > src.x ? 1 : -1;
       const dy1 = bypassY > src.y ? 1 : -1;
       const dy2 = tgt.y > bypassY ? 1 : -1;
 
       const path = [
         `M ${src.x} ${src.y}`,
-        `L ${src.x} ${bypassY - dy1 * rr}`,
-        `Q ${src.x} ${bypassY} ${src.x + dx * rr} ${bypassY}`,
-        `L ${tgt.x - dx * rr} ${bypassY}`,
-        `Q ${tgt.x} ${bypassY} ${tgt.x} ${bypassY + dy2 * rr}`,
+        `L ${stubSrcX - dirX * rr} ${src.y}`,
+        `Q ${stubSrcX} ${src.y} ${stubSrcX} ${src.y + dy1 * rr}`,
+        `L ${stubSrcX} ${bypassY - dy1 * rr}`,
+        `Q ${stubSrcX} ${bypassY} ${stubSrcX + dirX * rr} ${bypassY}`,
+        `L ${stubTgtX - dirX * rr} ${bypassY}`,
+        `Q ${stubTgtX} ${bypassY} ${stubTgtX} ${bypassY + dy2 * rr}`,
+        `L ${stubTgtX} ${tgt.y - dy2 * rr}`,
+        `Q ${stubTgtX} ${tgt.y} ${stubTgtX + dirX * rr} ${tgt.y}`,
         `L ${tgt.x} ${tgt.y}`,
       ].join(' ');
 
@@ -378,28 +389,43 @@ function computeEdgePath(
       return [path, lx, ly] as [string, number, number];
     } else {
       // For paired bidirectional edges in vertical layout:
-      // Route each edge as a "C-shape" going left or right to avoid crossing.
+      // Route as V→H→V→H→V (5 segments) so lines leave/arrive vertically.
+      // One edge goes LEFT, the other RIGHT to avoid crossing.
       const bypassOffset = PAIR_OFFSET_SPACING * 1.5 * (pairIndex === 0 ? -1 : 1);
       const bypassX = ((src.x + tgt.x) / 2) + bypassOffset;
       const r = 8;
 
-      const rr = Math.min(r, Math.abs(bypassX - src.x), Math.abs(tgt.y - src.y), Math.abs(tgt.x - bypassX)) || 0;
+      const stubLen = 20;
+      const dirY = tgt.y > src.y ? 1 : -1;
+      const stubSrcY = src.y + dirY * stubLen;
+      const stubTgtY = tgt.y - dirY * stubLen;
+
+      const rr = Math.min(r,
+        Math.abs(stubSrcY - src.y),
+        Math.abs(bypassX - src.x),
+        Math.abs(stubTgtY - stubSrcY),
+        Math.abs(tgt.x - bypassX),
+        Math.abs(tgt.y - stubTgtY),
+      ) || 0;
 
       if (rr < 0.5) {
-        const path = `M ${src.x} ${src.y} L ${bypassX} ${src.y} L ${bypassX} ${tgt.y} L ${tgt.x} ${tgt.y}`;
+        const path = `M ${src.x} ${src.y} L ${src.x} ${stubSrcY} L ${bypassX} ${stubSrcY} L ${bypassX} ${stubTgtY} L ${tgt.x} ${stubTgtY} L ${tgt.x} ${tgt.y}`;
         return [path, bypassX, (src.y + tgt.y) / 2] as [string, number, number];
       }
 
-      const dy = tgt.y > src.y ? 1 : -1;
       const dx1 = bypassX > src.x ? 1 : -1;
       const dx2 = tgt.x > bypassX ? 1 : -1;
 
       const path = [
         `M ${src.x} ${src.y}`,
-        `L ${bypassX - dx1 * rr} ${src.y}`,
-        `Q ${bypassX} ${src.y} ${bypassX} ${src.y + dy * rr}`,
-        `L ${bypassX} ${tgt.y - dy * rr}`,
-        `Q ${bypassX} ${tgt.y} ${bypassX + dx2 * rr} ${tgt.y}`,
+        `L ${src.x} ${stubSrcY - dirY * rr}`,
+        `Q ${src.x} ${stubSrcY} ${src.x + dx1 * rr} ${stubSrcY}`,
+        `L ${bypassX - dx1 * rr} ${stubSrcY}`,
+        `Q ${bypassX} ${stubSrcY} ${bypassX} ${stubSrcY + dirY * rr}`,
+        `L ${bypassX} ${stubTgtY - dirY * rr}`,
+        `Q ${bypassX} ${stubTgtY} ${bypassX + dx2 * rr} ${stubTgtY}`,
+        `L ${tgt.x - dx2 * rr} ${stubTgtY}`,
+        `Q ${tgt.x} ${stubTgtY} ${tgt.x} ${stubTgtY + dirY * rr}`,
         `L ${tgt.x} ${tgt.y}`,
       ].join(' ');
 
