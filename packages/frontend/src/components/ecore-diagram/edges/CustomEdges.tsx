@@ -342,25 +342,69 @@ function computeEdgePath(
     const isHorizontal = (sourcePosition === Position.Left || sourcePosition === Position.Right);
 
     if (isHorizontal) {
-      // H→V→H: Use a SINGLE shared corridor X but offset the vertical segments
-      // slightly (+/- half spacing) so they don't visually overlap.
-      // Using separate corridors causes crossing (H of one edge crosses V of other).
-      const corridorX = (midSrc.x + midTgt.x) / 2;
-      // Offset the vertical segment slightly based on pairIndex
-      const vOffset = (PAIR_OFFSET_SPACING / 2) * (pairIndex - (pairTotal - 1) / 2);
-      const myCorridorX = corridorX + vOffset;
-      const path = buildParallelHVH(src.x, src.y, myCorridorX, tgt.x, tgt.y, 8);
-      const lx = corridorX;
-      const ly = (src.y + tgt.y) / 2;
+      // For paired bidirectional edges in horizontal layout:
+      // Route each edge as a "C-shape" going above or below to avoid crossing.
+      // Edge with pairIndex=0 goes ABOVE (negative Y offset)
+      // Edge with pairIndex=1 goes BELOW (positive Y offset)
+      // Path: H(short) → V(to bypass Y) → H(long, at bypass Y) → V(to target Y) → H(short)
+      const bypassOffset = PAIR_OFFSET_SPACING * 1.5 * (pairIndex === 0 ? -1 : 1);
+      const bypassY = ((src.y + tgt.y) / 2) + bypassOffset;
+      const r = 8;
+
+      // 5-segment path: src→V→H(bypass)→V→tgt
+      // Actually simpler: V from src.y to bypassY, H from src.x to tgt.x, V from bypassY to tgt.y
+      const rr = Math.min(r, Math.abs(bypassY - src.y), Math.abs(tgt.x - src.x), Math.abs(tgt.y - bypassY)) || 0;
+
+      if (rr < 0.5) {
+        const path = `M ${src.x} ${src.y} L ${src.x} ${bypassY} L ${tgt.x} ${bypassY} L ${tgt.x} ${tgt.y}`;
+        return [path, (src.x + tgt.x) / 2, bypassY] as [string, number, number];
+      }
+
+      const dx = tgt.x > src.x ? 1 : -1;
+      const dy1 = bypassY > src.y ? 1 : -1;
+      const dy2 = tgt.y > bypassY ? 1 : -1;
+
+      const path = [
+        `M ${src.x} ${src.y}`,
+        `L ${src.x} ${bypassY - dy1 * rr}`,
+        `Q ${src.x} ${bypassY} ${src.x + dx * rr} ${bypassY}`,
+        `L ${tgt.x - dx * rr} ${bypassY}`,
+        `Q ${tgt.x} ${bypassY} ${tgt.x} ${bypassY + dy2 * rr}`,
+        `L ${tgt.x} ${tgt.y}`,
+      ].join(' ');
+
+      const lx = (src.x + tgt.x) / 2;
+      const ly = bypassY;
       return [path, lx, ly] as [string, number, number];
     } else {
-      // V→H→V: Same approach - shared corridor Y with slight offset
-      const corridorY = (midSrc.y + midTgt.y) / 2;
-      const hOffset = (PAIR_OFFSET_SPACING / 2) * (pairIndex - (pairTotal - 1) / 2);
-      const myCorridorY = corridorY + hOffset;
-      const path = buildParallelVHV(src.x, src.y, myCorridorY, tgt.x, tgt.y, 8);
-      const lx = (src.x + tgt.x) / 2;
-      const ly = corridorY;
+      // For paired bidirectional edges in vertical layout:
+      // Route each edge as a "C-shape" going left or right to avoid crossing.
+      const bypassOffset = PAIR_OFFSET_SPACING * 1.5 * (pairIndex === 0 ? -1 : 1);
+      const bypassX = ((src.x + tgt.x) / 2) + bypassOffset;
+      const r = 8;
+
+      const rr = Math.min(r, Math.abs(bypassX - src.x), Math.abs(tgt.y - src.y), Math.abs(tgt.x - bypassX)) || 0;
+
+      if (rr < 0.5) {
+        const path = `M ${src.x} ${src.y} L ${bypassX} ${src.y} L ${bypassX} ${tgt.y} L ${tgt.x} ${tgt.y}`;
+        return [path, bypassX, (src.y + tgt.y) / 2] as [string, number, number];
+      }
+
+      const dy = tgt.y > src.y ? 1 : -1;
+      const dx1 = bypassX > src.x ? 1 : -1;
+      const dx2 = tgt.x > bypassX ? 1 : -1;
+
+      const path = [
+        `M ${src.x} ${src.y}`,
+        `L ${bypassX - dx1 * rr} ${src.y}`,
+        `Q ${bypassX} ${src.y} ${bypassX} ${src.y + dy * rr}`,
+        `L ${bypassX} ${tgt.y - dy * rr}`,
+        `Q ${bypassX} ${tgt.y} ${bypassX + dx2 * rr} ${tgt.y}`,
+        `L ${tgt.x} ${tgt.y}`,
+      ].join(' ');
+
+      const lx = bypassX;
+      const ly = (src.y + tgt.y) / 2;
       return [path, lx, ly] as [string, number, number];
     }
   }
