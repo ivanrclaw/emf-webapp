@@ -351,9 +351,10 @@ function computeEdgePath(
       const r = 8;
 
       // Different stub lengths per edge so vertical segments don't overlap
-      // Cap to 1/4 of available gap so stubs never cross each other
+      // Use different fractions of the gap per pairIndex to guarantee separation
       const gap = Math.abs(tgt.x - src.x);
-      const stubLen = Math.min(20 + pairIndex * PAIR_OFFSET_SPACING, gap / 4);
+      const fraction = pairIndex === 0 ? 0.15 : 0.35;
+      const stubLen = Math.max(8, gap * fraction);
       const dirX = tgt.x > src.x ? 1 : -1;
       const stubSrcX = src.x + dirX * stubLen;
       const stubTgtX = tgt.x - dirX * stubLen;
@@ -400,9 +401,10 @@ function computeEdgePath(
       const r = 8;
 
       // Different stub lengths per edge so horizontal segments don't overlap
-      // Cap to 1/4 of available gap so stubs never cross each other
+      // Use different fractions of the gap per pairIndex to guarantee separation
       const gap = Math.abs(tgt.y - src.y);
-      const stubLen = Math.min(20 + pairIndex * PAIR_OFFSET_SPACING, gap / 4);
+      const fraction = pairIndex === 0 ? 0.15 : 0.35;
+      const stubLen = Math.max(8, gap * fraction);
       const dirY = tgt.y > src.y ? 1 : -1;
       const stubSrcY = src.y + dirY * stubLen;
       const stubTgtY = tgt.y - dirY * stubLen;
