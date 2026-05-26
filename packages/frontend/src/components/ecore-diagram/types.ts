@@ -133,6 +133,18 @@ export interface EcoreEdgeData extends Record<string, unknown> {
   sourceHandlePos?: 'left' | 'right' | 'top' | 'bottom';
   /** Posición óptima del handle target (calculada por pkgToEdges) */
   targetHandlePos?: 'left' | 'right' | 'top' | 'bottom';
+  /** Port spreading: index of this edge among siblings sharing the same (node, side) */
+  sourcePortIndex?: number;
+  /** Port spreading: total edges sharing the same source (node, side) */
+  sourcePortTotal?: number;
+  /** Port spreading: index of this edge among siblings sharing the same target (node, side) */
+  targetPortIndex?: number;
+  /** Port spreading: total edges sharing the same target (node, side) */
+  targetPortTotal?: number;
+  /** Pair index: position among edges connecting the same node pair (for mid-segment offset) */
+  pairIndex?: number;
+  /** Pair total: how many edges connect the same node pair */
+  pairTotal?: number;
 }
 
 export type AppEdge = Edge<EcoreEdgeData>;

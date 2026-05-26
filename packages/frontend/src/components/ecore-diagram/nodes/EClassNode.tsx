@@ -114,11 +114,15 @@ const EClassNode = memo(function EClassNode(props: NodeProps) {
 
   return (
     <div className={styles.node} onClick={() => onSelect(classifier.id, 'class')}>
-      {/* ── Handles (4 sides for optimal edge routing) ──── */}
+      {/* ── Handles (4 sides, source + target for correct arrow orientation) ──── */}
       <Handle type="source" position={Position.Left} id="left" />
       <Handle type="source" position={Position.Right} id="right" />
       <Handle type="source" position={Position.Top} id="top" />
       <Handle type="source" position={Position.Bottom} id="bottom" />
+      <Handle type="target" position={Position.Left} id="left" />
+      <Handle type="target" position={Position.Right} id="right" />
+      <Handle type="target" position={Position.Top} id="top" />
+      <Handle type="target" position={Position.Bottom} id="bottom" />
 
       {/* ── OCL Violation Badge ─────────────────────────── */}
       {data.violations && data.violations.length > 0 && (

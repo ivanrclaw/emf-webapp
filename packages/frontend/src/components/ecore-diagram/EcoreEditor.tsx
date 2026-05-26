@@ -35,7 +35,7 @@ import '@xyflow/react/dist/style.css';
 import { useEcoreModel } from './useEcoreModel';
 import { nodeTypes } from './nodes/nodeTypes';
 import { edgeTypes } from './edges/CustomEdges';
-import { EdgeLayoutProvider } from './edges/EdgeLayoutContext';
+
 import { getMetamodel, getProject, exportEcore, exportGenmodel, exportXmiZip, exportProjectAsEclipse } from '../../api/client';
 import { useCollaborativeModel } from '../../hooks/useCollaborativeModel';
 import { useOCLValidation } from '../../hooks/useOCLValidation';
@@ -809,112 +809,157 @@ function EditorInner({ projectId, metamodelId }: EditorInnerProps) {
         awarenessStates={collaborative.remoteStates}
         nodes={model.nodes as any}
       />
-      <EdgeLayoutProvider>
-      <ReactFlow
-        nodes={model.nodes as any}
-        edges={model.edges as any}
-        onNodesChange={model.onNodesChange}
-        onEdgesChange={model.onEdgesChange}
-        onConnect={model.onConnect}
+      <RoutedReactFlow
+        model={model}
         onNodeClick={onNodeClick}
         onNodeDrag={onNodeDrag}
         onEdgeClick={onEdgeClick}
         onPaneClick={onPaneClick}
         onDragOver={onDragOver}
         onDrop={onDrop}
-        nodeTypes={nodeTypes as any}
-        edgeTypes={edgeTypes as any}
-        fitView
-        connectionMode={ConnectionMode.Loose}
-        selectionMode={SelectionMode.Partial}
-        deleteKeyCode={['Delete', 'Backspace']}
-        multiSelectionKeyCode="Shift"
-        panOnScroll
-        minZoom={0.1}
-        maxZoom={4}
-        defaultEdgeOptions={DEFAULT_EDGE_OPTIONS}
-        style={{ background: 'var(--bg)' }}
-      >
-        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="var(--border)" />
-        <Controls
+        collaborative={collaborative}
+        followingId={followingId}
+        setFollowingId={setFollowingId}
+        reactFlowInstance={reactFlowInstance}
+      />
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RoutedReactFlow — inner component for ReactFlow rendering
+// ═══════════════════════════════════════════════════════════════
+
+interface RoutedReactFlowProps {
+  model: any;
+  onNodeClick: NodeMouseHandler;
+  onNodeDrag: any;
+  onEdgeClick: EdgeMouseHandler;
+  onPaneClick: () => void;
+  onDragOver: (e: DragEvent) => void;
+  onDrop: (e: DragEvent) => void;
+  collaborative: any;
+  followingId: number | null;
+  setFollowingId: (id: number | null) => void;
+  reactFlowInstance: any;
+}
+
+function RoutedReactFlow({
+  model, onNodeClick, onNodeDrag, onEdgeClick, onPaneClick,
+  onDragOver, onDrop, collaborative, followingId, setFollowingId,
+  reactFlowInstance,
+}: RoutedReactFlowProps) {
+  const handleNodesChange = useCallback(
+    (changes: any) => {
+      model.onNodesChange(changes);
+    },
+    [model],
+  );
+
+  return (
+    <ReactFlow
+      nodes={model.nodes as any}
+      edges={model.edges as any}
+      onNodesChange={handleNodesChange}
+      onEdgesChange={model.onEdgesChange}
+      onConnect={model.onConnect}
+      onNodeClick={onNodeClick}
+      onNodeDrag={onNodeDrag}
+      onEdgeClick={onEdgeClick}
+      onPaneClick={onPaneClick}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      nodeTypes={nodeTypes as any}
+      edgeTypes={edgeTypes as any}
+      fitView
+      connectionMode={ConnectionMode.Loose}
+      selectionMode={SelectionMode.Partial}
+      deleteKeyCode={['Delete', 'Backspace']}
+      multiSelectionKeyCode="Shift"
+      panOnScroll
+      minZoom={0.1}
+      maxZoom={4}
+      defaultEdgeOptions={DEFAULT_EDGE_OPTIONS}
+      style={{ background: 'var(--bg)' }}
+    >
+      <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="var(--border)" />
+      <Controls
+        style={{
+          borderRadius: 10,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+          border: '1px solid var(--border)',
+          overflow: 'hidden',
+        }}
+        showInteractive={false}
+      />
+      <MiniMap
+        style={{
+          borderRadius: 10,
+          border: '1px solid var(--border)',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+        }}
+        nodeColor={minimapNodeColor}
+        maskColor="rgba(15,23,42,0.7)"
+        pannable
+        zoomable
+      />
+      <Panel position="bottom-center">
+        <div
           style={{
-            borderRadius: 10,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-            border: '1px solid var(--border)',
-            overflow: 'hidden',
+            display: 'flex', alignItems: 'center', gap: 16,
+            padding: '6px 14px', background: 'var(--surface)',
+            border: '1px solid var(--border)', borderRadius: 10,
+            fontSize: 12, color: 'var(--text-secondary)',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
           }}
-          showInteractive={false}
-        />
-        <MiniMap
-          style={{
-            borderRadius: 10,
-            border: '1px solid var(--border)',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-          }}
-          nodeColor={minimapNodeColor}
-          maskColor="rgba(15,23,42,0.7)"
-          pannable
-          zoomable
-        />
-        <Panel position="bottom-center">
-          <div
+        >
+          <span>{model.nodes?.length ?? 0} nodes</span>
+          <span style={{ color: 'var(--border)' }}>·</span>
+          <span>{model.edges?.length ?? 0} edges</span>
+          <span style={{ color: 'var(--border)' }}>·</span>
+          <span>{model.pkg.nsPrefix || 'no nsPrefix'}</span>
+        </div>
+      </Panel>
+      <Panel position="top-right">
+        <div style={{ display: 'flex', gap: 4, alignItems: 'flex-start' }}>
+          <FollowModePanel
+            awarenessStates={collaborative.remoteStates}
+            followingId={followingId}
+            onFollow={setFollowingId}
+          />
+          <PresencePanel
+            awarenessStates={collaborative.remoteStates}
+            currentUserName="Anonymous"
+            currentUserColor="#6366f1"
+            connected={collaborative.connected}
+          />
+          <button
+            onClick={() => { model.autoLayout('LR'); setTimeout(() => { reactFlowInstance.fitView({ padding: 0.15, duration: 300 }); }, 50); }}
+            title="Auto Layout (Left → Right)"
             style={{
-              display: 'flex', alignItems: 'center', gap: 16,
-              padding: '6px 14px', background: 'var(--surface)',
-              border: '1px solid var(--border)', borderRadius: 10,
-              fontSize: 12, color: 'var(--text-secondary)',
-              boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+              padding: '6px 10px', fontSize: 12, fontWeight: 600,
+              background: 'var(--surface)', border: '1px solid var(--border)',
+              borderRadius: 8, cursor: 'pointer', color: 'var(--text)',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
             }}
           >
-            <span>{model.nodes?.length ?? 0} nodes</span>
-            <span style={{ color: 'var(--border)' }}>·</span>
-            <span>{model.edges?.length ?? 0} edges</span>
-            <span style={{ color: 'var(--border)' }}>·</span>
-            <span>{model.pkg.nsPrefix || 'no nsPrefix'}</span>
-          </div>
-        </Panel>
-        <Panel position="top-right">
-          <div style={{ display: 'flex', gap: 4, alignItems: 'flex-start' }}>
-            <FollowModePanel
-              awarenessStates={collaborative.remoteStates}
-              followingId={followingId}
-              onFollow={setFollowingId}
-            />
-            <PresencePanel
-              awarenessStates={collaborative.remoteStates}
-              currentUserName="Anonymous"
-              currentUserColor="#6366f1"
-              connected={collaborative.connected}
-            />
-            <button
-              onClick={() => { model.autoLayout('LR'); setTimeout(() => reactFlowInstance.fitView({ padding: 0.15, duration: 300 }), 50); }}
-              title="Auto Layout (Left → Right)"
-              style={{
-                padding: '6px 10px', fontSize: 12, fontWeight: 600,
-                background: 'var(--surface)', border: '1px solid var(--border)',
-                borderRadius: 8, cursor: 'pointer', color: 'var(--text)',
-                boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-              }}
-            >
-              ↔ Layout
-            </button>
-            <button
-              onClick={() => { model.autoLayout('TB'); setTimeout(() => reactFlowInstance.fitView({ padding: 0.15, duration: 300 }), 50); }}
-              title="Auto Layout (Top → Bottom)"
-              style={{
-                padding: '6px 10px', fontSize: 12, fontWeight: 600,
-                background: 'var(--surface)', border: '1px solid var(--border)',
-                borderRadius: 8, cursor: 'pointer', color: 'var(--text)',
-                boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-              }}
-            >
-              ↕ Layout
-            </button>
-          </div>
-        </Panel>
-      </ReactFlow>
-      </EdgeLayoutProvider>
-    </div>
+            ↔ Layout
+          </button>
+          <button
+            onClick={() => { model.autoLayout('TB'); setTimeout(() => { reactFlowInstance.fitView({ padding: 0.15, duration: 300 }); }, 50); }}
+            title="Auto Layout (Top → Bottom)"
+            style={{
+              padding: '6px 10px', fontSize: 12, fontWeight: 600,
+              background: 'var(--surface)', border: '1px solid var(--border)',
+              borderRadius: 8, cursor: 'pointer', color: 'var(--text)',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+            }}
+          >
+            ↕ Layout
+          </button>
+        </div>
+      </Panel>
+    </ReactFlow>
   );
 }
 

@@ -60,11 +60,15 @@ const EEnumNode = memo(function EEnumNode(props: NodeProps) {
 
   return (
     <div className={styles.node} onClick={() => onSelect(classifier.id, 'enum')}>
-      {/* ── Handles (4 sides for optimal edge routing) ──── */}
+      {/* ── Handles (4 sides, source + target for correct arrow orientation) ──── */}
       <Handle type="source" position={Position.Left} id="left" />
       <Handle type="source" position={Position.Right} id="right" />
       <Handle type="source" position={Position.Top} id="top" />
       <Handle type="source" position={Position.Bottom} id="bottom" />
+      <Handle type="target" position={Position.Left} id="left" />
+      <Handle type="target" position={Position.Right} id="right" />
+      <Handle type="target" position={Position.Top} id="top" />
+      <Handle type="target" position={Position.Bottom} id="bottom" />
 
       {/* ── Header ───────────────────────────────────────── */}
       <div className={styles.header} onDoubleClick={handleDoubleClick}>

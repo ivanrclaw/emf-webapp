@@ -294,6 +294,53 @@ function pkgToEdges(pkg: SerializableEPackage, _posMap?: Map<string, { x: number
       } as AppEdge);
     }
   }
+
+  // ── Port spreading: assign index/total per (node, side) ──
+  // Group all connections by the (nodeId, side) they touch
+  const portGroups = new Map<string, number[]>(); // key → edge indices in `out`
+  for (let i = 0; i < out.length; i++) {
+    const e = out[i];
+    const sKey = `${e.source}|${e.sourceHandle ?? 'right'}`;
+    const tKey = `${e.target}|${e.targetHandle ?? 'left'}`;
+    if (!portGroups.has(sKey)) portGroups.set(sKey, []);
+    portGroups.get(sKey)!.push(i);
+    if (!portGroups.has(tKey)) portGroups.set(tKey, []);
+    portGroups.get(tKey)!.push(i);
+  }
+
+  // ── Pair grouping: edges between the same two nodes (for mid-segment offset) ──
+  const pairGroups = new Map<string, number[]>();
+  for (let i = 0; i < out.length; i++) {
+    const e = out[i];
+    const pairKey = [e.source, e.target].sort().join('|');
+    if (!pairGroups.has(pairKey)) pairGroups.set(pairKey, []);
+    pairGroups.get(pairKey)!.push(i);
+  }
+
+  // For each edge, assign port and pair info
+  for (let i = 0; i < out.length; i++) {
+    const e = out[i];
+    const sKey = `${e.source}|${e.sourceHandle ?? 'right'}`;
+    const tKey = `${e.target}|${e.targetHandle ?? 'left'}`;
+
+    const sourceGroup = portGroups.get(sKey)!;
+    const targetGroup = portGroups.get(tKey)!;
+
+    const sourcePortIndex = sourceGroup.indexOf(i);
+    const targetPortIndex = targetGroup.indexOf(i);
+
+    const pairKey = [e.source, e.target].sort().join('|');
+    const pairGroup = pairGroups.get(pairKey)!;
+    const pairIndex = pairGroup.indexOf(i);
+
+    (e.data as EcoreEdgeData).sourcePortIndex = sourcePortIndex;
+    (e.data as EcoreEdgeData).sourcePortTotal = sourceGroup.length;
+    (e.data as EcoreEdgeData).targetPortIndex = targetPortIndex;
+    (e.data as EcoreEdgeData).targetPortTotal = targetGroup.length;
+    (e.data as EcoreEdgeData).pairIndex = pairIndex;
+    (e.data as EcoreEdgeData).pairTotal = pairGroup.length;
+  }
+
   return out;
 }
 
@@ -437,11 +484,13 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg, violationsMa
   // ── React Flow handlers ────────────────────────────────────
   const onNodesChange: OnNodesChange = useCallback(
     (changes: NodeChange[]) => {
+      let positionChanged = false;
       setNodes((cur) => {
         // Track positions + dragging state
         for (const ch of changes) {
           if (ch.type === 'position' && 'position' in ch && ch.position) {
             posMap.current.set(ch.id, { ...ch.position });
+            positionChanged = true;
           }
           if (ch.type === 'position' && ch.dragging === true) {
             draggingNodesRef.current.add(ch.id);
@@ -453,6 +502,10 @@ export function useEcoreModel({ projectId, metamodelId, initialPkg, violationsMa
         }
         return applyNodeChanges(changes, cur) as AppNode[];
       });
+      // Recompute edge handles on every position change so arrows stay correct during drag
+      if (positionChanged) {
+        setEdges(pkgToEdges(pkgRef.current, posMap.current));
+      }
     },
     [],
   );

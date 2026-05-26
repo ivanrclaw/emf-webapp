@@ -1,12 +1,11 @@
 /**
  * @emf-webapp/frontend — Edge Routing Utilities (Pure Logic)
  *
- * Professional edge routing with:
- * - Congestion-aware side selection
+ * Minimal edge routing utilities:
+ * - Edge grouping for port spreading (used by VsmEdge, SpecEdge)
  * - Adaptive port spreading along node sides
- * - Global channel assignment to prevent corridor overlaps
- * - Self-loop handling
- * - Label collision avoidance
+ * - Self-loop path generation
+ * - Crossing detection for bridge rendering
  */
 import { Position, getSmoothStepPath } from '@xyflow/react';
 
@@ -14,7 +13,6 @@ export const EDGE_SPACING = 20;
 export const SIDE_MARGIN = 10;
 export const BRIDGE_RADIUS = 4;
 export const MIN_PORT_SPACING = 8;
-export const CHANNEL_SPACING = 18;
 export const SELF_LOOP_SIZE = 50;
 
 export interface EdgeGroupInfo {
@@ -134,155 +132,6 @@ export function collectEdgeGroups(
   return result;
 }
 
-// ─── Congestion-Aware Side Selection ─────────────────────────────────────
-
-export interface NodeRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-/**
- * Compute the best sides for all edges globally, considering congestion.
- * Returns a map of edgeId → { sourceSide, targetSide }.
- *
- * Algorithm:
- * 1. Sort edges by distance (shortest first — they get priority)
- * 2. For each edge, pick the side combination that minimizes:
- *    distance * (1 + congestionPenalty)
- * 3. Track congestion per (nodeId, side) as edges are assigned
- */
-export function computeGlobalSideAssignment(
-  edges: Array<{ id: string; sourceId: string; targetId: string }>,
-  nodeRects: Map<string, NodeRect>,
-): Map<string, { sourceSide: Side; targetSide: Side }> {
-  const sides: Side[] = ['left', 'right', 'top', 'bottom'];
-  const congestion = new Map<string, number>(); // "nodeId|side" → count
-
-  function getCongestion(nodeId: string, side: Side): number {
-    return congestion.get(`${nodeId}|${side}`) || 0;
-  }
-  function addCongestion(nodeId: string, side: Side): void {
-    const key = `${nodeId}|${side}`;
-    congestion.set(key, (congestion.get(key) || 0) + 1);
-  }
-
-  function getPoint(rect: NodeRect, side: Side): { x: number; y: number } {
-    switch (side) {
-      case 'left': return { x: rect.x, y: rect.y + rect.height / 2 };
-      case 'right': return { x: rect.x + rect.width, y: rect.y + rect.height / 2 };
-      case 'top': return { x: rect.x + rect.width / 2, y: rect.y };
-      case 'bottom': return { x: rect.x + rect.width / 2, y: rect.y + rect.height };
-    }
-  }
-
-  // Sort edges by natural distance (shortest first get best sides)
-  const edgesWithDist = edges.map((e) => {
-    const sRect = nodeRects.get(e.sourceId);
-    const tRect = nodeRects.get(e.targetId);
-    if (!sRect || !tRect) return { ...e, dist: Infinity };
-    const sc = { x: sRect.x + sRect.width / 2, y: sRect.y + sRect.height / 2 };
-    const tc = { x: tRect.x + tRect.width / 2, y: tRect.y + tRect.height / 2 };
-    const dx = sc.x - tc.x;
-    const dy = sc.y - tc.y;
-    return { ...e, dist: Math.sqrt(dx * dx + dy * dy) };
-  });
-  edgesWithDist.sort((a, b) => a.dist - b.dist);
-
-  const result = new Map<string, { sourceSide: Side; targetSide: Side }>();
-
-  for (const edge of edgesWithDist) {
-    const sRect = nodeRects.get(edge.sourceId);
-    const tRect = nodeRects.get(edge.targetId);
-
-    if (!sRect || !tRect) {
-      result.set(edge.id, { sourceSide: 'right', targetSide: 'left' });
-      continue;
-    }
-
-    // Self-loop: always right→top
-    if (edge.sourceId === edge.targetId) {
-      result.set(edge.id, { sourceSide: 'right', targetSide: 'top' });
-      addCongestion(edge.sourceId, 'right');
-      addCongestion(edge.targetId, 'top');
-      continue;
-    }
-
-    let bestScore = Infinity;
-    let bestSS: Side = 'right';
-    let bestTS: Side = 'left';
-
-    for (const ss of sides) {
-      const sp = getPoint(sRect, ss);
-      for (const ts of sides) {
-        const tp = getPoint(tRect, ts);
-        const dx = sp.x - tp.x;
-        const dy = sp.y - tp.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-
-        // Penalties
-        const sameSidePenalty = ss === ts ? 1.2 : 1.0;
-        const sourceCongestion = getCongestion(edge.sourceId, ss);
-        const targetCongestion = getCongestion(edge.targetId, ts);
-        const congestionPenalty = 1 + (sourceCongestion + targetCongestion) * 0.15;
-
-        // Penalize going "against" the natural direction
-        // e.g., if target is to the right, penalize using left side of source
-        const dirPenalty = getDirectionPenalty(sRect, tRect, ss, ts);
-
-        const score = dist * sameSidePenalty * congestionPenalty * dirPenalty;
-        if (score < bestScore) {
-          bestScore = score;
-          bestSS = ss;
-          bestTS = ts;
-        }
-      }
-    }
-
-    result.set(edge.id, { sourceSide: bestSS, targetSide: bestTS });
-    addCongestion(edge.sourceId, bestSS);
-    addCongestion(edge.targetId, bestTS);
-  }
-
-  return result;
-}
-
-/**
- * Penalize side choices that go against the natural direction between nodes.
- * E.g., if target is clearly to the right of source, using source's left side is bad.
- */
-function getDirectionPenalty(sRect: NodeRect, tRect: NodeRect, ss: Side, ts: Side): number {
-  const sc = { x: sRect.x + sRect.width / 2, y: sRect.y + sRect.height / 2 };
-  const tc = { x: tRect.x + tRect.width / 2, y: tRect.y + tRect.height / 2 };
-  const dx = tc.x - sc.x;
-  const dy = tc.y - sc.y;
-
-  let penalty = 1.0;
-
-  // Source side penalty: going opposite to target direction
-  if (Math.abs(dx) > Math.abs(dy)) {
-    // Primarily horizontal relationship
-    if (dx > 0 && ss === 'left') penalty *= 1.5;
-    if (dx < 0 && ss === 'right') penalty *= 1.5;
-  } else {
-    // Primarily vertical relationship
-    if (dy > 0 && ss === 'top') penalty *= 1.5;
-    if (dy < 0 && ss === 'bottom') penalty *= 1.5;
-  }
-
-  // Target side penalty
-  if (Math.abs(dx) > Math.abs(dy)) {
-    if (dx > 0 && ts === 'right') penalty *= 1.5;
-    if (dx < 0 && ts === 'left') penalty *= 1.5;
-  } else {
-    if (dy > 0 && ts === 'bottom') penalty *= 1.5;
-    if (dy < 0 && ts === 'top') penalty *= 1.5;
-  }
-
-  return penalty;
-}
-
 // ─── Adaptive Port Spreading ─────────────────────────────────────────────
 
 /**
@@ -309,7 +158,6 @@ export function spreadHandlePosition(
 
   const sideLen = (side === 'left' || side === 'right') ? nodeHeight : nodeWidth;
   const maxUsable = sideLen - 2 * SIDE_MARGIN;
-  // Adaptive spacing: use EDGE_SPACING but compress if too many edges
   const idealSpan = EDGE_SPACING * (groupSize - 1);
   const usableSpan = Math.min(idealSpan, maxUsable);
   const spacing = groupSize > 1
@@ -337,88 +185,6 @@ export function spreadHandlePosition(
   }
 }
 
-// ─── Global Channel Assignment ───────────────────────────────────────────
-
-export interface ChannelAssignment {
-  /** The Y-coordinate for horizontal routing segments */
-  channelY?: number;
-  /** The X-coordinate for vertical routing segments */
-  channelX?: number;
-  /** Offset from the natural midpoint */
-  offset: number;
-}
-
-/**
- * Assign non-overlapping routing channels to edges that share corridor space.
- * Groups edges by their approximate corridor (quantized midpoint) and spreads them.
- */
-export function assignGlobalChannels(
-  edgeEndpoints: Array<{
-    id: string;
-    sx: number; sy: number; sPos: Position;
-    tx: number; ty: number; tPos: Position;
-  }>,
-): Map<string, number> {
-  const isHorizontal = (pos: Position) => pos === Position.Left || pos === Position.Right;
-
-  // Group edges by corridor: edges with similar midY (for horizontal routing)
-  // or similar midX (for vertical routing)
-  const QUANTIZE = CHANNEL_SPACING * 2; // bucket size for grouping
-
-  interface CorridorEntry {
-    id: string;
-    midY: number;
-    midX: number;
-    isHorizRoute: boolean;
-  }
-
-  const entries: CorridorEntry[] = edgeEndpoints.map((e) => {
-    const midY = (e.sy + e.ty) / 2;
-    const midX = (e.sx + e.tx) / 2;
-    const isHorizRoute = isHorizontal(e.sPos) && isHorizontal(e.tPos);
-    return { id: e.id, midY, midX, isHorizRoute };
-  });
-
-  // Group by quantized corridor
-  const corridors = new Map<string, CorridorEntry[]>();
-  entries.forEach((entry) => {
-    const key = entry.isHorizRoute
-      ? `H:${Math.round(entry.midY / QUANTIZE)}`
-      : `V:${Math.round(entry.midX / QUANTIZE)}`;
-    if (!corridors.has(key)) corridors.set(key, []);
-    corridors.get(key)!.push(entry);
-  });
-
-  const result = new Map<string, number>();
-
-  corridors.forEach((group) => {
-    if (group.length <= 1) {
-      group.forEach((e) => result.set(e.id, 0));
-      return;
-    }
-
-    // Sort by midpoint for consistent ordering
-    group.sort((a, b) => {
-      if (a.isHorizRoute) return a.midY - b.midY;
-      return a.midX - b.midX;
-    });
-
-    // Assign offsets centered around 0
-    const totalSpan = CHANNEL_SPACING * (group.length - 1);
-    group.forEach((entry, i) => {
-      const offset = -totalSpan / 2 + CHANNEL_SPACING * i;
-      result.set(entry.id, offset);
-    });
-  });
-
-  // Edges not in any corridor get 0 offset
-  edgeEndpoints.forEach((e) => {
-    if (!result.has(e.id)) result.set(e.id, 0);
-  });
-
-  return result;
-}
-
 // ─── Self-Loop Path ──────────────────────────────────────────────────────
 
 /**
@@ -431,7 +197,7 @@ export function computeSelfLoopPath(
   nodeWidth: number,
   nodeHeight: number,
   loopIndex: number,
-  loopCount: number,
+  _loopCount: number,
 ): [string, number, number] {
   const loopSize = SELF_LOOP_SIZE + loopIndex * 20;
   const exitX = nodeX + nodeWidth;
@@ -460,51 +226,7 @@ export function computeSelfLoopPath(
   return [path, labelX, labelY];
 }
 
-// ─── Label Collision Avoidance ───────────────────────────────────────────
-
-export interface LabelInfo {
-  id: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-/**
- * Nudge overlapping labels apart. Simple greedy approach:
- * sort by Y, then push overlapping labels down.
- */
-export function resolveLabelsOverlap(labels: LabelInfo[]): Map<string, { dx: number; dy: number }> {
-  const offsets = new Map<string, { dx: number; dy: number }>();
-  labels.forEach((l) => offsets.set(l.id, { dx: 0, dy: 0 }));
-
-  if (labels.length <= 1) return offsets;
-
-  // Sort by Y position
-  const sorted = [...labels].sort((a, b) => a.y - b.y);
-
-  for (let i = 1; i < sorted.length; i++) {
-    const prev = sorted[i - 1];
-    const curr = sorted[i];
-    const prevOffset = offsets.get(prev.id)!;
-    const currOffset = offsets.get(curr.id)!;
-
-    const prevBottom = prev.y + prevOffset.dy + prev.height / 2;
-    const currTop = curr.y + currOffset.dy - curr.height / 2;
-
-    // Check horizontal overlap too
-    const hOverlap = Math.abs((prev.x + prevOffset.dx) - (curr.x + currOffset.dx)) < (prev.width + curr.width) / 2;
-
-    if (hOverlap && prevBottom > currTop - 4) {
-      const nudge = prevBottom - currTop + 6;
-      currOffset.dy += nudge;
-    }
-  }
-
-  return offsets;
-}
-
-// ─── Legacy exports for backward compat ──────────────────────────────────
+// ─── Legacy: getSpreadSmoothStepPath (used by VsmEdge) ───────────────────
 
 function positionToSide(pos: Position): Side {
   switch (pos) {
@@ -550,7 +272,7 @@ export function getSpreadSmoothStepPath(
   return [result[0], result[1], result[2]];
 }
 
-// ─── Crossing Detection ─────────────────────────────────────────────────
+// ─── Crossing Detection (used by CrossingBridges) ────────────────────────
 
 function parseSegments(pathD: string): Array<{ x: number; y: number }> {
   const pts: Array<{ x: number; y: number }> = [];
