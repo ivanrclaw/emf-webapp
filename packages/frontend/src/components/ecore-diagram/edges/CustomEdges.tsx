@@ -342,21 +342,24 @@ function computeEdgePath(
     const isHorizontal = (sourcePosition === Position.Left || sourcePosition === Position.Right);
 
     if (isHorizontal) {
-      // H→V→H: offset horizontal segments in Y, vertical segment in X (but same X for both)
-      // Actually simpler: just use the already-spread src/tgt endpoints with a shared corridor
-      // The key insight: use the SAME corridor X for both edges, but different Y endpoints
-      // This makes them parallel horizontal lines that share the same vertical corridor
-      const corridorX = (midSrc.x + midTgt.x) / 2;
+      // H→V→H: each edge gets its own corridor X, offset from midpoint
+      // so vertical segments don't overlap visually
+      const baseCorridor = (midSrc.x + midTgt.x) / 2;
+      const corridorOffset = PAIR_OFFSET_SPACING / 2 * (pairIndex - (pairTotal - 1) / 2);
+      const corridorX = baseCorridor + corridorOffset;
       const path = buildParallelHVH(src.x, src.y, corridorX, tgt.x, tgt.y, 8);
-      const lx = corridorX;
+      const lx = baseCorridor;
       const ly = (src.y + tgt.y) / 2;
       return [path, lx, ly] as [string, number, number];
     } else {
-      // V→H→V: offset vertical segments in X, horizontal segment in Y (but same Y for both)
-      const corridorY = (midSrc.y + midTgt.y) / 2;
+      // V→H→V: each edge gets its own corridor Y, offset from midpoint
+      // so horizontal segments don't overlap visually
+      const baseCorridor = (midSrc.y + midTgt.y) / 2;
+      const corridorOffset = PAIR_OFFSET_SPACING / 2 * (pairIndex - (pairTotal - 1) / 2);
+      const corridorY = baseCorridor + corridorOffset;
       const path = buildParallelVHV(src.x, src.y, corridorY, tgt.x, tgt.y, 8);
       const lx = (src.x + tgt.x) / 2;
-      const ly = corridorY;
+      const ly = baseCorridor;
       return [path, lx, ly] as [string, number, number];
     }
   }
