@@ -6,6 +6,7 @@ COPY package.json package-lock.json ./
 COPY packages/core/package.json packages/core/
 COPY packages/backend/package.json packages/backend/
 COPY packages/frontend/package.json packages/frontend/
+COPY packages/frontend/scripts packages/frontend/scripts
 
 # Instalar con npm ci (reproducible y más rápido)
 RUN npm ci
