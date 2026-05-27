@@ -850,9 +850,38 @@ function RoutedReactFlow({
   onDragOver, onDrop, collaborative, followingId, setFollowingId,
   reactFlowInstance,
 }: RoutedReactFlowProps) {
+  // Sanitize nodes/edges for the Web Worker (strip non-cloneable functions from data)
+  const routerNodes = useMemo(() =>
+    (model.nodes as any[]).map((n: any) => ({
+      id: n.id,
+      position: n.position,
+      type: n.type,
+      measured: n.measured,
+      width: n.width,
+      height: n.height,
+      parentId: n.parentId,
+      data: {},
+    })),
+    [model.nodes],
+  );
+
+  const routerEdges = useMemo(() =>
+    (model.edges as any[]).map((e: any) => ({
+      id: e.id,
+      source: e.source,
+      target: e.target,
+      type: e.type,
+      sourceHandle: e.sourceHandle,
+      targetHandle: e.targetHandle,
+      sourcePosition: e.sourcePosition,
+      targetPosition: e.targetPosition,
+    })),
+    [model.edges],
+  );
+
   // avoid-nodes-edge: orthogonal routing that avoids overlapping nodes
   const { updateRoutingOnNodesChange, resetRouting } =
-    useAvoidNodesRouterFromWorker(model.nodes as any, model.edges as any, {
+    useAvoidNodesRouterFromWorker(routerNodes, routerEdges, {
       edgeToNodeSpacing: 12,
       edgeToEdgeSpacing: 10,
       edgeRounding: 8,
