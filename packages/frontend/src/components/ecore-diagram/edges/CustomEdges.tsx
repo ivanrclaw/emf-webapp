@@ -27,8 +27,7 @@ import { computeSelfLoopPath } from '../../../lib/edge-routing';
 // Port spreading
 // ─────────────────────────────────────────────────────────────────
 
-const PORT_SPACING = 30; // px between adjacent ports on the same side
-const PAIR_OFFSET_SPACING = 24; // px between mid-segments of edges in the same node pair
+const PORT_SPACING = 20; // px between adjacent ports on the same side
 
 /**
  * Compute the offset for a port along a node side.
@@ -113,183 +112,8 @@ function renderCombinedLabel(
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Compute spread path
+// Compute spread path — uses React Flow's stock getSmoothStepPath
 // ─────────────────────────────────────────────────────────────────
-
-/**
- * Custom smooth step path that supports shifting the vertical middle segment.
- * React Flow's getSmoothStepPath offset only extends horizontal stubs,
- * it does NOT move the vertical corridor. We need our own implementation.
- */
-function customSmoothStepPath(
-  sourceX: number, sourceY: number, sourcePosition: Position,
-  targetX: number, targetY: number, targetPosition: Position,
-  corridorOffset: number,
-  borderRadius: number,
-): [string, number, number] {
-  const isHorizontal = (sourcePosition === Position.Left || sourcePosition === Position.Right) &&
-                       (targetPosition === Position.Left || targetPosition === Position.Right);
-  const isVertical = (sourcePosition === Position.Top || sourcePosition === Position.Bottom) &&
-                     (targetPosition === Position.Top || targetPosition === Position.Bottom);
-
-  if (isHorizontal) {
-    // Horizontal connection: path goes H → V → H
-    // The vertical segment X is at the midpoint + corridorOffset
-    const midX = (sourceX + targetX) / 2 + corridorOffset;
-    const r = Math.min(borderRadius, Math.abs(midX - sourceX) / 2, Math.abs(targetX - midX) / 2, Math.abs(targetY - sourceY) / 2);
-
-    if (Math.abs(targetY - sourceY) < 1) {
-      // Straight horizontal line
-      const labelX = (sourceX + targetX) / 2;
-      const labelY = sourceY;
-      return [`M ${sourceX} ${sourceY} L ${targetX} ${targetY}`, labelX, labelY];
-    }
-
-    const dirS = sourcePosition === Position.Right ? 1 : -1;
-    const dirT = targetPosition === Position.Left ? -1 : 1;
-    const startX = sourceX;
-    const endX = targetX;
-
-    // Build path: source → horizontal to midX → vertical to targetY → horizontal to target
-    const dy = targetY > sourceY ? 1 : -1;
-    const path = buildSmoothStepH(startX, sourceY, midX, targetY, endX, r, dy, dirS, dirT);
-    const labelX = midX;
-    const labelY = (sourceY + targetY) / 2;
-    return [path, labelX, labelY];
-  } else if (isVertical) {
-    // Vertical connection: path goes V → H → V
-    const midY = (sourceY + targetY) / 2 + corridorOffset;
-    const r = Math.min(borderRadius, Math.abs(midY - sourceY) / 2, Math.abs(targetY - midY) / 2, Math.abs(targetX - sourceX) / 2);
-
-    if (Math.abs(targetX - sourceX) < 1) {
-      const labelX = sourceX;
-      const labelY = (sourceY + targetY) / 2;
-      return [`M ${sourceX} ${sourceY} L ${targetX} ${targetY}`, labelX, labelY];
-    }
-
-    const dirS = sourcePosition === Position.Bottom ? 1 : -1;
-    const dirT = targetPosition === Position.Top ? -1 : 1;
-    const dx = targetX > sourceX ? 1 : -1;
-    const path = buildSmoothStepV(sourceX, sourceY, targetX, midY, targetY, r, dx, dirS, dirT);
-    const labelX = (sourceX + targetX) / 2;
-    const labelY = midY;
-    return [path, labelX, labelY];
-  } else {
-    // Mixed (e.g., Right→Top): fall back to getSmoothStepPath
-    const result = getSmoothStepPath({
-      sourceX, sourceY, targetX, targetY,
-      sourcePosition, targetPosition,
-      borderRadius,
-    });
-    return [result[0], result[1], result[2]];
-  }
-}
-
-/** Build H→V→H path with rounded corners */
-function buildSmoothStepH(
-  sx: number, sy: number, mx: number, ty: number, tx: number,
-  r: number, dy: number, _dirS: number, _dirT: number,
-): string {
-  const rr = Math.min(r, Math.abs(mx - sx), Math.abs(ty - sy), Math.abs(tx - mx)) || 0;
-  if (rr < 0.5) {
-    return `M ${sx} ${sy} L ${mx} ${sy} L ${mx} ${ty} L ${tx} ${ty}`;
-  }
-
-  // First corner: horizontal to vertical
-  const c1x = mx - (mx > sx ? rr : -rr);
-  const c1y = sy + dy * rr;
-  // Second corner: vertical to horizontal
-  const c2x = mx + (tx > mx ? rr : -rr);
-  const c2y = ty - dy * rr;
-
-  return [
-    `M ${sx} ${sy}`,
-    `L ${c1x} ${sy}`,
-    `Q ${mx} ${sy} ${mx} ${c1y}`,
-    `L ${mx} ${c2y}`,
-    `Q ${mx} ${ty} ${c2x} ${ty}`,
-    `L ${tx} ${ty}`,
-  ].join(' ');
-}
-
-/** Build V→H→V path with rounded corners */
-function buildSmoothStepV(
-  sx: number, sy: number, tx: number, my: number, ty: number,
-  r: number, dx: number, _dirS: number, _dirT: number,
-): string {
-  const rr = Math.min(r, Math.abs(my - sy), Math.abs(tx - sx), Math.abs(ty - my)) || 0;
-  if (rr < 0.5) {
-    return `M ${sx} ${sy} L ${sx} ${my} L ${tx} ${my} L ${tx} ${ty}`;
-  }
-
-  const c1x = sx + dx * rr;
-  const c1y = my - (my > sy ? rr : -rr);
-  const c2x = tx - dx * rr;
-  const c2y = my + (ty > my ? rr : -rr);
-
-  return [
-    `M ${sx} ${sy}`,
-    `L ${sx} ${c1y}`,
-    `Q ${sx} ${my} ${c1x} ${my}`,
-    `L ${c2x} ${my}`,
-    `Q ${tx} ${my} ${tx} ${c2y}`,
-    `L ${tx} ${ty}`,
-  ].join(' ');
-}
-
-/**
- * Build H→V→H path for paired edges sharing the same corridor X.
- * Since endpoints are at different Y (port spreading), horizontal segments
- * are parallel and the shared vertical corridor doesn't cause crossing.
- */
-function buildParallelHVH(
-  sx: number, sy: number, mx: number, tx: number, ty: number, r: number,
-): string {
-  const rr = Math.min(r, Math.abs(mx - sx), Math.abs(ty - sy), Math.abs(tx - mx)) || 0;
-  const dy = ty > sy ? 1 : -1;
-  if (rr < 0.5) {
-    return `M ${sx} ${sy} L ${mx} ${sy} L ${mx} ${ty} L ${tx} ${ty}`;
-  }
-  const c1x = mx - (mx > sx ? rr : -rr);
-  const c1y = sy + dy * rr;
-  const c2x = mx + (tx > mx ? rr : -rr);
-  const c2y = ty - dy * rr;
-  return [
-    `M ${sx} ${sy}`,
-    `L ${c1x} ${sy}`,
-    `Q ${mx} ${sy} ${mx} ${c1y}`,
-    `L ${mx} ${c2y}`,
-    `Q ${mx} ${ty} ${c2x} ${ty}`,
-    `L ${tx} ${ty}`,
-  ].join(' ');
-}
-
-/**
- * Build V→H→V path for paired edges sharing the same corridor Y.
- * Since endpoints are at different X (port spreading), vertical segments
- * are parallel and the shared horizontal corridor doesn't cause crossing.
- */
-function buildParallelVHV(
-  sx: number, sy: number, my: number, tx: number, ty: number, r: number,
-): string {
-  const rr = Math.min(r, Math.abs(my - sy), Math.abs(tx - sx), Math.abs(ty - my)) || 0;
-  const dx = tx > sx ? 1 : -1;
-  if (rr < 0.5) {
-    return `M ${sx} ${sy} L ${sx} ${my} L ${tx} ${my} L ${tx} ${ty}`;
-  }
-  const c1x = sx + dx * rr;
-  const c1y = my - (my > sy ? rr : -rr);
-  const c2x = tx - dx * rr;
-  const c2y = my + (ty > my ? rr : -rr);
-  return [
-    `M ${sx} ${sy}`,
-    `L ${sx} ${c1y}`,
-    `Q ${sx} ${my} ${c1x} ${my}`,
-    `L ${c2x} ${my}`,
-    `Q ${tx} ${my} ${tx} ${c2y}`,
-    `L ${tx} ${ty}`,
-  ].join(' ');
-}
 
 function computeEdgePath(
   sourceX: number, sourceY: number, sourcePosition: Position,
@@ -303,10 +127,7 @@ function computeEdgePath(
   let tgt: { x: number; y: number };
 
   if (pairTotal > 1) {
-    // Paired edges (bidirectional between same nodes):
-    // Use pairIndex as port index on BOTH sides to keep lines parallel.
-    // Independent sourcePortIndex/targetPortIndex would cause X-crossings
-    // because the edges are registered in different order on each side.
+    // Paired edges: use pairIndex as port index on BOTH sides to keep lines parallel
     src = applySpread(sourceX, sourceY, sourcePosition, pairIndex, pairTotal);
     tgt = applySpread(targetX, targetY, targetPosition, pairIndex, pairTotal);
   } else {
@@ -315,109 +136,18 @@ function computeEdgePath(
     tgt = applySpread(targetX, targetY, targetPosition, data?.targetPortIndex ?? 0, data?.targetPortTotal ?? 1);
   }
 
-  // For paired edges, compute a single canonical path and offset each edge
-  // perpendicularly. This guarantees parallel non-crossing lines regardless
-  // of node orientation (horizontal or vertical layout).
-  if (pairTotal > 1) {
-    // Canonical path uses the midpoint between the two spread endpoints
-    const src0 = applySpread(sourceX, sourceY, sourcePosition, 0, pairTotal);
-    const src1 = applySpread(sourceX, sourceY, sourcePosition, pairTotal - 1, pairTotal);
-    const tgt0 = applySpread(targetX, targetY, targetPosition, 0, pairTotal);
-    const tgt1 = applySpread(targetX, targetY, targetPosition, pairTotal - 1, pairTotal);
-    const midSrc = { x: (src0.x + src1.x) / 2, y: (src0.y + src1.y) / 2 };
-    const midTgt = { x: (tgt0.x + tgt1.x) / 2, y: (tgt0.y + tgt1.y) / 2 };
+  // Use React Flow's stock smooth step path for all edges
+  const [path, labelX, labelY] = getSmoothStepPath({
+    sourceX: src.x,
+    sourceY: src.y,
+    sourcePosition,
+    targetX: tgt.x,
+    targetY: tgt.y,
+    targetPosition,
+    borderRadius: 8,
+  });
 
-    // Compute the canonical H→V→H or V→H→V path segments
-    const [canonPath, labelX, labelY] = customSmoothStepPath(
-      midSrc.x, midSrc.y, sourcePosition,
-      midTgt.x, midTgt.y, targetPosition,
-      0, 0, // no offset, no rounding for the canonical reference
-    );
-
-    // Offset perpendicular to each segment
-    const gap = PORT_SPACING;
-    const offset = gap * (pairIndex - (pairTotal - 1) / 2);
-
-    // Determine perpendicular direction based on orientation
-    const isHorizontal = (sourcePosition === Position.Left || sourcePosition === Position.Right);
-
-    if (isHorizontal) {
-      // Simple H→V→H: corridor at midpoint with small offset per edge
-      const midX = (src.x + tgt.x) / 2;
-      const offset = PAIR_OFFSET_SPACING * (pairIndex - (pairTotal - 1) / 2);
-      const corridorX = midX + offset;
-      const r = 8;
-
-      const rr = Math.min(r,
-        Math.abs(corridorX - src.x) / 2,
-        Math.abs(tgt.x - corridorX) / 2,
-        Math.abs(tgt.y - src.y) / 2,
-      ) || 0;
-
-      if (rr < 0.5) {
-        const path = `M ${src.x} ${src.y} L ${corridorX} ${src.y} L ${corridorX} ${tgt.y} L ${tgt.x} ${tgt.y}`;
-        return [path, corridorX, (src.y + tgt.y) / 2] as [string, number, number];
-      }
-
-      const dirX1 = corridorX > src.x ? 1 : -1;
-      const dirY = tgt.y > src.y ? 1 : -1;
-      const dirX2 = tgt.x > corridorX ? 1 : -1;
-
-      const path = [
-        `M ${src.x} ${src.y}`,
-        `L ${corridorX - dirX1 * rr} ${src.y}`,
-        `Q ${corridorX} ${src.y} ${corridorX} ${src.y + dirY * rr}`,
-        `L ${corridorX} ${tgt.y - dirY * rr}`,
-        `Q ${corridorX} ${tgt.y} ${corridorX + dirX2 * rr} ${tgt.y}`,
-        `L ${tgt.x} ${tgt.y}`,
-      ].join(' ');
-
-      const lx = corridorX;
-      const ly = (src.y + tgt.y) / 2;
-      return [path, lx, ly] as [string, number, number];
-    } else {
-      // Simple V→H→V: corridor at midpoint with small offset per edge
-      const midY = (src.y + tgt.y) / 2;
-      const offset = PAIR_OFFSET_SPACING * (pairIndex - (pairTotal - 1) / 2);
-      const corridorY = midY + offset;
-      const r = 8;
-
-      const rr = Math.min(r,
-        Math.abs(corridorY - src.y) / 2,
-        Math.abs(tgt.y - corridorY) / 2,
-        Math.abs(tgt.x - src.x) / 2,
-      ) || 0;
-
-      if (rr < 0.5) {
-        const path = `M ${src.x} ${src.y} L ${src.x} ${corridorY} L ${tgt.x} ${corridorY} L ${tgt.x} ${tgt.y}`;
-        return [path, (src.x + tgt.x) / 2, corridorY] as [string, number, number];
-      }
-
-      const dirY1 = corridorY > src.y ? 1 : -1;
-      const dirX = tgt.x > src.x ? 1 : -1;
-      const dirY2 = tgt.y > corridorY ? 1 : -1;
-
-      const path = [
-        `M ${src.x} ${src.y}`,
-        `L ${src.x} ${corridorY - dirY1 * rr}`,
-        `Q ${src.x} ${corridorY} ${src.x + dirX * rr} ${corridorY}`,
-        `L ${tgt.x - dirX * rr} ${corridorY}`,
-        `Q ${tgt.x} ${corridorY} ${tgt.x} ${corridorY + dirY2 * rr}`,
-        `L ${tgt.x} ${tgt.y}`,
-      ].join(' ');
-
-      const lx = (src.x + tgt.x) / 2;
-      const ly = corridorY;
-      return [path, lx, ly] as [string, number, number];
-    }
-  }
-
-  // Single edges: use custom H→V→H path
-  return customSmoothStepPath(
-    src.x, src.y, sourcePosition,
-    tgt.x, tgt.y, targetPosition,
-    0, 8,
-  );
+  return [path, labelX, labelY] as [string, number, number];
 }
 
 // ─────────────────────────────────────────────────────────────────
