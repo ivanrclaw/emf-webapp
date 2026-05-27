@@ -35,6 +35,7 @@ import '@xyflow/react/dist/style.css';
 import { useEcoreModel } from './useEcoreModel';
 import { nodeTypes } from './nodes/nodeTypes';
 import { edgeTypes } from './edges/CustomEdges';
+import { useAvoidNodesRouterFromWorker } from 'avoid-nodes-edge';
 
 import { getMetamodel, getProject, exportEcore, exportGenmodel, exportXmiZip, exportProjectAsEclipse } from '../../api/client';
 import { useCollaborativeModel } from '../../hooks/useCollaborativeModel';
@@ -849,11 +850,38 @@ function RoutedReactFlow({
   onDragOver, onDrop, collaborative, followingId, setFollowingId,
   reactFlowInstance,
 }: RoutedReactFlowProps) {
+  // avoid-nodes-edge: orthogonal routing that avoids overlapping nodes
+  const { updateRoutingOnNodesChange, resetRouting } =
+    useAvoidNodesRouterFromWorker(model.nodes as any, model.edges as any, {
+      edgeToNodeSpacing: 12,
+      edgeToEdgeSpacing: 10,
+      edgeRounding: 8,
+      autoBestSideConnection: true,
+    });
+
   const handleNodesChange = useCallback(
     (changes: any) => {
       model.onNodesChange(changes);
+      updateRoutingOnNodesChange(changes);
     },
-    [model],
+    [model, updateRoutingOnNodesChange],
+  );
+
+  const handleEdgesChange = useCallback(
+    (changes: any) => {
+      model.onEdgesChange(changes);
+      const needsReset = changes.some((c: any) => c.type === 'add' || c.type === 'remove');
+      if (needsReset) requestAnimationFrame(() => resetRouting());
+    },
+    [model, resetRouting],
+  );
+
+  const handleConnect = useCallback(
+    (params: any) => {
+      model.onConnect(params);
+      requestAnimationFrame(() => resetRouting());
+    },
+    [model, resetRouting],
   );
 
   return (
@@ -861,8 +889,8 @@ function RoutedReactFlow({
       nodes={model.nodes as any}
       edges={model.edges as any}
       onNodesChange={handleNodesChange}
-      onEdgesChange={model.onEdgesChange}
-      onConnect={model.onConnect}
+      onEdgesChange={handleEdgesChange}
+      onConnect={handleConnect}
       onNodeClick={onNodeClick}
       onNodeDrag={onNodeDrag}
       onEdgeClick={onEdgeClick}

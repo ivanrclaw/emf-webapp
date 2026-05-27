@@ -1,7 +1,9 @@
 /**
  * @emf-webapp/frontend — Custom Edge Components for Ecore Diagram Editor
  *
- * Minimal edge rendering using React Flow's getSmoothStepPath.
+ * Edge rendering using avoid-nodes-edge for orthogonal routing that avoids nodes.
+ * Falls back to React Flow's getSmoothStepPath when the router hasn't loaded yet.
+ *
  * Port spreading: edges sharing the same (node, side) are spread along
  * that side so their horizontal/vertical segments don't overlap.
  *
@@ -15,49 +17,13 @@ import React from 'react';
 import {
   BaseEdge,
   EdgeLabelRenderer,
-  getSmoothStepPath,
   Position,
   type EdgeProps,
   type Edge,
 } from '@xyflow/react';
+import { useAvoidNodesPath } from 'avoid-nodes-edge';
 import type { EcoreEdgeData } from '../types';
 import { computeSelfLoopPath } from '../../../lib/edge-routing';
-
-// ─────────────────────────────────────────────────────────────────
-// Port spreading
-// ─────────────────────────────────────────────────────────────────
-
-const PORT_SPACING = 20; // px between adjacent ports on the same side
-
-/**
- * Compute the offset for a port along a node side.
- * For left/right sides → Y offset. For top/bottom → X offset.
- */
-function portOffset(index: number, total: number): number {
-  if (total <= 1) return 0;
-  const span = PORT_SPACING * (total - 1);
-  return -span / 2 + index * PORT_SPACING;
-}
-
-/**
- * Apply port spreading to a coordinate along the node side.
- */
-function applySpread(
-  x: number, y: number,
-  position: Position,
-  portIndex: number,
-  portTotal: number,
-): { x: number; y: number } {
-  const offset = portOffset(portIndex, portTotal);
-  switch (position) {
-    case Position.Left:
-    case Position.Right:
-      return { x, y: y + offset };
-    case Position.Top:
-    case Position.Bottom:
-      return { x: x + offset, y };
-  }
-}
 
 // ─────────────────────────────────────────────────────────────────
 // Helpers
@@ -112,38 +78,23 @@ function renderCombinedLabel(
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Compute spread path — uses React Flow's stock getSmoothStepPath
+// Compute edge path — uses avoid-nodes-edge store (libavoid WASM)
+// Falls back to smooth-step when router hasn't loaded yet
 // ─────────────────────────────────────────────────────────────────
 
-function computeEdgePath(
+function useRoutedEdgePath(
+  id: string,
   sourceX: number, sourceY: number, sourcePosition: Position,
   targetX: number, targetY: number, targetPosition: Position,
-  data: EcoreEdgeData | undefined,
 ) {
-  const pairTotal = data?.pairTotal ?? 1;
-  const pairIndex = data?.pairIndex ?? 0;
-
-  let src: { x: number; y: number };
-  let tgt: { x: number; y: number };
-
-  if (pairTotal > 1) {
-    // Paired edges: use pairIndex as port index on BOTH sides to keep lines parallel
-    src = applySpread(sourceX, sourceY, sourcePosition, pairIndex, pairTotal);
-    tgt = applySpread(targetX, targetY, targetPosition, pairIndex, pairTotal);
-  } else {
-    // Single edge: use normal port spreading
-    src = applySpread(sourceX, sourceY, sourcePosition, data?.sourcePortIndex ?? 0, data?.sourcePortTotal ?? 1);
-    tgt = applySpread(targetX, targetY, targetPosition, data?.targetPortIndex ?? 0, data?.targetPortTotal ?? 1);
-  }
-
-  // Use React Flow's stock smooth step path for all edges
-  const [path, labelX, labelY] = getSmoothStepPath({
-    sourceX: src.x,
-    sourceY: src.y,
-    sourcePosition,
-    targetX: tgt.x,
-    targetY: tgt.y,
-    targetPosition,
+  const [path, labelX, labelY] = useAvoidNodesPath({
+    id,
+    sourceX,
+    sourceY,
+    targetX,
+    targetY,
+    sourcePosition: sourcePosition as any,
+    targetPosition: targetPosition as any,
     borderRadius: 8,
   });
 
@@ -225,10 +176,9 @@ function ReferenceEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
     );
   }
 
-  const [path, labelX, labelY] = computeEdgePath(
-    sourceX, sourceY, sourcePosition,
+  const [path, labelX, labelY] = useRoutedEdgePath(
+    id, sourceX, sourceY, sourcePosition,
     targetX, targetY, targetPosition,
-    data,
   );
 
   const ref = data?.reference;
@@ -291,10 +241,9 @@ function ContainmentEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
     );
   }
 
-  const [path, labelX, labelY] = computeEdgePath(
-    sourceX, sourceY, sourcePosition,
+  const [path, labelX, labelY] = useRoutedEdgePath(
+    id, sourceX, sourceY, sourcePosition,
     targetX, targetY, targetPosition,
-    data,
   );
 
   const ref = data?.reference;
@@ -331,10 +280,9 @@ function InheritanceEdge(props: EdgeProps<Edge<EcoreEdgeData>>) {
     return null;
   }
 
-  const [path] = computeEdgePath(
-    sourceX, sourceY, sourcePosition,
+  const [path] = useRoutedEdgePath(
+    id, sourceX, sourceY, sourcePosition,
     targetX, targetY, targetPosition,
-    data,
   );
 
   const color = 'var(--text-muted)';

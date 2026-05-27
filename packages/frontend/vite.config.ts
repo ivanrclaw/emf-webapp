@@ -8,6 +8,15 @@ export default defineConfig({
   define: {
     'process.env.NODE_ENV': JSON.stringify('development'),
   },
+  worker: {
+    format: 'es',
+    rollupOptions: {
+      output: { entryFileNames: '[name].js' },
+    },
+  },
+  optimizeDeps: {
+    exclude: ['avoid-nodes-edge'],
+  },
   build: {
     outDir: 'dist',
     minify: false,
